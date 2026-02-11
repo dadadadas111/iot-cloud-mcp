@@ -144,7 +144,7 @@ git push -u origin main
 
 **3.2 Create Render Web Service:**
 
-Follow the detailed guide in [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)
+Follow the detailed guide in [RENDER_DEPLOYMENT.md](../deployment/RENDER_DEPLOYMENT.md)
 
 Quick summary:
 
@@ -303,13 +303,13 @@ Ask ChatGPT questions like:
 
 ## 📚 Documentation Reference
 
-| File                      | Purpose                       |
-| ------------------------- | ----------------------------- |
-| `README.md`               | Main documentation            |
-| `SETUP_CHECKLIST.md`      | Step-by-step setup            |
-| `RENDER_DEPLOYMENT.md`    | Detailed deployment guide     |
-| `IMPLEMENTATION_NOTES.md` | Session progress & AI prompts |
-| `SESSION_SUMMARY.md`      | Complete session overview     |
+| File                                                                     | Purpose                       |
+| ------------------------------------------------------------------------ | ----------------------------- |
+| [README.md](../../README.md)                                             | Main documentation            |
+| [SETUP_CHECKLIST.md](../setup/SETUP_CHECKLIST.md)                        | Step-by-step setup            |
+| [RENDER_DEPLOYMENT.md](../deployment/RENDER_DEPLOYMENT.md)               | Detailed deployment guide     |
+| [IMPLEMENTATION_NOTES.md](../development/IMPLEMENTATION_NOTES.md)        | Session progress & AI prompts |
+| [SESSION_SUMMARY.md](../development/SESSION_SUMMARY.md)                  | Complete session overview     |
 
 ---
 

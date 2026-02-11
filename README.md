@@ -32,6 +32,14 @@ A Model Context Protocol (MCP) bridge server for the IoT Cloud REST API, enablin
 └─────────────────────────────────┘
 ```
 
+## Documentation
+
+- **[Quick Start Guide](docs/setup/QUICK_START.md)** - Get started quickly
+- **[Setup Checklist](docs/setup/SETUP_CHECKLIST.md)** - Complete setup guide
+- **[Render Deployment](docs/deployment/RENDER_DEPLOYMENT.md)** - Deploy to Render.com
+- **[Implementation Notes](docs/development/IMPLEMENTATION_NOTES.md)** - Development notes
+- **[Session Summary](docs/development/SESSION_SUMMARY.md)** - Development session logs
+
 ## Prerequisites
 
 - Node.js 18+ and npm/yarn
@@ -200,7 +208,7 @@ curl -X POST http://localhost:3001/api/auth/refresh \
 
 ```
 iot-cloud-mcp/
-├── src/
+├── src/                             # Source code
 │   ├── main.ts                      # Application entry point
 │   ├── app.module.ts                # Root module
 │   ├── auth/                        # Authentication module
@@ -210,12 +218,25 @@ iot-cloud-mcp/
 │   │   ├── firebase-admin.service.ts # Firebase SDK wrapper
 │   │   ├── firebase.strategy.ts     # Passport strategy
 │   │   └── firebase-auth.guard.ts   # Auth guard
+│   ├── api/                         # API modules
+│   │   └── controllers/             # API controllers
 │   ├── services/
 │   │   └── api-client.service.ts    # HTTP client for IoT API
 │   ├── shared/
 │   │   └── decorators/
 │   │       └── user.decorator.ts    # User context extractor
 │   └── health.controller.ts         # Health check endpoint
+├── docs/                            # Documentation
+│   ├── setup/                       # Setup guides
+│   │   ├── QUICK_START.md
+│   │   └── SETUP_CHECKLIST.md
+│   ├── deployment/                  # Deployment guides
+│   │   └── RENDER_DEPLOYMENT.md
+│   └── development/                 # Development notes
+│       ├── IMPLEMENTATION_NOTES.md
+│       └── SESSION_SUMMARY.md
+├── config/                          # Configuration examples
+│   └── firebase-service-account.example.json
 ├── .env                             # Environment variables (not in git)
 ├── .env.example                     # Environment template
 ├── firebase-service-account.json    # Firebase credentials (not in git)
@@ -231,7 +252,7 @@ iot-cloud-mcp/
 - [x] API client service
 - [x] Health check endpoint
 - [x] **MVP REST API endpoints** (Definitions, Locations, Groups, Devices, State)
-- [x] **Render deployment guide** (see `RENDER_DEPLOYMENT.md`)
+- [x] **Render deployment guide** (see [RENDER_DEPLOYMENT.md](docs/deployment/RENDER_DEPLOYMENT.md))
 - [ ] Testing with real Firebase credentials
 - [ ] MCP resources (Partner, Project, Device, Location, Group) - Optional
 - [ ] MCP tools (CRUD operations) - Optional
@@ -324,7 +345,7 @@ docker run -p 3001:3001 --env-file .env iot-cloud-mcp
 
 ### Render (Recommended for Testing)
 
-**See detailed guide:** [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)
+**See detailed guide:** [RENDER_DEPLOYMENT.md](docs/deployment/RENDER_DEPLOYMENT.md)
 
 Quick steps:
 

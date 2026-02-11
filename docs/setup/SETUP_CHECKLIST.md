@@ -103,4 +103,4 @@ After successful setup, you can:
 
 ## Ready to Deploy?
 
-See `IMPLEMENTATION_NOTES.md` for deployment guides and next steps!
+See [IMPLEMENTATION_NOTES.md](../development/IMPLEMENTATION_NOTES.md) for deployment guides and next steps!
