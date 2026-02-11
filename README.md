@@ -36,6 +36,7 @@ A Model Context Protocol (MCP) bridge server for the IoT Cloud REST API, enablin
 
 - **[Quick Start Guide](docs/setup/QUICK_START.md)** - Get started quickly
 - **[Setup Checklist](docs/setup/SETUP_CHECKLIST.md)** - Complete setup guide
+- **[Docker Deployment](docs/deployment/DOCKER_DEPLOYMENT.md)** - Deploy with Docker & CI/CD
 - **[Render Deployment](docs/deployment/RENDER_DEPLOYMENT.md)** - Deploy to Render.com
 - **[Implementation Notes](docs/development/IMPLEMENTATION_NOTES.md)** - Development notes
 - **[Session Summary](docs/development/SESSION_SUMMARY.md)** - Development session logs
@@ -253,11 +254,12 @@ iot-cloud-mcp/
 - [x] Health check endpoint
 - [x] **MVP REST API endpoints** (Definitions, Locations, Groups, Devices, State)
 - [x] **Render deployment guide** (see [RENDER_DEPLOYMENT.md](docs/deployment/RENDER_DEPLOYMENT.md))
+- [x] **Docker configuration** (see [DOCKER_DEPLOYMENT.md](docs/deployment/DOCKER_DEPLOYMENT.md))
+- [x] **CI/CD pipeline** (GitHub Actions for automated builds)
 - [ ] Testing with real Firebase credentials
 - [ ] MCP resources (Partner, Project, Device, Location, Group) - Optional
 - [ ] MCP tools (CRUD operations) - Optional
 - [ ] Extended REST API (POST/PATCH/DELETE operations)
-- [ ] Docker configuration
 
 ## API Endpoints
 
@@ -327,12 +329,105 @@ npm run test:cov
 
 ### Docker
 
+#### Quick Start with Docker Compose
+
+The easiest way to run with Docker:
+
 ```bash
-# Build image
+# Create .env file with your configuration
+cp .env.example .env
+
+# Build and start the container
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop the container
+docker-compose down
+```
+
+#### Manual Docker Build and Run
+
+```bash
+# Build the image
 docker build -t iot-cloud-mcp .
 
-# Run container
-docker run -p 3001:3001 --env-file .env iot-cloud-mcp
+# Run with environment file
+docker run -d \
+  --name iot-cloud-mcp \
+  -p 3001:3001 \
+  --env-file .env \
+  iot-cloud-mcp
+
+# Or run with inline environment variables
+docker run -d \
+  --name iot-cloud-mcp \
+  -p 3001:3001 \
+  -e NODE_ENV=production \
+  -e PORT=3001 \
+  -e IOT_API_BASE_URL=https://your-api.com \
+  -e IOT_API_KEY=your-key \
+  -e FIREBASE_SERVICE_ACCOUNT='{"type":"service_account",...}' \
+  iot-cloud-mcp
+
+# View logs
+docker logs -f iot-cloud-mcp
+
+# Stop and remove container
+docker stop iot-cloud-mcp && docker rm iot-cloud-mcp
+```
+
+#### Pull from GitHub Container Registry
+
+Once CI/CD is set up, pull pre-built images:
+
+```bash
+# Pull latest image
+docker pull ghcr.io/YOUR_USERNAME/iot-cloud-mcp:latest
+
+# Run the pulled image
+docker run -d \
+  --name iot-cloud-mcp \
+  -p 3001:3001 \
+  --env-file .env \
+  ghcr.io/YOUR_USERNAME/iot-cloud-mcp:latest
+```
+
+### CI/CD Pipeline
+
+The project includes a GitHub Actions workflow that automatically:
+
+- ✅ Runs tests and linting on every push and pull request
+- ✅ Builds Docker images on push to `master`/`main` branch
+- ✅ Pushes images to GitHub Container Registry (GHCR)
+- ✅ Tags images with version numbers (from git tags)
+- ✅ Supports multi-architecture builds (amd64, arm64)
+
+**Setup Steps:**
+
+1. The workflow is already configured in [.github/workflows/docker-build.yml](.github/workflows/docker-build.yml)
+2. GitHub automatically provides `GITHUB_TOKEN` for GHCR access
+3. Push to `master` or `main` branch triggers the build
+4. Images are available at `ghcr.io/YOUR_USERNAME/iot-cloud-mcp`
+
+**Optional: Push to Docker Hub**
+
+To also push to Docker Hub, add secrets to your GitHub repository:
+
+1. Go to **Settings** → **Secrets and variables** → **Actions**
+2. Add `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
+3. Uncomment the Docker Hub login section in the workflow file
+
+**Triggering Builds:**
+
+```bash
+# Automatic build on push to master
+git push origin master
+
+# Create a version tag for releases
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
 ```
 
 ### Railway

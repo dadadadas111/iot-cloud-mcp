@@ -13,6 +13,7 @@ Located in [`setup/`](setup/)
 ### 🚀 Deployment
 Located in [`deployment/`](deployment/)
 
+- **[Docker Deployment Guide](deployment/DOCKER_DEPLOYMENT.md)** - Deploy with Docker and Docker Compose (includes CI/CD setup)
 - **[Render Deployment Guide](deployment/RENDER_DEPLOYMENT.md)** - Deploy to Render.com with detailed instructions
 
 ### 💻 Development
