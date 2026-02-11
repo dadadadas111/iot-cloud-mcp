@@ -16,7 +16,8 @@ export class GroupsController {
   @Get()
   @ApiOperation({
     summary: 'Get user groups',
-    description: 'Returns all groups owned by the authenticated user',
+    description:
+      'Returns all groups owned by the authenticated user, optionally filtered by location',
   })
   @ApiQuery({ name: 'locationId', required: false, description: 'Filter by location ID' })
   @ApiResponse({
@@ -28,22 +29,16 @@ export class GroupsController {
     status: 401,
     description: 'Unauthorized - invalid or missing token',
   })
-  async getGroups(
-    @User() user: UserContext,
-    @Query('locationId') locationId?: string,
-    @Query('page') page?: number,
-  ) {
+  async getGroups(@User() user: UserContext, @Query('locationId') locationId?: string) {
     try {
-      const params: any = {
-        userId: user.userId,
-        page: page || 1,
-      };
+      // Correct API format: GET /iot-core/group/{userId}?locationId=...
+      const params: any = {};
 
       if (locationId) {
         params.locationId = locationId;
       }
 
-      const groups = await this.apiClient.get('/group', user.token, params);
+      const groups = await this.apiClient.get(`/group/${user.userId}`, user.token, params);
 
       return {
         success: true,

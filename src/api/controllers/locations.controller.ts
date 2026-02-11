@@ -1,5 +1,5 @@
-import { Controller, Get, Query, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, UseGuards, HttpException, HttpStatus } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { FirebaseAuthGuard } from '../../auth/firebase-auth.guard';
 import { User } from '../../shared/decorators/user.decorator';
 import { UserContext } from '../../auth/firebase.strategy';
@@ -27,12 +27,10 @@ export class LocationsController {
     status: 401,
     description: 'Unauthorized - invalid or missing token',
   })
-  async getLocations(@User() user: UserContext, @Query('page') page?: number) {
+  async getLocations(@User() user: UserContext) {
     try {
-      const locations = await this.apiClient.get('/location', user.token, {
-        userId: user.userId,
-        page: page || 1,
-      });
+      // Correct API format: GET /iot-core/location/{userId}
+      const locations = await this.apiClient.get(`/location/${user.userId}`, user.token);
 
       return {
         success: true,

@@ -24,11 +24,10 @@ export class DevicesController {
   @Get()
   @ApiOperation({
     summary: 'Get user devices',
-    description: 'Returns all devices owned by the authenticated user, with optional filters',
+    description:
+      'Returns all devices owned by the authenticated user, optionally filtered by location',
   })
   @ApiQuery({ name: 'locationId', required: false, description: 'Filter by location ID' })
-  @ApiQuery({ name: 'groupId', required: false, description: 'Filter by group ID' })
-  @ApiQuery({ name: 'page', required: false, description: 'Page number for pagination' })
   @ApiResponse({
     status: 200,
     description: 'Devices retrieved successfully',
@@ -38,36 +37,22 @@ export class DevicesController {
     status: 401,
     description: 'Unauthorized - invalid or missing token',
   })
-  async getDevices(
-    @User() user: UserContext,
-    @Query('locationId') locationId?: string,
-    @Query('groupId') groupId?: string,
-    @Query('page') page?: number,
-  ) {
+  async getDevices(@User() user: UserContext, @Query('locationId') locationId?: string) {
     try {
-      const params: any = {
-        userId: user.userId,
-        page: page || 1,
-      };
+      // Correct API format: GET /iot-core/device/{userId}?locationId=...
+      const params: any = {};
 
       if (locationId) {
         params.locationId = locationId;
       }
 
-      if (groupId) {
-        params.groupId = groupId;
-      }
-
-      const devices = await this.apiClient.get('/device', user.token, params);
+      const devices = await this.apiClient.get(`/device/${user.userId}`, user.token, params);
 
       return {
         success: true,
         data: devices,
         userId: user.userId,
-        filters: {
-          ...(locationId && { locationId }),
-          ...(groupId && { groupId }),
-        },
+        filters: locationId ? { locationId } : {},
       };
     } catch (error) {
       throw new HttpException(
@@ -83,8 +68,8 @@ export class DevicesController {
 
   @Get(':id')
   @ApiOperation({
-    summary: 'Get device by ID',
-    description: 'Returns details of a specific device',
+    summary: 'Get device by UUID',
+    description: 'Returns details of a specific device by its UUID',
   })
   @ApiResponse({
     status: 200,
@@ -95,9 +80,10 @@ export class DevicesController {
     status: 404,
     description: 'Device not found',
   })
-  async getDevice(@User() user: UserContext, @Param('id') deviceId: string) {
+  async getDevice(@User() user: UserContext, @Param('id') deviceUuid: string) {
     try {
-      const device = await this.apiClient.get(`/device/${deviceId}`, user.token);
+      // Correct API format: GET /iot-core/device/{userId}/{uuid}
+      const device = await this.apiClient.get(`/device/${user.userId}/${deviceUuid}`, user.token);
 
       return {
         success: true,
@@ -131,16 +117,12 @@ export class DevicesController {
   })
   async getDeviceState(@User() user: UserContext, @Param('id') deviceId: string) {
     try {
-      const state = await this.apiClient.get(`/state/${deviceId}`, user.token);
+      // Correct API format: GET /iot-core/state/devId/{devId}
+      const state = await this.apiClient.get(`/state/devId/${deviceId}`, user.token);
 
       return {
         success: true,
-        data: {
-          deviceId,
-          state: state.state || state,
-          updatedAt: state.updatedAt || new Date().toISOString(),
-          online: state.online !== undefined ? state.online : true,
-        },
+        data: state,
       };
     } catch (error) {
       throw new HttpException(
