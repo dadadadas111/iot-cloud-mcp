@@ -45,7 +45,7 @@ async function bootstrap() {
       in: 'header',
     })
     .addServer('http://localhost:3001', 'Local Development')
-    .addServer('https://your-deployment-url.com', 'Production')
+    .addServer('https://iot-cloud-mcp.onrender.com', 'Production')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
