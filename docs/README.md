@@ -14,6 +14,7 @@ Located in [`setup/`](setup/)
 Located in [`deployment/`](deployment/)
 
 - **[Docker Deployment Guide](deployment/DOCKER_DEPLOYMENT.md)** - Deploy with Docker and Docker Compose (includes CI/CD setup)
+- **[ChatGPT Apps Integration](deployment/CHATGPT_APPS.md)** - Integrate with ChatGPT Apps (the easy setup guide)
 - **[Render Deployment Guide](deployment/RENDER_DEPLOYMENT.md)** - Deploy to Render.com with detailed instructions
 
 ### 💻 Development

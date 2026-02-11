@@ -36,6 +36,7 @@ A Model Context Protocol (MCP) bridge server for the IoT Cloud REST API, enablin
 
 - **[Quick Start Guide](docs/setup/QUICK_START.md)** - Get started quickly
 - **[Setup Checklist](docs/setup/SETUP_CHECKLIST.md)** - Complete setup guide
+- **[ChatGPT Apps Integration](docs/deployment/CHATGPT_APPS.md)** - Connect to ChatGPT Apps
 - **[Docker Deployment](docs/deployment/DOCKER_DEPLOYMENT.md)** - Deploy with Docker & CI/CD
 - **[Render Deployment](docs/deployment/RENDER_DEPLOYMENT.md)** - Deploy to Render.com
 - **[Implementation Notes](docs/development/IMPLEMENTATION_NOTES.md)** - Development notes
