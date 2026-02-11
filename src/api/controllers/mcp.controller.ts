@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Body, UseGuards, HttpException, HttpStatus, Req, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Response, Request } from 'express';
 import { FirebaseAuthGuard } from '../../auth/firebase-auth.guard';
 import { User } from '../../shared/decorators/user.decorator';
 import { UserContext } from '../../auth/firebase.strategy';
@@ -51,6 +51,82 @@ export class McpController {
         },
       });
     }
+  }
+
+  /**
+   * MCP SSE Endpoint - For ChatGPT streaming
+   * GET /api/mcp/sse
+   * Authorization: Bearer {FIREBASE_TOKEN}
+   */
+  @Get('sse')
+  @UseGuards(FirebaseAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'MCP Protocol SSE Stream',
+    description: 'Server-Sent Events endpoint for ChatGPT to stream MCP protocol',
+  })
+  async streamMcpEvents(@User() user: UserContext, @Req() req: Request, @Res() res: Response): Promise<void> {
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    try {
+      // Send initialization
+      this.sendSSEMessage(res, 'message', {
+        jsonrpc: '2.0',
+        result: this.mcpService.getInitializeResponse(),
+      });
+
+      // Load and send resources
+      const resources = await this.mcpService.listResources(user);
+      this.sendSSEMessage(res, 'message', {
+        jsonrpc: '2.0',
+        result: { resources },
+      });
+
+      // Load and send tools
+      const tools = this.mcpService.listTools();
+      this.sendSSEMessage(res, 'message', {
+        jsonrpc: '2.0',
+        result: { tools },
+      });
+
+      // Send ready signal
+      this.sendSSEMessage(res, 'message', {
+        jsonrpc: '2.0',
+        result: {
+          status: 'ready',
+          resourceCount: resources.length,
+          toolCount: tools.length,
+        },
+      });
+
+      // Keep connection alive
+      const keepAlive = setInterval(() => {
+        res.write(': keep-alive\n\n');
+      }, 30000);
+
+      // Cleanup on disconnect
+      req.on('close', () => {
+        clearInterval(keepAlive);
+        res.end();
+      });
+    } catch (error) {
+      this.sendSSEMessage(res, 'error', {
+        error: error.message || 'Stream error',
+      });
+      res.end();
+    }
+  }
+
+  /**
+   * Helper: Send SSE formatted message
+   */
+  private sendSSEMessage(res: Response, eventType: string, data: any): void {
+    const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+    res.write(message);
   }
 
   /**
