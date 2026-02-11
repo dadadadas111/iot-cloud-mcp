@@ -9,6 +9,7 @@ export interface UserContext {
   authTime: number;
   exp: number;
   emailVerified: boolean;
+  token: string; // Store raw token for API forwarding
 }
 
 @Injectable()
@@ -31,6 +32,7 @@ export class FirebaseStrategy extends PassportStrategy(Strategy, 'firebase') {
         authTime: decodedToken.auth_time,
         exp: decodedToken.exp,
         emailVerified: decodedToken.email_verified || false,
+        token, // Store raw token for forwarding to IoT API
       };
     } catch (error) {
       this.logger.error('Token validation failed:', error.message);

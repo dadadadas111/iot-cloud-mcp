@@ -62,37 +62,82 @@ iot-cloud-mcp/
 
 ## 🔜 Next Steps (For Future Sessions)
 
-### Priority 1: REST API Endpoints (ChatGPT Actions)
+### Priority 1: Testing & Verification ⚡ URGENT
 
-Create REST controllers that wrap the IoT Cloud API for ChatGPT Actions compatibility.
+**What needs to be done:**
 
-**Files to create:**
+1. **Add Firebase Service Account**
 
-```
-src/api/
-├── api.module.ts
-├── dto/                            # Request/Response DTOs
-│   ├── device.dto.ts
-│   ├── project.dto.ts
-│   ├── partner.dto.ts
-│   ├── location.dto.ts
-│   └── group.dto.ts
-└── controllers/
-    ├── device.controller.ts        # Device CRUD
-    ├── project.controller.ts       # Project CRUD
-    ├── partner.controller.ts       # Partner info
-    ├── location.controller.ts      # Location CRUD
-    └── group.controller.ts         # Group CRUD
-```
+   - Get `firebase-service-account.json` from Firebase Console
+   - Place in `iot-cloud-mcp/` directory
+   - OR set `FIREBASE_SERVICE_ACCOUNT` environment variable
 
-**Key endpoints needed:**
+2. **Test Authentication Flow**
 
-- `GET /api/v1/devices` - List devices
-- `POST /api/v1/devices` - Create device
-- `GET /api/v1/devices/:id` - Get device
-- `PATCH /api/v1/devices/:id` - Update device
-- `DELETE /api/v1/devices/:id` - Delete device
-- Similar for projects, locations, groups
+   ```bash
+   cd iot-cloud-mcp
+   npm run start:dev
+
+   # Test login
+   curl -X POST http://localhost:3001/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"password"}'
+   ```
+
+3. **Test MVP Endpoints**
+
+   ```bash
+   # Get token from login response
+   TOKEN="eyJhbGci..."
+
+   # Test definitions
+   curl http://localhost:3001/api/definitions
+
+   # Test locations (requires auth)
+   curl -H "Authorization: Bearer $TOKEN" \
+     http://localhost:3001/api/locations
+
+   # Test devices
+   curl -H "Authorization: Bearer $TOKEN" \
+     http://localhost:3001/api/devices
+
+   # Test device state
+   curl -H "Authorization: Bearer $TOKEN" \
+     http://localhost:3001/api/devices/DEVICE_ID/state
+   ```
+
+4. **Verify Swagger Documentation**
+   - Open http://localhost:3001/api/docs
+   - Check all endpoints are documented
+   - Test "Try it out" feature
+
+### Priority 2: Deploy to Render
+
+Follow the deployment guide in `RENDER_DEPLOYMENT.md`:
+
+1. Push code to GitHub
+2. Create Render Web Service
+3. Configure environment variables
+4. Deploy and verify
+5. Test with ChatGPT Actions
+
+### Priority 3: Additional REST Endpoints (If Needed)
+
+Currently implemented MVP covers:
+
+- ✅ Definitions (Partner, Project, Location, Group, Device, State)
+- ✅ Locations (GET)
+- ✅ Groups (GET)
+- ✅ Devices (GET, GET by ID)
+- ✅ Device State (GET)
+
+**Potential additions:**
+
+- POST/PATCH/DELETE operations for devices, groups, locations
+- Projects management endpoints
+- Partner information endpoints
+- Device command/control endpoints
+- Real-time state updates (WebSocket/SSE)
 
 ### Priority 2: MCP Resources (Optional - for Claude Desktop)
 
@@ -234,18 +279,52 @@ CONTEXT:
 - Firebase service account can be passed as env var or mounted file
 ```
 
-## 🎯 Current Status
+## 🎯 Current Status (Session 2 Update - Feb 11, 2026)
 
-**Build Status:** ✅ Compiling successfully
-**Authentication:** ✅ Working (needs Firebase credentials to test)
+**Build Status:** ✅ **PASSING** - All TypeScript errors resolved, dependencies installed
+**Authentication:** ✅ Ready (supports both file and env var for Firebase)
 **API Client:** ✅ Ready to use
-**Documentation:** ✅ Complete
+**MVP Endpoints:** ✅ **COMPLETE** - Definitions, Locations, Groups, Devices, State
+**Documentation:** ✅ Complete (README, Setup, Render deployment guide)
+**Deployment:** ✅ Render deployment guide created
+
+### Session 2 Accomplishments
+
+1. ✅ **Fixed Build Issues**
+
+   - Installed missing dependencies in `iot-cloud-mcp/node_modules`
+   - Build now passes: `webpack 5.97.1 compiled successfully`
+   - Output: `dist/main.js` generated
+
+2. ✅ **MVP API Endpoints Implemented**
+
+   - `src/api/api.module.ts` - API module configuration
+   - `src/types/entities.dto.ts` - All entity DTOs (Partner, Project, Location, Group, Device, State)
+   - `src/types/definitions.ts` - Entity definitions and workflow documentation
+   - `src/api/controllers/definitions.controller.ts`:
+     - `GET /api/definitions` - All definitions + workflows
+     - `GET /api/definitions/entities` - Entity definitions only
+     - `GET /api/definitions/workflows` - Workflow examples
+   - `src/api/controllers/locations.controller.ts`:
+     - `GET /api/locations` - User's locations
+   - `src/api/controllers/groups.controller.ts`:
+     - `GET /api/groups` - User's groups (filterable by locationId)
+   - `src/api/controllers/devices.controller.ts`:
+     - `GET /api/devices` - User's devices (filterable by locationId, groupId)
+     - `GET /api/devices/:id` - Specific device details
+     - `GET /api/devices/:id/state` - Device current state
+
+3. ✅ **Deployment Documentation**
+   - Created `RENDER_DEPLOYMENT.md` with step-by-step Render deployment guide
+   - Documented Firebase environment variable setup (for cloud deployment)
+   - Included ChatGPT Actions integration steps
+   - Added troubleshooting section
 
 **What you need to continue:**
 
-1. Firebase service account JSON file
-2. Test IoT API credentials
-3. Choose which to build next: REST API or Docker first
+1. Firebase service account JSON file (for testing authentication)
+2. Test credentials to verify endpoints work with real IoT API
+3. Deploy to Render for online testing with ChatGPT
 
 ## 📞 Questions to Clarify
 

@@ -230,11 +230,13 @@ iot-cloud-mcp/
 - [x] Firebase authentication
 - [x] API client service
 - [x] Health check endpoint
-- [ ] MCP resources (Partner, Project, Device, Location, Group)
-- [ ] MCP tools (CRUD operations)
-- [ ] REST API controllers for ChatGPT Actions
+- [x] **MVP REST API endpoints** (Definitions, Locations, Groups, Devices, State)
+- [x] **Render deployment guide** (see `RENDER_DEPLOYMENT.md`)
+- [ ] Testing with real Firebase credentials
+- [ ] MCP resources (Partner, Project, Device, Location, Group) - Optional
+- [ ] MCP tools (CRUD operations) - Optional
+- [ ] Extended REST API (POST/PATCH/DELETE operations)
 - [ ] Docker configuration
-- [ ] Deployment guides (Railway, Render, Heroku)
 
 ## API Endpoints
 
@@ -250,6 +252,21 @@ iot-cloud-mcp/
 | Method | Endpoint      | Description  | Auth Required |
 | ------ | ------------- | ------------ | ------------- |
 | GET    | `/api/health` | Health check | ❌            |
+
+### MVP Endpoints (Read-Only)
+
+| Method | Endpoint                     | Description                                      | Auth Required |
+| ------ | ---------------------------- | ------------------------------------------------ | ------------- |
+| GET    | `/api/definitions`           | All entity definitions + workflows               | ❌            |
+| GET    | `/api/definitions/entities`  | Entity definitions only                          | ❌            |
+| GET    | `/api/definitions/workflows` | Common workflow examples                         | ❌            |
+| GET    | `/api/locations`             | User's locations                                 | ✅            |
+| GET    | `/api/groups`                | User's groups (filter: `locationId`)             | ✅            |
+| GET    | `/api/devices`               | User's devices (filter: `locationId`, `groupId`) | ✅            |
+| GET    | `/api/devices/:id`           | Specific device details                          | ✅            |
+| GET    | `/api/devices/:id/state`     | Current state of a device                        | ✅            |
+
+> ℹ️ All authenticated endpoints require `Authorization: Bearer <token>` header
 
 ## Environment Variables
 
@@ -305,13 +322,25 @@ docker run -p 3001:3001 --env-file .env iot-cloud-mcp
 4. Deploy: `railway up`
 5. Set environment variables in Railway dashboard
 
-### Render
+### Render (Recommended for Testing)
+
+**See detailed guide:** [RENDER_DEPLOYMENT.md](./RENDER_DEPLOYMENT.md)
+
+Quick steps:
 
 1. Connect your GitHub repository
 2. Create new Web Service
 3. Build command: `npm install && npm run build`
 4. Start command: `npm run start:prod`
-5. Add environment variables in Render dashboard
+5. Add environment variables in Render dashboard (including `FIREBASE_SERVICE_ACCOUNT`)
+
+Render provides:
+
+- ✅ Free tier with 750 hours/month
+- ✅ Automatic SSL/HTTPS
+- ✅ Easy environment variable management
+- ✅ Direct GitHub integration
+- ✅ Build logs and monitoring
 
 ## Security Considerations
 
