@@ -6,10 +6,17 @@ import { DefinitionsController } from './controllers/definitions.controller';
 import { LocationsController } from './controllers/locations.controller';
 import { GroupsController } from './controllers/groups.controller';
 import { DevicesController } from './controllers/devices.controller';
+import { McpController } from './controllers/mcp.controller';
 
 @Module({
   imports: [HttpModule, AuthModule],
-  controllers: [DefinitionsController, LocationsController, GroupsController, DevicesController],
+  controllers: [
+    DefinitionsController,
+    LocationsController,
+    GroupsController,
+    DevicesController,
+    McpController,
+  ],
   providers: [ApiClientService],
 })
 export class ApiModule {}
