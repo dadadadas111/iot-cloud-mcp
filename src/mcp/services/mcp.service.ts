@@ -173,7 +173,7 @@ export class McpService {
 
           // Search locations
           const locations = await this.apiClient.get(
-            `/iot-core/location/${connectionState.userId}`,
+            `/location/${connectionState.userId}`,
             connectionState.token,
           );
           if (Array.isArray(locations)) {
@@ -194,7 +194,7 @@ export class McpService {
 
           // Search groups
           const groups = await this.apiClient.get(
-            `/iot-core/group/${connectionState.userId}`,
+            `/group/${connectionState.userId}`,
             connectionState.token,
           );
           if (Array.isArray(groups)) {
@@ -281,7 +281,7 @@ export class McpService {
 
             case 'location':
               const allLocations = await this.apiClient.get(
-                `/iot-core/location/${connectionState.userId}`,
+                `/location/${connectionState.userId}`,
                 connectionState.token,
               );
               fetchedData = Array.isArray(allLocations)
@@ -294,7 +294,7 @@ export class McpService {
 
             case 'group':
               const allGroups = await this.apiClient.get(
-                `/iot-core/group/${connectionState.userId}`,
+                `/group/${connectionState.userId}`,
                 connectionState.token,
               );
               fetchedData = Array.isArray(allGroups)
