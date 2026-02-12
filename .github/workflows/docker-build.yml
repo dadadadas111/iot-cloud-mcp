@@ -85,52 +85,49 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_KEY_BASE64 }}" | base64 -d > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
-
       - name: Deploy to VPS via SSH
-        run: |
-          ssh -i ~/.ssh/deploy_key -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_USERNAME }}@${{ secrets.VPS_HOST }} << 'ENDSSH'
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
             set -e
-            
+
             # Navigate to project directory
             cd /opt/mcp
-            
+
             # Login to GitHub Container Registry
             echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
-            
+
             # Pull the latest image
             sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            
+
             # Detect docker-compose version and use appropriate command
             if command -v docker-compose &> /dev/null; then
                 COMPOSE_CMD="sudo docker-compose"
             else
                 COMPOSE_CMD="sudo docker compose"
             fi
-            
+
             # Stop and remove old containers
             $COMPOSE_CMD down || true
-            
+
             # Start services with the new image
             $COMPOSE_CMD up -d
-            
+
             # Wait for services to be healthy
             echo "Waiting for services to start..."
             sleep 15
-            
+
             # Check service status
             $COMPOSE_CMD ps
-            
+
             # Show recent logs
             $COMPOSE_CMD logs --tail=50 iot-cloud-mcp
-            
+
             # Clean up old images
             sudo docker image prune -af --filter "until=24h"
-            
+
             echo "Deployment completed successfully!"
-          ENDSSH
