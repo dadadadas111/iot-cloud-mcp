@@ -487,7 +487,6 @@ export class McpService {
             productId: d.productId,
             locationId: d.locationId,
             groupId: d.groupId,
-            online: d.link === 1,
           }));
 
           return {
@@ -856,8 +855,468 @@ export class McpService {
       },
     );
 
+    // Tool 10: get_device_states - Get states for all devices
+    server.registerTool(
+      'get_device_states',
+      {
+        description:
+          'Get current states of all IoT devices. Returns state information including attributes, values, and last update times for all devices in the system.',
+        inputSchema: z.object({}),
+      },
+      async (_, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(`[get_device_states] Fetching all device states`);
+          const states = await this.apiClient.get(
+            `/state/devId/${connectionState.userId}`,
+            connectionState.token,
+          );
+
+          this.logger.log(`[get_device_states] Retrieved states successfully`);
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(states, null, 2),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[get_device_states] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to get device states: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // Tool 11: get_location_state - Get states for all devices in a location
+    server.registerTool(
+      'get_location_state',
+      {
+        description:
+          'Get current states of all IoT devices in a specific location. Returns state information for all devices within the specified location.',
+        inputSchema: z.object({
+          locationUuid: z.string().describe('Location UUID (use _id from list_locations)'),
+        }),
+      },
+      async ({ locationUuid }, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(`[get_location_state] Fetching state for location: ${locationUuid}`);
+          const states = await this.apiClient.get(`/state/${locationUuid}`, connectionState.token);
+
+          this.logger.log(`[get_location_state] Retrieved location state successfully`);
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(states, null, 2),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[get_location_state] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to get location state: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // Tool 12: get_device_state_by_mac - Get state of a specific device by MAC address
+    server.registerTool(
+      'get_device_state_by_mac',
+      {
+        description:
+          'Get current state of a specific IoT device by its MAC address within a location. Useful when you need state info for a single device.',
+        inputSchema: z.object({
+          locationUuid: z.string().describe('Location UUID where the device is located'),
+          macAddress: z.string().describe('Device MAC address (physical identifier)'),
+        }),
+      },
+      async ({ locationUuid, macAddress }, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(
+            `[get_device_state_by_mac] Fetching state for location ${locationUuid}, device ${macAddress}`,
+          );
+          const state = await this.apiClient.get(
+            `/state/${locationUuid}/${macAddress}`,
+            connectionState.token,
+          );
+
+          this.logger.log(`[get_device_state_by_mac] Retrieved device state successfully`);
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(state, null, 2),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[get_device_state_by_mac] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to get device state: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // Tool 13: control_device - Control an IoT device
+    server.registerTool(
+      'control_device',
+      {
+        description:
+          'Send control command to an IoT device. You must first get device details to retrieve required fields (eid, rootUuid, endpoint, partnerId, protocolCtl). ' +
+          'Command format: [attributeId, value, ...] e.g., [1, 1] for ON, [1, 0] for OFF, [28, 700] for brightness. ' +
+          'See device-attr-and-control.csv for attribute IDs: ON_OFF=1, BRIGHTNESS=28, KELVIN=29, COLOR_HSV=31, MODE=17, TEMP_SET=20, etc. ' +
+          'Note: This API only publishes MQTT messages - it does not validate or guarantee device state changes.',
+        inputSchema: z.object({
+          uuid: z.string().describe('Device UUID to control (first get device details)'),
+          elementIds: z
+            .array(z.number())
+            .describe('Element IDs to control (from device.elementIds, use all if unsure)'),
+          command: z
+            .array(z.number())
+            .describe(
+              'Command array: [attributeId, value, ...]. Examples: [1,1]=ON, [1,0]=OFF, [28,700]=brightness, [20,22]=temp 22°C',
+            ),
+        }),
+      },
+      async ({ uuid, elementIds, command }, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(`[control_device] Getting device details for uuid: ${uuid}`);
+
+          // First, get device details to retrieve control parameters
+          const device = await this.apiClient.get(
+            `/device/${connectionState.userId}/${uuid}`,
+            connectionState.token,
+          );
+
+          if (!device) {
+            throw new Error(`Device ${uuid} not found`);
+          }
+
+          // Extract required fields
+          const eid = device.eid;
+          const rootUuid = device.rootUuid || device.uuid; // Use device uuid if no rootUuid
+          const endpoint = device.endpoint;
+          const partnerId = device.partnerId;
+          const protocolCtl = device.protocolCtl;
+
+          // Validate required fields
+          if (!eid || !endpoint || !partnerId || protocolCtl === undefined) {
+            this.logger.error('[control_device] Missing required device fields:', {
+              eid,
+              endpoint,
+              partnerId,
+              protocolCtl,
+            });
+            throw new Error(
+              'Device is missing required control fields (eid, endpoint, partnerId, or protocolCtl)',
+            );
+          }
+
+          // Build control payload
+          const payload = {
+            eid,
+            elementIds,
+            command,
+            endpoint,
+            partnerId,
+            rootUuid,
+            protocolCtl,
+          };
+
+          this.logger.debug('[control_device] Sending control command:', payload);
+
+          // Send control command
+          const result = await this.apiClient.post(
+            '/control/device',
+            connectionState.token,
+            payload,
+          );
+
+          this.logger.log(
+            `[control_device] Control command sent successfully for device ${device.label || uuid}`,
+          );
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    device: {
+                      uuid: device.uuid,
+                      label: device.label,
+                      mac: device.mac,
+                    },
+                    command_sent: {
+                      elementIds,
+                      command,
+                    },
+                    note: 'Control command published to MQTT. Device state change is not guaranteed - check device state after a few seconds.',
+                    response: result,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[control_device] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to control device: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // Tool 14: control_device_simple - Simplified device control helpers
+    server.registerTool(
+      'control_device_simple',
+      {
+        description:
+          'Simplified device control for common operations. Automatically builds the correct command array for common actions. ' +
+          'Actions: turn_on, turn_off, set_brightness (0-1000), set_kelvin (0-65000), set_temperature (15-30 for AC), set_mode (0-4 for AC). ' +
+          'If elementId not specified, controls all elements. This is easier than control_device for basic operations.',
+        inputSchema: z.object({
+          uuid: z.string().describe('Device UUID to control'),
+          action: z
+            .enum([
+              'turn_on',
+              'turn_off',
+              'set_brightness',
+              'set_kelvin',
+              'set_temperature',
+              'set_mode',
+            ])
+            .describe(
+              'Action to perform: turn_on, turn_off, set_brightness, set_kelvin, set_temperature (AC), set_mode (AC)',
+            ),
+          value: z
+            .number()
+            .optional()
+            .describe(
+              'Value for set_* actions: brightness (0-1000), kelvin (0-65000), temperature (15-30), mode (0-4)',
+            ),
+          elementId: z
+            .number()
+            .optional()
+            .describe('Specific element ID to control (optional, controls all if not specified)'),
+        }),
+      },
+      async ({ uuid, action, value, elementId }, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(`[control_device_simple] Getting device details for uuid: ${uuid}`);
+
+          // Get device details
+          const device = await this.apiClient.get(
+            `/device/${connectionState.userId}/${uuid}`,
+            connectionState.token,
+          );
+
+          if (!device) {
+            throw new Error(`Device ${uuid} not found`);
+          }
+
+          // Determine element IDs
+          const elementIds = elementId ? [elementId] : device.elementIds || [];
+
+          if (elementIds.length === 0) {
+            throw new Error('No element IDs available for this device');
+          }
+
+          // Build command based on action
+          let command: number[];
+          let actionDescription: string;
+
+          switch (action) {
+            case 'turn_on':
+              command = [1, 1]; // ON_OFF=1, value=1 (ON)
+              actionDescription = 'Turn ON';
+              break;
+            case 'turn_off':
+              command = [1, 0]; // ON_OFF=1, value=0 (OFF)
+              actionDescription = 'Turn OFF';
+              break;
+            case 'set_brightness':
+              if (value === undefined || value < 0 || value > 1000) {
+                throw new Error('Brightness value must be between 0 and 1000');
+              }
+              command = [28, value]; // BRIGHTNESS=28
+              actionDescription = `Set brightness to ${value}`;
+              break;
+            case 'set_kelvin':
+              if (value === undefined || value < 0 || value > 65000) {
+                throw new Error('Kelvin value must be between 0 and 65000');
+              }
+              command = [29, value]; // KELVIN=29
+              actionDescription = `Set kelvin to ${value}`;
+              break;
+            case 'set_temperature':
+              if (value === undefined || value < 15 || value > 30) {
+                throw new Error('Temperature must be between 15 and 30 (Celsius)');
+              }
+              command = [20, value]; // TEMP_SET=20
+              actionDescription = `Set temperature to ${value}°C`;
+              break;
+            case 'set_mode':
+              if (value === undefined || value < 0 || value > 4) {
+                throw new Error('Mode must be 0-4 (0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN)');
+              }
+              command = [17, value]; // MODE=17
+              const modes = ['AUTO', 'COOLING', 'DRY', 'HEATING', 'FAN'];
+              actionDescription = `Set mode to ${modes[value]}`;
+              break;
+            default:
+              throw new Error(`Unknown action: ${action}`);
+          }
+
+          // Extract required control fields
+          const eid = device.eid;
+          const rootUuid = device.rootUuid || device.uuid;
+          const endpoint = device.endpoint;
+          const partnerId = device.partnerId;
+          const protocolCtl = device.protocolCtl;
+
+          if (!eid || !endpoint || !partnerId || protocolCtl === undefined) {
+            throw new Error(
+              'Device is missing required control fields (eid, endpoint, partnerId, or protocolCtl)',
+            );
+          }
+
+          // Build control payload
+          const payload = {
+            eid,
+            elementIds,
+            command,
+            endpoint,
+            partnerId,
+            rootUuid,
+            protocolCtl,
+          };
+
+          this.logger.debug('[control_device_simple] Sending control command:', payload);
+
+          // Send control command
+          const result = await this.apiClient.post(
+            '/control/device',
+            connectionState.token,
+            payload,
+          );
+
+          this.logger.log(
+            `[control_device_simple] ${actionDescription} command sent for device ${device.label || uuid}`,
+          );
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    device: {
+                      uuid: device.uuid,
+                      label: device.label,
+                      mac: device.mac,
+                    },
+                    action: actionDescription,
+                    command_sent: {
+                      elementIds,
+                      command,
+                    },
+                    note: 'Control command published to MQTT. Device state change is not guaranteed - check device state after a few seconds.',
+                    response: result,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[control_device_simple] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to control device: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
     this.logger.log(
-      'MCP tools registered successfully: login, search, fetch, list_devices, list_locations, list_groups, get_device, update_device, delete_device',
+      'MCP tools registered successfully: login, search, fetch, list_devices, list_locations, list_groups, get_device, update_device, delete_device, get_device_states, get_location_state, get_device_state_by_mac, control_device, control_device_simple',
     );
   }
 }
