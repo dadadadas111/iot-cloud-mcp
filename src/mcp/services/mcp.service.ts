@@ -168,9 +168,10 @@ export class McpService {
           if (Array.isArray(devices)) {
             const filteredDevices = devices.filter(
               (d) =>
-                d.name?.toLowerCase().includes(lowerQuery) ||
-                d.uuid?.toLowerCase().includes(lowerQuery) ||
-                d.type?.toLowerCase().includes(lowerQuery),
+                d.label?.toLowerCase().includes(lowerQuery) ||
+                d.mac?.toLowerCase().includes(lowerQuery) ||
+                d.desc?.toLowerCase().includes(lowerQuery) ||
+                d.productId?.toLowerCase().includes(lowerQuery),
             );
             this.logger.debug(
               `[search] Filtered ${filteredDevices.length} devices matching query "${query}"`,
@@ -178,9 +179,9 @@ export class McpService {
 
             filteredDevices.forEach((device) => {
               results.push({
-                id: `device:${device.uuid}`,
-                title: `Device: ${device.name || device.uuid}`,
-                url: `https://mcp.dash.id.vn/device/${device.uuid}`,
+                id: `device:${device.mac}`,
+                title: `Device: ${device.label || device.mac}`,
+                url: `https://mcp.dash.id.vn/device/${device.mac}`,
               });
             });
           } else {
@@ -208,8 +209,9 @@ export class McpService {
           if (Array.isArray(locations)) {
             const filteredLocations = locations.filter(
               (l) =>
-                l.name?.toLowerCase().includes(lowerQuery) ||
-                l.uuid?.toLowerCase().includes(lowerQuery),
+                l.label?.toLowerCase().includes(lowerQuery) ||
+                l.desc?.toLowerCase().includes(lowerQuery) ||
+                l._id?.toLowerCase().includes(lowerQuery),
             );
             this.logger.debug(
               `[search] Filtered ${filteredLocations.length} locations matching query "${query}"`,
@@ -217,9 +219,9 @@ export class McpService {
 
             filteredLocations.forEach((location) => {
               results.push({
-                id: `location:${location.uuid}`,
-                title: `Location: ${location.name || location.uuid}`,
-                url: `https://mcp.dash.id.vn/location/${location.uuid}`,
+                id: `location:${location._id}`,
+                title: `Location: ${location.label || location._id}`,
+                url: `https://mcp.dash.id.vn/location/${location._id}`,
               });
             });
           } else {
@@ -245,8 +247,9 @@ export class McpService {
           if (Array.isArray(groups)) {
             const filteredGroups = groups.filter(
               (g) =>
-                g.name?.toLowerCase().includes(lowerQuery) ||
-                g.uuid?.toLowerCase().includes(lowerQuery),
+                g.label?.toLowerCase().includes(lowerQuery) ||
+                g.desc?.toLowerCase().includes(lowerQuery) ||
+                g._id?.toLowerCase().includes(lowerQuery),
             );
             this.logger.debug(
               `[search] Filtered ${filteredGroups.length} groups matching query "${query}"`,
@@ -254,9 +257,9 @@ export class McpService {
 
             filteredGroups.forEach((group) => {
               results.push({
-                id: `group:${group.uuid}`,
-                title: `Group: ${group.name || group.uuid}`,
-                url: `https://mcp.dash.id.vn/group/${group.uuid}`,
+                id: `group:${group._id}`,
+                title: `Group: ${group.label || group._id}`,
+                url: `https://mcp.dash.id.vn/group/${group._id}`,
               });
             });
           } else {
@@ -340,12 +343,12 @@ export class McpService {
               this.logger.debug(
                 `[fetch] Device response type: ${typeof fetchedData}, keys: ${fetchedData ? Object.keys(fetchedData).slice(0, 10).join(', ') : 'null'}`,
               );
-              title = `Device: ${fetchedData.name || uuid}`;
+              title = `Device: ${fetchedData.label || uuid}`;
               url = `https://mcp.dash.id.vn/device/${uuid}`;
               break;
 
             case 'location':
-              this.logger.debug(`[fetch] Fetching all locations to find uuid: ${uuid}`);
+              this.logger.debug(`[fetch] Fetching all locations to find id: ${uuid}`);
               const allLocations = await this.apiClient.get(
                 `/location/${connectionState.userId}`,
                 connectionState.token,
@@ -354,7 +357,7 @@ export class McpService {
                 `[fetch] Locations response isArray: ${Array.isArray(allLocations)}, length: ${Array.isArray(allLocations) ? allLocations.length : 'N/A'}`,
               );
               fetchedData = Array.isArray(allLocations)
-                ? allLocations.find((l) => l.uuid === uuid)
+                ? allLocations.find((l) => l._id === uuid)
                 : null;
               if (!fetchedData) {
                 this.logger.warn(
@@ -362,12 +365,12 @@ export class McpService {
                 );
                 throw new Error(`Location ${uuid} not found`);
               }
-              title = `Location: ${fetchedData.name || uuid}`;
+              title = `Location: ${fetchedData.label || uuid}`;
               url = `https://mcp.dash.id.vn/location/${uuid}`;
               break;
 
             case 'group':
-              this.logger.debug(`[fetch] Fetching all groups to find uuid: ${uuid}`);
+              this.logger.debug(`[fetch] Fetching all groups to find id: ${uuid}`);
               const allGroups = await this.apiClient.get(
                 `/group/${connectionState.userId}`,
                 connectionState.token,
@@ -375,16 +378,14 @@ export class McpService {
               this.logger.debug(
                 `[fetch] Groups response isArray: ${Array.isArray(allGroups)}, length: ${Array.isArray(allGroups) ? allGroups.length : 'N/A'}`,
               );
-              fetchedData = Array.isArray(allGroups)
-                ? allGroups.find((g) => g.uuid === uuid)
-                : null;
+              fetchedData = Array.isArray(allGroups) ? allGroups.find((g) => g._id === uuid) : null;
               if (!fetchedData) {
                 this.logger.warn(
                   `[fetch] Group ${uuid} not found in ${Array.isArray(allGroups) ? allGroups.length : 0} groups`,
                 );
                 throw new Error(`Group ${uuid} not found`);
               }
-              title = `Group: ${fetchedData.name || uuid}`;
+              title = `Group: ${fetchedData.label || uuid}`;
               url = `https://mcp.dash.id.vn/group/${uuid}`;
               break;
 
