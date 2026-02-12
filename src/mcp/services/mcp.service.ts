@@ -16,7 +16,6 @@ export interface ConnectionState {
 @Injectable()
 export class McpService {
   private readonly logger = new Logger(McpService.name);
-  private server: McpServer | null = null;
   // Store connection states by session ID (in production, use Redis or similar)
   private readonly connectionStates = new Map<string, ConnectionState>();
 
@@ -26,15 +25,13 @@ export class McpService {
   ) {}
 
   /**
-   * Get or create the MCP Server instance
+   * Create a NEW MCP Server instance
+   * IMPORTANT: Each transport needs its own server instance
+   * The official SDK's server.connect() can only be called once per server
    */
-  async getServer(): Promise<McpServer> {
-    if (this.server) {
-      return this.server;
-    }
-
+  async createServer(): Promise<McpServer> {
     // Create MCP server with official SDK
-    this.server = new McpServer(
+    const server = new McpServer(
       {
         name: 'IoT Cloud MCP Bridge',
         version: '1.0.0',
@@ -48,10 +45,10 @@ export class McpService {
     );
 
     // Register all tools
-    this.registerTools(this.server);
+    this.registerTools(server);
 
-    this.logger.log('MCP Server initialized successfully with official SDK');
-    return this.server;
+    this.logger.log('MCP Server instance created with official SDK');
+    return server;
   }
 
   /**

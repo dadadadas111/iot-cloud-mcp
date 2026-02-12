@@ -69,9 +69,10 @@ export class McpController {
           }
         };
 
-        // Connect transport to MCP server
-        console.log('[MCP] Creating new transport and connecting to server');
-        const server = await this.mcpService.getServer();
+        // CRITICAL FIX: Create NEW server instance per transport
+        // Each transport needs its own server connection
+        console.log('[MCP] Creating new server instance for transport');
+        const server = await this.mcpService.createServer();
         await server.connect(transport);
       }
 
