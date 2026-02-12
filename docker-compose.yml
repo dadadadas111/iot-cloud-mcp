@@ -6,52 +6,38 @@ services:
     container_name: iot-cloud-mcp
     restart: unless-stopped
     ports:
-      - "${PORT:-3001}:3001"
+      - '${PORT:-3001}:3001'
     environment:
       # Server Configuration
       NODE_ENV: ${NODE_ENV:-production}
       PORT: 3001
       HOST: 0.0.0.0
-      
+
       # IoT Cloud API
       IOT_API_BASE_URL: ${IOT_API_BASE_URL}
       IOT_API_KEY: ${IOT_API_KEY}
       IOT_API_TIMEOUT: ${IOT_API_TIMEOUT:-30000}
-      
-      # Firebase Admin SDK (inline JSON recommended for Docker)
-      FIREBASE_SERVICE_ACCOUNT: ${FIREBASE_SERVICE_ACCOUNT}
-      
+
       # CORS Configuration
       ENABLE_CORS: ${ENABLE_CORS:-true}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
-      
+
       # Rate Limiting
       ENABLE_RATE_LIMIT: ${ENABLE_RATE_LIMIT:-true}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-60000}
-      
+
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-info}
-    
-    # Optional: Mount Firebase service account if using file path
-    # volumes:
-    #   - ./firebase-service-account.json:/app/firebase-service-account.json:ro
-    
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    
+
     networks:
       - iot-network
-    
+
     logging:
-      driver: "json-file"
+      driver: 'json-file'
       options:
-        max-size: "10m"
-        max-file: "3"
+        max-size: '10m'
+        max-file: '3'
 
 networks:
   iot-network:

@@ -1,12 +1,26 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ApiClientService } from '../../services/api-client.service';
-import { UserContext } from '../../auth/firebase.strategy';
-import { CallToolResponse, InitializeResponse, Resource, ServerCapabilities, Tool } from '@/mcp/types/mcp.types';
+import { AuthService } from '../../auth/auth.service';
+import {
+  CallToolResponse,
+  InitializeResponse,
+  ServerCapabilities,
+  Tool,
+} from '@/mcp/types/mcp.types';
 
+export interface ConnectionState {
+  token: string | null;
+  userId: string | null;
+}
 
 @Injectable()
 export class McpService {
-  constructor(private apiClient: ApiClientService) {}
+  private readonly logger = new Logger(McpService.name);
+
+  constructor(
+    private apiClient: ApiClientService,
+    private authService: AuthService,
+  ) {}
 
   /**
    * Initialize MCP connection
@@ -28,9 +42,6 @@ export class McpService {
   private getServerCapabilities(): ServerCapabilities {
     return {
       logging: {},
-      resources: {
-        listChanged: true,
-      },
       tools: {
         listChanged: true,
       },
@@ -39,95 +50,29 @@ export class McpService {
   }
 
   /**
-   * List all available resources
-   */
-  async listResources(user: UserContext): Promise<Resource[]> {
-    try {
-      // Get data from IoT API
-      const [devices, locations, groups] = await Promise.all([
-        this.apiClient.get(`/device/${user.userId}`, user.token).catch(() => []),
-        this.apiClient.get(`/iot-core/location/${user.userId}`, user.token).catch(() => []),
-        this.apiClient.get(`/iot-core/group/${user.userId}`, user.token).catch(() => []),
-      ]);
-
-      const resources: Resource[] = [
-        {
-          uri: 'iot://devices',
-          name: 'Devices',
-          description: 'All IoT devices accessible to the user',
-          mimeType: 'application/json',
-        },
-        {
-          uri: 'iot://locations',
-          name: 'Locations',
-          description: 'All location groups with device organization',
-          mimeType: 'application/json',
-        },
-        {
-          uri: 'iot://groups',
-          name: 'Device Groups',
-          description: 'All device groups for bulk operations',
-          mimeType: 'application/json',
-        },
-      ];
-
-      // Add individual device resources
-      if (Array.isArray(devices)) {
-        devices.forEach((device: any) => {
-          resources.push({
-            uri: `iot://device/${device.uuid}`,
-            name: device.name || `Device ${device.uuid}`,
-            description: `Device: ${device.deviceType || 'Unknown'}`,
-            mimeType: 'application/json',
-          });
-        });
-      }
-
-      return resources;
-    } catch (error) {
-      console.error('Error listing resources:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Read a specific resource
-   */
-  async readResource(user: UserContext, resourceUri: string): Promise<string> {
-    try {
-      if (resourceUri === 'iot://devices') {
-        const devices = await this.apiClient.get(`/device/${user.userId}`, user.token);
-        return JSON.stringify(devices, null, 2);
-      }
-
-      if (resourceUri === 'iot://locations') {
-        const locations = await this.apiClient.get(`/iot-core/location/${user.userId}`, user.token);
-        return JSON.stringify(locations, null, 2);
-      }
-
-      if (resourceUri === 'iot://groups') {
-        const groups = await this.apiClient.get(`/iot-core/group/${user.userId}`, user.token);
-        return JSON.stringify(groups, null, 2);
-      }
-
-      // Read individual device
-      if (resourceUri.startsWith('iot://device/')) {
-        const deviceId = resourceUri.replace('iot://device/', '');
-        const device = await this.apiClient.get(`/device/${user.userId}/${deviceId}`, user.token);
-        return JSON.stringify(device, null, 2);
-      }
-
-      throw new Error(`Unknown resource: ${resourceUri}`);
-    } catch (error) {
-      throw new Error(`Failed to read resource ${resourceUri}: ${error.message}`);
-    }
-  }
-
-  /**
    * List all available tools
    */
   listTools(): Tool[] {
     return [
+      {
+        name: 'login',
+        description:
+          'Authenticate with email and password to get access to IoT devices. MUST be called first before using other tools.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            email: {
+              type: 'string',
+              description: 'User email address',
+            },
+            password: {
+              type: 'string',
+              description: 'User password',
+            },
+          },
+          required: ['email', 'password'],
+        },
+      },
       {
         name: 'get_devices',
         description: 'Get all IoT devices for the authenticated user',
@@ -214,40 +159,113 @@ export class McpService {
   /**
    * Call a tool with parameters
    */
-  async callTool(user: UserContext, toolName: string, params: Record<string, any>): Promise<CallToolResponse> {
+  async callTool(
+    toolName: string,
+    params: Record<string, any>,
+    connectionState: ConnectionState,
+  ): Promise<CallToolResponse> {
     try {
       let result: any;
 
+      // Handle login tool separately
+      if (toolName === 'login') {
+        if (!params.email || !params.password) {
+          throw new Error('email and password are required');
+        }
+
+        const loginResult = await this.authService.login(params.email, params.password);
+
+        // Decode JWT to extract userId
+        let userId: string | null = null;
+        try {
+          const tokenParts = loginResult.access_token.split('.');
+          if (tokenParts.length === 3) {
+            const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+            userId = payload.user_id || payload.sub || null;
+          }
+        } catch (error) {
+          this.logger.warn('Could not decode JWT token', error);
+        }
+
+        // Store token and userId in connection state
+        connectionState.token = loginResult.access_token;
+        connectionState.userId = userId;
+
+        this.logger.log(`User ${params.email} logged in successfully, userId: ${userId}`);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  success: true,
+                  message:
+                    'Login successful. You can now use other tools to interact with your IoT devices.',
+                  token_type: loginResult.token_type,
+                  expires_in: loginResult.expires_in,
+                  user_id: userId,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }
+
+      // All other tools require authentication
+      if (!connectionState.token || !connectionState.userId) {
+        throw new Error('Authentication required. Please use the login tool first.');
+      }
+
       switch (toolName) {
         case 'get_devices':
-          result = await this.apiClient.get(`/device/${user.userId}`, user.token, {
-            locationId: params.locationId,
-            groupId: params.groupId,
-          });
+          result = await this.apiClient.get(
+            `/device/${connectionState.userId}`,
+            connectionState.token,
+            {
+              locationId: params.locationId,
+              groupId: params.groupId,
+            },
+          );
           break;
 
         case 'get_device':
           if (!params.deviceId) throw new Error('deviceId is required');
-          result = await this.apiClient.get(`/device/${user.userId}/${params.deviceId}`, user.token);
+          result = await this.apiClient.get(
+            `/device/${connectionState.userId}/${params.deviceId}`,
+            connectionState.token,
+          );
           break;
 
         case 'get_device_state':
           if (!params.deviceId) throw new Error('deviceId is required');
-          result = await this.apiClient.get(`/device/${user.userId}/${params.deviceId}/state`, user.token);
+          result = await this.apiClient.get(
+            `/device/${connectionState.userId}/${params.deviceId}/state`,
+            connectionState.token,
+          );
           break;
 
         case 'get_locations':
-          result = await this.apiClient.get(`/iot-core/location/${user.userId}`, user.token);
+          result = await this.apiClient.get(
+            `/iot-core/location/${connectionState.userId}`,
+            connectionState.token,
+          );
           break;
 
         case 'get_groups':
-          result = await this.apiClient.get(`/iot-core/group/${user.userId}`, user.token, {
-            locationId: params.locationId,
-          });
+          result = await this.apiClient.get(
+            `/iot-core/group/${connectionState.userId}`,
+            connectionState.token,
+            {
+              locationId: params.locationId,
+            },
+          );
           break;
 
         case 'get_definitions':
-          result = await this.apiClient.get(`/iot-core/definition`, user.token, {
+          result = await this.apiClient.get(`/iot-core/definition`, connectionState.token, {
             type: params.type,
           });
           break;
@@ -265,6 +283,7 @@ export class McpService {
         ],
       };
     } catch (error) {
+      this.logger.error(`Error calling tool ${toolName}:`, error);
       return {
         content: [
           {
