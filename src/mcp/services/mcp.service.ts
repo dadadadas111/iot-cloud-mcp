@@ -150,67 +150,122 @@ export class McpService {
 
         try {
           // Search devices
+          this.logger.debug(`[search] Fetching devices for userId: ${connectionState.userId}`);
           const devices = await this.apiClient.get(
             `/device/${connectionState.userId}`,
             connectionState.token,
           );
+          this.logger.debug(
+            `[search] Devices response type: ${typeof devices}, isArray: ${Array.isArray(devices)}, length: ${Array.isArray(devices) ? devices.length : 'N/A'}`,
+          );
+          if (devices && typeof devices === 'object') {
+            this.logger.debug(`[search] Devices response keys: ${Object.keys(devices).join(', ')}`);
+            this.logger.debug(
+              `[search] Devices response sample: ${JSON.stringify(devices).substring(0, 500)}`,
+            );
+          }
+
           if (Array.isArray(devices)) {
-            devices
-              .filter(
-                (d) =>
-                  d.name?.toLowerCase().includes(lowerQuery) ||
-                  d.uuid?.toLowerCase().includes(lowerQuery) ||
-                  d.type?.toLowerCase().includes(lowerQuery),
-              )
-              .forEach((device) => {
-                results.push({
-                  id: `device:${device.uuid}`,
-                  title: `Device: ${device.name || device.uuid}`,
-                  url: `https://mcp.dash.id.vn/device/${device.uuid}`,
-                });
+            const filteredDevices = devices.filter(
+              (d) =>
+                d.name?.toLowerCase().includes(lowerQuery) ||
+                d.uuid?.toLowerCase().includes(lowerQuery) ||
+                d.type?.toLowerCase().includes(lowerQuery),
+            );
+            this.logger.debug(
+              `[search] Filtered ${filteredDevices.length} devices matching query "${query}"`,
+            );
+
+            filteredDevices.forEach((device) => {
+              results.push({
+                id: `device:${device.uuid}`,
+                title: `Device: ${device.name || device.uuid}`,
+                url: `https://mcp.dash.id.vn/device/${device.uuid}`,
               });
+            });
+          } else {
+            this.logger.warn(`[search] Devices response is not an array!`);
           }
 
           // Search locations
+          this.logger.debug(`[search] Fetching locations for userId: ${connectionState.userId}`);
           const locations = await this.apiClient.get(
             `/location/${connectionState.userId}`,
             connectionState.token,
           );
+          this.logger.debug(
+            `[search] Locations response type: ${typeof locations}, isArray: ${Array.isArray(locations)}, length: ${Array.isArray(locations) ? locations.length : 'N/A'}`,
+          );
+          if (locations && typeof locations === 'object' && !Array.isArray(locations)) {
+            this.logger.debug(
+              `[search] Locations response keys: ${Object.keys(locations).join(', ')}`,
+            );
+            this.logger.debug(
+              `[search] Locations response sample: ${JSON.stringify(locations).substring(0, 500)}`,
+            );
+          }
+
           if (Array.isArray(locations)) {
-            locations
-              .filter(
-                (l) =>
-                  l.name?.toLowerCase().includes(lowerQuery) ||
-                  l.uuid?.toLowerCase().includes(lowerQuery),
-              )
-              .forEach((location) => {
-                results.push({
-                  id: `location:${location.uuid}`,
-                  title: `Location: ${location.name || location.uuid}`,
-                  url: `https://mcp.dash.id.vn/location/${location.uuid}`,
-                });
+            const filteredLocations = locations.filter(
+              (l) =>
+                l.name?.toLowerCase().includes(lowerQuery) ||
+                l.uuid?.toLowerCase().includes(lowerQuery),
+            );
+            this.logger.debug(
+              `[search] Filtered ${filteredLocations.length} locations matching query "${query}"`,
+            );
+
+            filteredLocations.forEach((location) => {
+              results.push({
+                id: `location:${location.uuid}`,
+                title: `Location: ${location.name || location.uuid}`,
+                url: `https://mcp.dash.id.vn/location/${location.uuid}`,
               });
+            });
+          } else {
+            this.logger.warn(`[search] Locations response is not an array!`);
           }
 
           // Search groups
+          this.logger.debug(`[search] Fetching groups for userId: ${connectionState.userId}`);
           const groups = await this.apiClient.get(
             `/group/${connectionState.userId}`,
             connectionState.token,
           );
+          this.logger.debug(
+            `[search] Groups response type: ${typeof groups}, isArray: ${Array.isArray(groups)}, length: ${Array.isArray(groups) ? groups.length : 'N/A'}`,
+          );
+          if (groups && typeof groups === 'object' && !Array.isArray(groups)) {
+            this.logger.debug(`[search] Groups response keys: ${Object.keys(groups).join(', ')}`);
+            this.logger.debug(
+              `[search] Groups response sample: ${JSON.stringify(groups).substring(0, 500)}`,
+            );
+          }
+
           if (Array.isArray(groups)) {
-            groups
-              .filter(
-                (g) =>
-                  g.name?.toLowerCase().includes(lowerQuery) ||
-                  g.uuid?.toLowerCase().includes(lowerQuery),
-              )
-              .forEach((group) => {
-                results.push({
-                  id: `group:${group.uuid}`,
-                  title: `Group: ${group.name || group.uuid}`,
-                  url: `https://mcp.dash.id.vn/group/${group.uuid}`,
-                });
+            const filteredGroups = groups.filter(
+              (g) =>
+                g.name?.toLowerCase().includes(lowerQuery) ||
+                g.uuid?.toLowerCase().includes(lowerQuery),
+            );
+            this.logger.debug(
+              `[search] Filtered ${filteredGroups.length} groups matching query "${query}"`,
+            );
+
+            filteredGroups.forEach((group) => {
+              results.push({
+                id: `group:${group.uuid}`,
+                title: `Group: ${group.name || group.uuid}`,
+                url: `https://mcp.dash.id.vn/group/${group.uuid}`,
               });
+            });
+          } else {
+            this.logger.warn(`[search] Groups response is not an array!`);
+          }
+
+          this.logger.log(`[search] Total results found: ${results.length} (query: "${query}")`);
+          if (results.length > 0) {
+            this.logger.debug(`[search] First result sample: ${JSON.stringify(results[0])}`);
           }
 
           return {
@@ -269,38 +324,66 @@ export class McpService {
           let title: string;
           let url: string;
 
+          this.logger.debug(
+            `[fetch] Fetching resource: type=${type}, uuid=${uuid}, userId=${connectionState.userId}`,
+          );
+
           switch (type) {
             case 'device':
+              this.logger.debug(
+                `[fetch] Fetching device: /device/${connectionState.userId}/${uuid}`,
+              );
               fetchedData = await this.apiClient.get(
                 `/device/${connectionState.userId}/${uuid}`,
                 connectionState.token,
+              );
+              this.logger.debug(
+                `[fetch] Device response type: ${typeof fetchedData}, keys: ${fetchedData ? Object.keys(fetchedData).slice(0, 10).join(', ') : 'null'}`,
               );
               title = `Device: ${fetchedData.name || uuid}`;
               url = `https://mcp.dash.id.vn/device/${uuid}`;
               break;
 
             case 'location':
+              this.logger.debug(`[fetch] Fetching all locations to find uuid: ${uuid}`);
               const allLocations = await this.apiClient.get(
                 `/location/${connectionState.userId}`,
                 connectionState.token,
               );
+              this.logger.debug(
+                `[fetch] Locations response isArray: ${Array.isArray(allLocations)}, length: ${Array.isArray(allLocations) ? allLocations.length : 'N/A'}`,
+              );
               fetchedData = Array.isArray(allLocations)
                 ? allLocations.find((l) => l.uuid === uuid)
                 : null;
-              if (!fetchedData) throw new Error(`Location ${uuid} not found`);
+              if (!fetchedData) {
+                this.logger.warn(
+                  `[fetch] Location ${uuid} not found in ${Array.isArray(allLocations) ? allLocations.length : 0} locations`,
+                );
+                throw new Error(`Location ${uuid} not found`);
+              }
               title = `Location: ${fetchedData.name || uuid}`;
               url = `https://mcp.dash.id.vn/location/${uuid}`;
               break;
 
             case 'group':
+              this.logger.debug(`[fetch] Fetching all groups to find uuid: ${uuid}`);
               const allGroups = await this.apiClient.get(
                 `/group/${connectionState.userId}`,
                 connectionState.token,
               );
+              this.logger.debug(
+                `[fetch] Groups response isArray: ${Array.isArray(allGroups)}, length: ${Array.isArray(allGroups) ? allGroups.length : 'N/A'}`,
+              );
               fetchedData = Array.isArray(allGroups)
                 ? allGroups.find((g) => g.uuid === uuid)
                 : null;
-              if (!fetchedData) throw new Error(`Group ${uuid} not found`);
+              if (!fetchedData) {
+                this.logger.warn(
+                  `[fetch] Group ${uuid} not found in ${Array.isArray(allGroups) ? allGroups.length : 0} groups`,
+                );
+                throw new Error(`Group ${uuid} not found`);
+              }
               title = `Group: ${fetchedData.name || uuid}`;
               url = `https://mcp.dash.id.vn/group/${uuid}`;
               break;
@@ -308,6 +391,8 @@ export class McpService {
             default:
               throw new Error(`Unknown resource type: ${type}`);
           }
+
+          this.logger.log(`[fetch] Successfully fetched ${type}:${uuid} - ${title}`);
 
           return {
             content: [

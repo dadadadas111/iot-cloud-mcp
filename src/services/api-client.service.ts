@@ -19,7 +19,10 @@ export class ApiClientService {
   private readonly apiKey: string;
   private readonly timeout: number;
 
-  constructor(private httpService: HttpService, private configService: ConfigService) {
+  constructor(
+    private httpService: HttpService,
+    private configService: ConfigService,
+  ) {
     this.baseUrl = this.configService.get<string>('IOT_API_BASE_URL') || '';
     this.apiKey = this.configService.get<string>('IOT_API_KEY') || '';
     this.timeout = this.configService.get<number>('IOT_API_TIMEOUT') || 30000;
@@ -50,6 +53,15 @@ export class ApiClientService {
 
     try {
       const response = await firstValueFrom(this.httpService.request<T>(config));
+
+      // Log response summary for debugging
+      const dataType = typeof response.data;
+      const isArray = Array.isArray(response.data);
+      const dataLength = isArray ? (response.data as any[]).length : 'N/A';
+      this.logger.debug(
+        `${method} ${path} -> ${response.status} (type: ${dataType}, isArray: ${isArray}, length: ${dataLength})`,
+      );
+
       return response.data;
     } catch (error) {
       return this.handleError(error, `${method} ${path}`);
