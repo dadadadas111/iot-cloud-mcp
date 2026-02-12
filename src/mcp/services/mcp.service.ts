@@ -132,9 +132,13 @@ export class McpService {
       'search',
       {
         description:
-          'Search for IoT devices, locations, and groups. Returns a list of matching results with basic information.',
+          'Search/filter IoT devices, locations, and groups by name, description, or ID. Use this when user wants to FIND SPECIFIC items matching a keyword. For listing ALL items without filtering, use list_devices, list_locations, or list_groups instead.',
         inputSchema: z.object({
-          query: z.string().describe('Search query to find devices, locations, or groups'),
+          query: z
+            .string()
+            .describe(
+              'Search keyword to filter items (e.g., "living room", "temperature", "gateway"). Leave empty or use "*" to return all items.',
+            ),
         }),
       },
       async ({ query }, extra) => {
@@ -145,7 +149,9 @@ export class McpService {
           throw new Error('Authentication required. Please use the login tool first.');
         }
 
-        const lowerQuery = query.toLowerCase();
+        // Empty query or "*" means return all items
+        const isListAll = !query || query.trim() === '' || query === '*';
+        const lowerQuery = isListAll ? '' : query.toLowerCase();
         const results: any[] = [];
 
         try {
@@ -166,15 +172,17 @@ export class McpService {
           }
 
           if (Array.isArray(devices)) {
-            const filteredDevices = devices.filter(
-              (d) =>
-                d.label?.toLowerCase().includes(lowerQuery) ||
-                d.mac?.toLowerCase().includes(lowerQuery) ||
-                d.desc?.toLowerCase().includes(lowerQuery) ||
-                d.productId?.toLowerCase().includes(lowerQuery),
-            );
+            const filteredDevices = isListAll
+              ? devices
+              : devices.filter(
+                  (d) =>
+                    d.label?.toLowerCase().includes(lowerQuery) ||
+                    d.mac?.toLowerCase().includes(lowerQuery) ||
+                    d.desc?.toLowerCase().includes(lowerQuery) ||
+                    d.productId?.toLowerCase().includes(lowerQuery),
+                );
             this.logger.debug(
-              `[search] Filtered ${filteredDevices.length} devices matching query "${query}"`,
+              `[search] Filtered ${filteredDevices.length} devices matching query "${query}" (listAll: ${isListAll})`,
             );
 
             filteredDevices.forEach((device) => {
@@ -207,14 +215,16 @@ export class McpService {
           }
 
           if (Array.isArray(locations)) {
-            const filteredLocations = locations.filter(
-              (l) =>
-                l.label?.toLowerCase().includes(lowerQuery) ||
-                l.desc?.toLowerCase().includes(lowerQuery) ||
-                l._id?.toLowerCase().includes(lowerQuery),
-            );
+            const filteredLocations = isListAll
+              ? locations
+              : locations.filter(
+                  (l) =>
+                    l.label?.toLowerCase().includes(lowerQuery) ||
+                    l.desc?.toLowerCase().includes(lowerQuery) ||
+                    l._id?.toLowerCase().includes(lowerQuery),
+                );
             this.logger.debug(
-              `[search] Filtered ${filteredLocations.length} locations matching query "${query}"`,
+              `[search] Filtered ${filteredLocations.length} locations matching query "${query}" (listAll: ${isListAll})`,
             );
 
             filteredLocations.forEach((location) => {
@@ -245,14 +255,16 @@ export class McpService {
           }
 
           if (Array.isArray(groups)) {
-            const filteredGroups = groups.filter(
-              (g) =>
-                g.label?.toLowerCase().includes(lowerQuery) ||
-                g.desc?.toLowerCase().includes(lowerQuery) ||
-                g._id?.toLowerCase().includes(lowerQuery),
-            );
+            const filteredGroups = isListAll
+              ? groups
+              : groups.filter(
+                  (g) =>
+                    g.label?.toLowerCase().includes(lowerQuery) ||
+                    g.desc?.toLowerCase().includes(lowerQuery) ||
+                    g._id?.toLowerCase().includes(lowerQuery),
+                );
             this.logger.debug(
-              `[search] Filtered ${filteredGroups.length} groups matching query "${query}"`,
+              `[search] Filtered ${filteredGroups.length} groups matching query "${query}" (listAll: ${isListAll})`,
             );
 
             filteredGroups.forEach((group) => {
@@ -428,6 +440,238 @@ export class McpService {
       },
     );
 
-    this.logger.log('MCP tools registered successfully: login, search, fetch');
+    // Tool 4: list_devices - List ALL devices without filtering
+    server.registerTool(
+      'list_devices',
+      {
+        description:
+          'List ALL IoT devices for the authenticated user. Use this when user asks to "show my devices", "list devices", "what devices do I have", etc. Returns complete device list without filtering.',
+        inputSchema: z.object({}),
+      },
+      async (args, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(
+            `[list_devices] Fetching all devices for userId: ${connectionState.userId}`,
+          );
+          const devices = await this.apiClient.get(
+            `/device/${connectionState.userId}`,
+            connectionState.token,
+          );
+
+          if (!Array.isArray(devices)) {
+            this.logger.warn(`[list_devices] Response is not an array`);
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: 'No devices found or invalid response format.',
+                },
+              ],
+            };
+          }
+
+          this.logger.log(`[list_devices] Found ${devices.length} devices`);
+
+          const deviceList = devices.map((d) => ({
+            id: d.mac,
+            name: d.label || d.mac,
+            description: d.desc || '',
+            productId: d.productId,
+            locationId: d.locationId,
+            online: d.link === 1,
+          }));
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(
+                  {
+                    total: devices.length,
+                    devices: deviceList,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[list_devices] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to list devices: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // Tool 5: list_locations - List ALL locations
+    server.registerTool(
+      'list_locations',
+      {
+        description:
+          'List ALL location groups for the authenticated user. Use this when user asks to "show my locations", "list locations", "what locations do I have", etc.',
+        inputSchema: z.object({}),
+      },
+      async (args, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(
+            `[list_locations] Fetching all locations for userId: ${connectionState.userId}`,
+          );
+          const locations = await this.apiClient.get(
+            `/location/${connectionState.userId}`,
+            connectionState.token,
+          );
+
+          if (!Array.isArray(locations)) {
+            this.logger.warn(`[list_locations] Response is not an array`);
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: 'No locations found or invalid response format.',
+                },
+              ],
+            };
+          }
+
+          this.logger.log(`[list_locations] Found ${locations.length} locations`);
+
+          const locationList = locations.map((l) => ({
+            id: l._id,
+            name: l.label || l._id,
+            description: l.desc || '',
+          }));
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(
+                  {
+                    total: locations.length,
+                    locations: locationList,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[list_locations] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to list locations: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // Tool 6: list_groups - List ALL device groups
+    server.registerTool(
+      'list_groups',
+      {
+        description:
+          'List ALL device groups for the authenticated user. Use this when user asks to "show my groups", "list groups", "what groups do I have", etc.',
+        inputSchema: z.object({}),
+      },
+      async (args, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(
+            `[list_groups] Fetching all groups for userId: ${connectionState.userId}`,
+          );
+          const groups = await this.apiClient.get(
+            `/group/${connectionState.userId}`,
+            connectionState.token,
+          );
+
+          if (!Array.isArray(groups)) {
+            this.logger.warn(`[list_groups] Response is not an array`);
+            return {
+              content: [
+                {
+                  type: 'text' as const,
+                  text: 'No groups found or invalid response format.',
+                },
+              ],
+            };
+          }
+
+          this.logger.log(`[list_groups] Found ${groups.length} groups`);
+
+          const groupList = groups.map((g) => ({
+            id: g._id,
+            name: g.label || g._id,
+            description: g.desc || '',
+            locationId: g.locationId,
+            type: g.type === 0 ? 'group' : 'tag',
+          }));
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(
+                  {
+                    total: groups.length,
+                    groups: groupList,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[list_groups] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to list groups: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    this.logger.log(
+      'MCP tools registered successfully: login, search, fetch, list_devices, list_locations, list_groups',
+    );
   }
 }
