@@ -4,7 +4,7 @@ A professional Model Context Protocol (MCP) server that bridges AI assistants wi
 
 ## Features
 
-- 🔌 **MCP Protocol** - Server-Sent Events (SSE) endpoint for AI agent connectivity
+- 🔌 **MCP Protocol** - Official SDK Streamable HTTP transport for AI agent connectivity
 - 🔐 **Simple Authentication** - Login tool for end-users, no auth required for agents
 - 🚀 **Production Ready** - Built with NestJS and TypeScript
 - 📊 **IoT Device Management** - Full access to devices, locations, groups, and definitions
@@ -14,18 +14,18 @@ A professional Model Context Protocol (MCP) server that bridges AI assistants wi
 ```
 ┌─────────────────────────────────┐
 │   AI Agent (Claude, ChatGPT)   │
-│   Connects via SSE              │
+│   Streamable HTTP + SSE         │
 └───────────┬─────────────────────┘
             │ No Authentication
 ┌───────────▼─────────────────────┐
-│   MCP Server (SSE Endpoint)     │
-│   GET /api/mcp/sse              │
+│   MCP Server (Official SDK)     │
+│   /api/mcp (all methods)        │
 └───────────┬─────────────────────┘
             │
             │ 1. Agent connects (no auth)
             │ 2. Agent calls 'login' tool
             │ 3. Server returns token
-            │ 4. Token stored in connection
+            │ 4. Token stored in session
             │ 5. Subsequent tools use token
             │
 ┌───────────▼─────────────────────┐
@@ -97,12 +97,15 @@ Server will be available at `http://localhost:3001`
 
 ### Connection
 
-**Endpoint:** `GET /api/mcp/sse`
+**Endpoint:** `/api/mcp` (supports GET for SSE, POST for messages, DELETE for session termination)
 
 **No Authentication Required** - Agents can connect freely.
 
+**Uses Official MCP SDK** - Implements the MCP Streamable HTTP protocol specification
+
 ```bash
-curl -N http://localhost:3001/api/mcp/sse
+# Test SSE connection (will receive session ID in response headers)
+curl -N http://localhost:3001/api/mcp
 ```
 
 ### Available Tools

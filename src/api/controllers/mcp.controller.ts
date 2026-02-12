@@ -1,225 +1,95 @@
-import { Controller, Get, Post, Body, Req, Res } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { Controller, All, Req, Res } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiExcludeEndpoint } from '@nestjs/swagger';
 import { Response, Request } from 'express';
+import { randomUUID } from 'node:crypto';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { McpService } from '../../mcp/services/mcp.service';
-import { McpRequest, McpResponse, MCP_METHODS, MCP_ERROR_CODES } from '../../mcp/types/mcp.types';
 
 @ApiTags('MCP Protocol')
 @Controller('mcp')
 export class McpController {
+  // Store transports by session ID (stateful mode)
+  private readonly transports = new Map<string, StreamableHTTPServerTransport>();
+
   constructor(private mcpService: McpService) {}
 
   /**
-   * MCP SSE Endpoint - Main entry point for MCP clients
-   * GET /api/mcp/sse
-   * NO AUTHENTICATION - Clients connect here first, then use login tool
+   * Main MCP endpoint - handles all HTTP methods
+   * GET: Establishes SSE stream for server-to-client messages
+   * POST: Receives client-to-server JSON-RPC messages
+   * DELETE: Terminates session
+   *
+   * NO AUTHENTICATION - Clients connect here, then use login tool
    */
-  @Get('sse')
+  @All()
   @ApiOperation({
-    summary: 'MCP Protocol SSE Stream',
+    summary: 'MCP Streamable HTTP endpoint',
     description:
-      'Server-Sent Events endpoint for MCP clients. No authentication required. Use the login tool to authenticate.',
+      'Main MCP endpoint using official SDK transport. No authentication required - use login tool to authenticate. ' +
+      'Supports GET (SSE stream), POST (JSON-RPC messages), DELETE (session termination).',
   })
   @ApiResponse({
     status: 200,
-    description: 'SSE stream established',
+    description: 'Request handled successfully',
   })
-  async streamMcpEvents(@Req() req: Request, @Res() res: Response): Promise<void> {
-    // Set SSE headers (ChatGPT-compatible)
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // Prevent nginx buffering
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  @ApiExcludeEndpoint() // Hide from Swagger since it's a special protocol endpoint
+  async handleMcpRequest(@Req() req: Request, @Res() res: Response): Promise<void> {
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+
+    console.log(`[MCP] ${req.method} request`, {
+      sessionId,
+      hasBody: !!req.body,
+      url: req.url,
+    });
 
     try {
-      // Send immediate message endpoint event (ChatGPT protocol)
-      // ChatGPT expects an "endpoint" event telling it where to POST requests
-      const messageEndpoint = `${req.protocol}://${req.get('host')}/api/mcp/message`;
-      this.sendSSEMessage(res, 'endpoint', messageEndpoint);
+      let transport: StreamableHTTPServerTransport;
 
-      // Send immediate keepalive
-      res.write(': keepalive\n\n');
+      if (sessionId && this.transports.has(sessionId)) {
+        // Reuse existing transport for this session
+        transport = this.transports.get(sessionId)!;
+        console.log(`[MCP] Reusing transport for session: ${sessionId}`);
+      } else {
+        // Create new transport (stateful mode with session management)
+        transport = new StreamableHTTPServerTransport({
+          sessionIdGenerator: () => randomUUID(),
+          onsessioninitialized: (newSessionId) => {
+            // Store transport when session is initialized
+            console.log(`[MCP] Session initialized: ${newSessionId}`);
+            this.transports.set(newSessionId, transport);
+          },
+        });
 
-      // Keep connection alive
-      const keepAlive = setInterval(() => {
-        res.write(': keepalive\n\n');
-      }, 15000); // Every 15 seconds
+        // Set up cleanup handler
+        transport.onclose = () => {
+          const sid = transport.sessionId;
+          if (sid && this.transports.has(sid)) {
+            console.log(`[MCP] Transport closed for session: ${sid}`);
+            this.transports.delete(sid);
+          }
+        };
 
-      // Cleanup on disconnect
-      req.on('close', () => {
-        clearInterval(keepAlive);
-        res.end();
-      });
-
-      // Keep the connection open indefinitely
-      // ChatGPT will POST to /api/mcp/message for actual requests
-    } catch (error) {
-      this.sendSSEMessage(res, 'error', {
-        error: error.message || 'Stream error',
-      });
-      res.end();
-    }
-  }
-
-  /**
-   * MCP Message Endpoint - ChatGPT posts requests here
-   * POST /api/mcp/message
-   */
-  @Post('message')
-  @ApiOperation({
-    summary: 'MCP Message Handler',
-    description:
-      'Handle MCP requests from ChatGPT connector. This is where ChatGPT POSTs tool calls.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'MCP response',
-  })
-  async handleMcpMessage(@Body() request: McpRequest, @Res() res: Response): Promise<void> {
-    // Store connection state (stateless for ChatGPT - each request is independent)
-    const connectionState = {
-      token: null as string | null,
-      userId: null as string | null,
-    };
-
-    try {
-      const response = await this.processMcpRequest(request, connectionState);
-      res.json(response);
-    } catch (error) {
-      res.json({
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: MCP_ERROR_CODES.INTERNAL_ERROR,
-          message: error.message || 'Internal server error',
-        },
-      });
-    }
-  }
-
-  /**
-   * MCP JSON-RPC Handler - Alternative POST endpoint (for non-ChatGPT clients)
-   * POST /api/mcp
-   */
-  @Post()
-  @ApiOperation({
-    summary: 'MCP JSON-RPC Handler',
-    description: 'Handle MCP requests via POST. Use the login tool first to authenticate.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'MCP response',
-  })
-  async handleMcpRequest(@Body() request: McpRequest, @Res() res: Response): Promise<void> {
-    // Store connection state (for POST requests, state is per-request)
-    const connectionState = {
-      token: null as string | null,
-      userId: null as string | null,
-    };
-
-    try {
-      const response = await this.processMcpRequest(request, connectionState);
-      res.json(response);
-    } catch (error) {
-      res.json({
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: MCP_ERROR_CODES.INTERNAL_ERROR,
-          message: error.message || 'Internal server error',
-        },
-      });
-    }
-  }
-
-  /**
-   * Helper: Send SSE formatted message
-   */
-  private sendSSEMessage(res: Response, eventType: string, data: any): void {
-    const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
-    res.write(message);
-  }
-
-  /**
-   * Process MCP request
-   */
-  private async processMcpRequest(
-    request: McpRequest,
-    connectionState: { token: string | null; userId: string | null },
-  ): Promise<McpResponse> {
-    // Validate request
-    if (!request.jsonrpc || request.jsonrpc !== '2.0') {
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: MCP_ERROR_CODES.INVALID_REQUEST,
-          message: 'Invalid JSON-RPC version',
-        },
-      };
-    }
-
-    if (!request.method) {
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: MCP_ERROR_CODES.INVALID_REQUEST,
-          message: 'Missing method',
-        },
-      };
-    }
-
-    try {
-      let result: any;
-
-      switch (request.method) {
-        case MCP_METHODS.INITIALIZE:
-          result = this.mcpService.getInitializeResponse();
-          break;
-
-        case MCP_METHODS.LIST_TOOLS:
-          const tools = this.mcpService.listTools();
-          result = { tools };
-          break;
-
-        case MCP_METHODS.CALL_TOOL:
-          if (!request.params?.name) throw new Error('Tool name required');
-          result = await this.mcpService.callTool(
-            request.params.name,
-            request.params?.arguments || {},
-            connectionState,
-          );
-          break;
-
-        default:
-          return {
-            jsonrpc: '2.0',
-            id: request.id,
-            error: {
-              code: MCP_ERROR_CODES.METHOD_NOT_FOUND,
-              message: `Unknown method: ${request.method}`,
-            },
-          };
+        // Connect transport to MCP server
+        console.log('[MCP] Creating new transport and connecting to server');
+        const server = await this.mcpService.getServer();
+        await server.connect(transport);
       }
 
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        result,
-      };
+      // Handle the request using the SDK transport
+      // The transport handles SSE streaming, JSON-RPC parsing, session validation, etc.
+      await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      return {
-        jsonrpc: '2.0',
-        id: request.id,
-        error: {
-          code: MCP_ERROR_CODES.INTERNAL_ERROR,
-          message: error.message || 'Internal server error',
-        },
-      };
+      console.error('[MCP] Error handling request:', error);
+      if (!res.headersSent) {
+        res.status(500).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: 'Internal server error',
+          },
+          id: null,
+        });
+      }
     }
   }
 }
