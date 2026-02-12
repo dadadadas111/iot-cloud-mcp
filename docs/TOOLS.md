@@ -265,36 +265,40 @@ Delete a device permanently. **Cannot be undone.**
 
 ## Device State (3 tools)
 
-### 10. get_device_states
+### 10. get_device_state
 
-Get current states of ALL devices in the system.
+Get current state of a specific device by UUID.
 
 **Input:**
 
 ```json
-{}
+{
+  "uuid": "abc-123"
+}
 ```
 
 **Output:**
 
 ```json
-[
-  {
-    "uuid": "abc-123",
-    "mac": "AA:BB:CC:DD:EE:FF",
-    "loc": "location-id",
-    "devId": "device-id",
-    "state": {
-      "deviceId": {
-        "elementId": {
-          "1": [1, 1], // ON_OFF: ON
-          "28": [28, 700] // BRIGHTNESS: 700
-        }
+{
+  "uuid": "abc-123",
+  "mac": "AA:BB:CC:DD:EE:FF",
+  "loc": "location-id",
+  "devId": "device-id",
+  "state": {
+    "deviceId": {
+      "1": {
+        "1": [1, 1], // Element 1: ON_OFF: ON
+        "31": [31, 0, 0, 0] // Element 1: COLOR_HSV
+      },
+      "2": {
+        "1": [1, 1], // Element 2: ON_OFF: ON
+        "28": [28, 700] // Element 2: BRIGHTNESS: 700
       }
-    },
-    "updatedAt": "2026-02-12T10:00:00Z"
-  }
-]
+    }
+  },
+  "updatedAt": "2026-02-12T10:00:00Z"
+}
 ```
 
 **State Structure:**
@@ -310,11 +314,28 @@ Get states of all devices in a specific location.
 
 ```json
 {
-  "locationUuid": "loc-123" // Use _id from list_locations
+  "locationUuid": "loc-123" // Use uuid from list_locations
 }
 ```
 
-**Output:** Same structure as `get_device_states` but filtered by location.
+**Output:** Array of device state objects (same structure as `get_device_state`).
+
+```json
+[
+  {
+    "uuid": "abc-123",
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "loc": "location-id",
+    "state": {...}
+  },
+  {
+    "uuid": "def-456",
+    "mac": "11:22:33:44:55:66",
+    "loc": "location-id",
+    "state": {...}
+  }
+]
+```
 
 ### 12. get_device_state_by_mac
 
@@ -504,7 +525,7 @@ Common device attributes (from `device-attr-and-control.csv`):
 {"tool": "control_device_simple", "uuid": "abc-123", "action": "set_brightness", "value": 700}
 
 // Step 4: Check state (wait 2-3 seconds)
-{"tool": "get_device_states"}
+{"tool": "get_device_state", "uuid": "abc-123"}
 ```
 
 ### Example 3: Control Air Conditioner
@@ -604,9 +625,9 @@ The control API only publishes MQTT messages - it doesn't guarantee device state
 
 ### State Endpoints
 
-- `GET /iot-core/state/devId/{devId}` - All device states
-- `GET /iot-core/state/{locationUuid}` - States by location
-- `GET /iot-core/state/{locationUuid}/{macAddress}` - State by MAC
+- `GET /iot-core/state/devId/{deviceUuid}` - Single device state by UUID
+- `GET /iot-core/state/{locationUuid}` - All device states in a location
+- `GET /iot-core/state/{locationUuid}/{macAddress}` - Single device state by MAC address
 
 ### Control Endpoint
 

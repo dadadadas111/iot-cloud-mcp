@@ -843,15 +843,17 @@ export class McpService {
       },
     );
 
-    // Tool 10: get_device_states - Get states for all devices
+    // Tool 10: get_device_state - Get state of a single device by UUID
     server.registerTool(
-      'get_device_states',
+      'get_device_state',
       {
         description:
-          'Get current states of all IoT devices. Returns state information including attributes, values, and last update times for all devices in the system.',
-        inputSchema: z.object({}),
+          'Get current state of a specific IoT device by its UUID. Returns state information including attributes, values, and last update time for the device.',
+        inputSchema: z.object({
+          uuid: z.string().describe('Device UUID (unique identifier)'),
+        }),
       },
-      async (_, extra) => {
+      async ({ uuid }, extra) => {
         const sessionKey = extra?.sessionId || 'default';
         const connectionState = this.connectionStates.get(sessionKey);
 
@@ -860,29 +862,26 @@ export class McpService {
         }
 
         try {
-          this.logger.debug(`[get_device_states] Fetching all device states`);
-          const states = await this.apiClient.get(
-            `/state/devId/${connectionState.userId}`,
-            connectionState.token,
-          );
+          this.logger.debug(`[get_device_state] Fetching state for device: ${uuid}`);
+          const state = await this.apiClient.get(`/state/devId/${uuid}`, connectionState.token);
 
-          this.logger.log(`[get_device_states] Retrieved states successfully`);
+          this.logger.log(`[get_device_state] Retrieved device state successfully`);
 
           return {
             content: [
               {
                 type: 'text' as const,
-                text: JSON.stringify(states, null, 2),
+                text: JSON.stringify(state, null, 2),
               },
             ],
           };
         } catch (error) {
-          this.logger.error('[get_device_states] Failed:', error);
+          this.logger.error('[get_device_state] Failed:', error);
           return {
             content: [
               {
                 type: 'text' as const,
-                text: `Failed to get device states: ${error.message}`,
+                text: `Failed to get device state: ${error.message}`,
               },
             ],
             isError: true,
@@ -1304,7 +1303,7 @@ export class McpService {
     );
 
     this.logger.log(
-      'MCP tools registered successfully: login, search, fetch, list_devices, list_locations, list_groups, get_device, update_device, delete_device, get_device_states, get_location_state, get_device_state_by_mac, control_device, control_device_simple',
+      'MCP tools registered successfully: login, search, fetch, list_devices, list_locations, list_groups, get_device, update_device, delete_device, get_device_state, get_location_state, get_device_state_by_mac, control_device, control_device_simple',
     );
   }
 }
