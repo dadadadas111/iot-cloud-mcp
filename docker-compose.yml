@@ -8,18 +8,18 @@ services:
     ports:
       - '${PORT:-3001}:3001'
     environment:
-      # Server Configuration
+      # Server
       NODE_ENV: ${NODE_ENV:-production}
-      PORT: 3001
-      HOST: 0.0.0.0
+      PORT: ${PORT:-3001}
+      HOST: ${HOST:-0.0.0.0}
 
       # IoT Cloud API
       IOT_API_BASE_URL: ${IOT_API_BASE_URL}
       IOT_API_KEY: ${IOT_API_KEY}
       IOT_API_TIMEOUT: ${IOT_API_TIMEOUT:-30000}
 
-      # CORS Configuration
-      ENABLE_CORS: ${ENABLE_CORS:-true}
+      # CORS Configuration (always enabled for MCP)
+      ENABLE_CORS: 'true'
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
 
       # Rate Limiting

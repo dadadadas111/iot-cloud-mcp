@@ -25,11 +25,17 @@ export class McpController {
     description: 'SSE stream established',
   })
   async streamMcpEvents(@Req() req: Request, @Res() res: Response): Promise<void> {
-    // Set SSE headers
+    // Set SSE headers (ChatGPT-compatible)
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Prevent nginx buffering
     res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    // Send immediate keepalive to prevent timeout
+    res.write(': keepalive\n\n');
 
     // Store connection state
     const connectionState = {
