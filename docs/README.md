@@ -13,9 +13,7 @@ Located in [`setup/`](setup/)
 ### 🚀 Deployment
 Located in [`deployment/`](deployment/)
 
-- **[MCP Protocol Guide](deployment/MCP_PROTOCOL.md)** - Model Context Protocol implementation (recommended)
 - **[Docker Deployment Guide](deployment/DOCKER_DEPLOYMENT.md)** - Deploy with Docker and Docker Compose (includes CI/CD setup)
-- **[ChatGPT Apps Integration](deployment/CHATGPT_APPS.md)** - Integrate with ChatGPT Apps
 - **[Render Deployment Guide](deployment/RENDER_DEPLOYMENT.md)** - Deploy to Render.com with detailed instructions
 
 ### 💻 Development
