@@ -34,66 +34,28 @@ export class McpController {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-    // Send immediate keepalive to prevent timeout
-    res.write(': keepalive\n\n');
-
-    // Store connection state
-    const connectionState = {
-      token: null as string | null,
-      userId: null as string | null,
-    };
-
     try {
-      // Send initialization
-      this.sendSSEMessage(res, 'message', {
-        jsonrpc: '2.0',
-        result: this.mcpService.getInitializeResponse(),
-      });
+      // Send immediate message endpoint event (ChatGPT protocol)
+      // ChatGPT expects an "endpoint" event telling it where to POST requests
+      const messageEndpoint = `${req.protocol}://${req.get('host')}/api/mcp/message`;
+      this.sendSSEMessage(res, 'endpoint', messageEndpoint);
 
-      // Send available tools (including login)
-      const tools = this.mcpService.listTools();
-      this.sendSSEMessage(res, 'message', {
-        jsonrpc: '2.0',
-        result: { tools },
-      });
-
-      // Send ready signal
-      this.sendSSEMessage(res, 'message', {
-        jsonrpc: '2.0',
-        result: {
-          status: 'ready',
-          toolCount: tools.length,
-          message: 'Use the login tool to authenticate',
-        },
-      });
-
-      // Handle incoming MCP requests
-      req.on('data', async (chunk) => {
-        try {
-          const request = JSON.parse(chunk.toString()) as McpRequest;
-          const response = await this.processMcpRequest(request, connectionState);
-          this.sendSSEMessage(res, 'message', response);
-        } catch (error) {
-          this.sendSSEMessage(res, 'error', {
-            jsonrpc: '2.0',
-            error: {
-              code: MCP_ERROR_CODES.PARSE_ERROR,
-              message: error.message || 'Failed to parse request',
-            },
-          });
-        }
-      });
+      // Send immediate keepalive
+      res.write(': keepalive\n\n');
 
       // Keep connection alive
       const keepAlive = setInterval(() => {
-        res.write(': keep-alive\n\n');
-      }, 30000);
+        res.write(': keepalive\n\n');
+      }, 15000); // Every 15 seconds
 
       // Cleanup on disconnect
       req.on('close', () => {
         clearInterval(keepAlive);
         res.end();
       });
+
+      // Keep the connection open indefinitely
+      // ChatGPT will POST to /api/mcp/message for actual requests
     } catch (error) {
       this.sendSSEMessage(res, 'error', {
         error: error.message || 'Stream error',
@@ -103,7 +65,43 @@ export class McpController {
   }
 
   /**
-   * MCP JSON-RPC Handler - Alternative POST endpoint
+   * MCP Message Endpoint - ChatGPT posts requests here
+   * POST /api/mcp/message
+   */
+  @Post('message')
+  @ApiOperation({
+    summary: 'MCP Message Handler',
+    description:
+      'Handle MCP requests from ChatGPT connector. This is where ChatGPT POSTs tool calls.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'MCP response',
+  })
+  async handleMcpMessage(@Body() request: McpRequest, @Res() res: Response): Promise<void> {
+    // Store connection state (stateless for ChatGPT - each request is independent)
+    const connectionState = {
+      token: null as string | null,
+      userId: null as string | null,
+    };
+
+    try {
+      const response = await this.processMcpRequest(request, connectionState);
+      res.json(response);
+    } catch (error) {
+      res.json({
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: MCP_ERROR_CODES.INTERNAL_ERROR,
+          message: error.message || 'Internal server error',
+        },
+      });
+    }
+  }
+
+  /**
+   * MCP JSON-RPC Handler - Alternative POST endpoint (for non-ChatGPT clients)
    * POST /api/mcp
    */
   @Post()
