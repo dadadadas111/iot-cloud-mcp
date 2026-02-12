@@ -55,6 +55,37 @@ export class McpService {
   listTools(): Tool[] {
     return [
       {
+        name: 'search',
+        description:
+          'Search for IoT devices, locations, and groups. Returns a list of matching results with basic information.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Search query to find devices, locations, or groups',
+            },
+          },
+          required: ['query'],
+        },
+      },
+      {
+        name: 'fetch',
+        description:
+          'Retrieve complete details of a specific IoT device, location, or group by ID.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              description:
+                'The unique identifier (format: type:id, e.g., device:uuid, location:uuid, group:uuid)',
+            },
+          },
+          required: ['id'],
+        },
+      },
+      {
         name: 'login',
         description:
           'Authenticate with email and password to get access to IoT devices. MUST be called first before using other tools.',
@@ -166,6 +197,166 @@ export class McpService {
   ): Promise<CallToolResponse> {
     try {
       let result: any;
+
+      // Handle search tool (ChatGPT-compatible)
+      if (toolName === 'search') {
+        if (!connectionState.token || !connectionState.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        const query = params.query?.toLowerCase() || '';
+        const results: any[] = [];
+
+        // Search devices
+        const devices = await this.apiClient.get(
+          `/device/${connectionState.userId}`,
+          connectionState.token,
+        );
+        if (Array.isArray(devices)) {
+          devices
+            .filter(
+              (d) =>
+                d.name?.toLowerCase().includes(query) ||
+                d.uuid?.toLowerCase().includes(query) ||
+                d.type?.toLowerCase().includes(query),
+            )
+            .forEach((device) => {
+              results.push({
+                id: `device:${device.uuid}`,
+                title: `Device: ${device.name || device.uuid}`,
+                url: `https://mcp.dash.id.vn/device/${device.uuid}`,
+              });
+            });
+        }
+
+        // Search locations
+        const locations = await this.apiClient.get(
+          `/iot-core/location/${connectionState.userId}`,
+          connectionState.token,
+        );
+        if (Array.isArray(locations)) {
+          locations
+            .filter(
+              (l) => l.name?.toLowerCase().includes(query) || l.uuid?.toLowerCase().includes(query),
+            )
+            .forEach((location) => {
+              results.push({
+                id: `location:${location.uuid}`,
+                title: `Location: ${location.name || location.uuid}`,
+                url: `https://mcp.dash.id.vn/location/${location.uuid}`,
+              });
+            });
+        }
+
+        // Search groups
+        const groups = await this.apiClient.get(
+          `/iot-core/group/${connectionState.userId}`,
+          connectionState.token,
+        );
+        if (Array.isArray(groups)) {
+          groups
+            .filter(
+              (g) => g.name?.toLowerCase().includes(query) || g.uuid?.toLowerCase().includes(query),
+            )
+            .forEach((group) => {
+              results.push({
+                id: `group:${group.uuid}`,
+                title: `Group: ${group.name || group.uuid}`,
+                url: `https://mcp.dash.id.vn/group/${group.uuid}`,
+              });
+            });
+        }
+
+        // Return in ChatGPT-compatible format
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ results }),
+            },
+          ],
+        };
+      }
+
+      // Handle fetch tool (ChatGPT-compatible)
+      if (toolName === 'fetch') {
+        if (!connectionState.token || !connectionState.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        const idParam = params.id || '';
+        const [type, uuid] = idParam.split(':');
+
+        if (!type || !uuid) {
+          throw new Error('Invalid ID format. Expected format: type:uuid (e.g., device:abc-123)');
+        }
+
+        let fetchedData: any;
+        let title: string;
+        let url: string;
+
+        switch (type) {
+          case 'device':
+            fetchedData = await this.apiClient.get(
+              `/device/${connectionState.userId}/${uuid}`,
+              connectionState.token,
+            );
+            title = `Device: ${fetchedData.name || uuid}`;
+            url = `https://mcp.dash.id.vn/device/${uuid}`;
+            break;
+
+          case 'location':
+            fetchedData = await this.apiClient.get(
+              `/iot-core/location/${connectionState.userId}`,
+              connectionState.token,
+            );
+            // Filter to specific location
+            fetchedData = Array.isArray(fetchedData)
+              ? fetchedData.find((l) => l.uuid === uuid)
+              : null;
+            if (!fetchedData) throw new Error(`Location ${uuid} not found`);
+            title = `Location: ${fetchedData.name || uuid}`;
+            url = `https://mcp.dash.id.vn/location/${uuid}`;
+            break;
+
+          case 'group':
+            fetchedData = await this.apiClient.get(
+              `/iot-core/group/${connectionState.userId}`,
+              connectionState.token,
+            );
+            // Filter to specific group
+            fetchedData = Array.isArray(fetchedData)
+              ? fetchedData.find((g) => g.uuid === uuid)
+              : null;
+            if (!fetchedData) throw new Error(`Group ${uuid} not found`);
+            title = `Group: ${fetchedData.name || uuid}`;
+            url = `https://mcp.dash.id.vn/group/${uuid}`;
+            break;
+
+          default:
+            throw new Error(`Unknown resource type: ${type}`);
+        }
+
+        // Return in ChatGPT-compatible format
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: idParam,
+                title,
+                text: JSON.stringify(fetchedData, null, 2),
+                url,
+                metadata: {
+                  type,
+                  uuid,
+                  retrieved_at: new Date().toISOString(),
+                },
+              }),
+            },
+          ],
+        };
+      }
 
       // Handle login tool separately
       if (toolName === 'login') {

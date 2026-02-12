@@ -107,7 +107,74 @@ curl -N http://localhost:3001/api/mcp/sse
 
 ### Available Tools
 
-#### 1. login
+#### ChatGPT-Compatible Tools
+
+These tools follow ChatGPT's MCP connector specification for document search and retrieval:
+
+##### 1. search
+
+Search for IoT devices, locations, and groups across your entire system.
+
+```json
+{
+  "name": "search",
+  "arguments": {
+    "query": "living room"
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "results": [
+    {
+      "id": "device:abc-123",
+      "title": "Device: Living Room Light",
+      "url": "https://mcp.dash.id.vn/device/abc-123"
+    },
+    {
+      "id": "location:def-456",
+      "title": "Location: Living Room",
+      "url": "https://mcp.dash.id.vn/location/def-456"
+    }
+  ]
+}
+```
+
+##### 2. fetch
+
+Retrieve complete details of a specific device, location, or group.
+
+```json
+{
+  "name": "fetch",
+  "arguments": {
+    "id": "device:abc-123"
+  }
+}
+```
+
+**Response:**
+
+```json
+{
+  "id": "device:abc-123",
+  "title": "Device: Living Room Light",
+  "text": "{...full device JSON...}",
+  "url": "https://mcp.dash.id.vn/device/abc-123",
+  "metadata": {
+    "type": "device",
+    "uuid": "abc-123",
+    "retrieved_at": "2026-02-12T10:00:00Z"
+  }
+}
+```
+
+#### Authentication Tool
+
+##### 3. login
 
 **MUST be called first** to authenticate end-users.
 
@@ -135,7 +202,11 @@ curl -N http://localhost:3001/api/mcp/sse
 
 The token is automatically stored in the connection context and used for subsequent tool calls.
 
-#### 2. get_devices
+#### Legacy IoT Tools
+
+These tools provide direct access to IoT API resources (for non-ChatGPT MCP clients):
+
+##### 4. get_devices
 
 Get all IoT devices for the authenticated user.
 
@@ -149,7 +220,7 @@ Get all IoT devices for the authenticated user.
 }
 ```
 
-#### 3. get_device
+##### 5. get_device
 
 Get details of a specific device by UUID.
 
@@ -162,7 +233,7 @@ Get details of a specific device by UUID.
 }
 ```
 
-#### 4. get_device_state
+##### 6. get_device_state
 
 Get current state and properties of a device.
 
@@ -175,7 +246,7 @@ Get current state and properties of a device.
 }
 ```
 
-#### 5. get_locations
+##### 7. get_locations
 
 Get all location groups for the user.
 
@@ -186,7 +257,7 @@ Get all location groups for the user.
 }
 ```
 
-#### 6. get_groups
+##### 8. get_groups
 
 Get all device groups for the user.
 
@@ -199,7 +270,7 @@ Get all device groups for the user.
 }
 ```
 
-#### 7. get_definitions
+##### 9. get_definitions
 
 Get entity definitions and workflow examples.
 
@@ -210,6 +281,51 @@ Get entity definitions and workflow examples.
     "type": "entities" // or "workflows"
   }
 }
+```
+
+## ChatGPT Integration
+
+Your MCP server is now compatible with ChatGPT's connector specification.
+
+### Using with ChatGPT
+
+1. **In ChatGPT settings**, go to **Connectors**
+2. **Add a new connector** with URL: `https://mcp.dash.id.vn/api/mcp/sse`
+3. **No authentication required** for the connector itself
+4. **In ChatGPT conversation:**
+   - First: "Login to my IoT account with email user@example.com and password mypassword"
+   - Then: "Search for all devices in my living room"
+   - Or: "Show me details of device abc-123"
+
+### Using with ChatGPT Deep Research (via API)
+
+Add your MCP server to a deep research request:
+
+```bash
+curl https://api.openai.com/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_OPENAI_API_KEY" \
+  -d '{
+    "model": "gpt-5-deep-research",
+    "instructions": "You are a helpful assistant with access to IoT device data.",
+    "tools": [
+      {
+        "type": "mcp",
+        "mcp": {
+          "url": "https://mcp.dash.id.vn/api/mcp/sse",
+          "approval_settings": {
+            "approval_required": false
+          }
+        }
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": "Login with email user@example.com and password mypassword, then search for all temperature sensors"
+      }
+    ]
+  }'
 ```
 
 ## Claude Desktop Integration
