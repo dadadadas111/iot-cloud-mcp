@@ -187,9 +187,9 @@ export class McpService {
 
             filteredDevices.forEach((device) => {
               results.push({
-                id: `device:${device.mac}`,
-                title: `Device: ${device.label || device.mac}`,
-                url: `https://mcp.dash.id.vn/device/${device.mac}`,
+                id: `device:${device.uuid}`,
+                title: `Device: ${device.label || device.uuid}`,
+                url: `https://mcp.dash.id.vn/device/${device.uuid}`,
               });
             });
           } else {
@@ -480,11 +480,13 @@ export class McpService {
           this.logger.log(`[list_devices] Found ${devices.length} devices`);
 
           const deviceList = devices.map((d) => ({
-            id: d.mac,
-            name: d.label || d.mac,
+            uuid: d.uuid,
+            mac: d.mac,
+            name: d.label || d.uuid,
             description: d.desc || '',
             productId: d.productId,
             locationId: d.locationId,
+            groupId: d.groupId,
             online: d.link === 1,
           }));
 
@@ -670,8 +672,192 @@ export class McpService {
       },
     );
 
+    // Tool 7: get_device - Get device details by UUID
+    server.registerTool(
+      'get_device',
+      {
+        description:
+          'Get detailed information about a specific IoT device by its UUID. Returns complete device data including properties, state, and configuration.',
+        inputSchema: z.object({
+          uuid: z.string().describe('Device UUID (unique identifier)'),
+        }),
+      },
+      async ({ uuid }, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(`[get_device] Fetching device uuid: ${uuid}`);
+          const device = await this.apiClient.get(
+            `/device/${connectionState.userId}/${uuid}`,
+            connectionState.token,
+          );
+
+          this.logger.log(`[get_device] Retrieved device: ${device.label || uuid}`);
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(device, null, 2),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[get_device] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to get device: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // Tool 8: update_device - Update device properties
+    server.registerTool(
+      'update_device',
+      {
+        description:
+          'Update device properties such as name (label), description, group assignment, or favorite status.',
+        inputSchema: z.object({
+          uuid: z.string().describe('Device UUID to update'),
+          label: z.string().optional().describe('New device name/label (max 255 chars)'),
+          desc: z.string().optional().describe('New device description (max 255 chars)'),
+          groupId: z.string().optional().describe('Group UUID to assign device to'),
+          vgroupId: z.string().optional().describe('Virtual group UUID'),
+          fav: z.boolean().optional().describe('Mark as favorite (true/false)'),
+        }),
+      },
+      async ({ uuid, label, desc, groupId, vgroupId, fav }, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          // Build update payload
+          const updateData: any = { uuid };
+          if (label !== undefined) updateData.label = label;
+          if (desc !== undefined) updateData.desc = desc;
+          if (groupId !== undefined) updateData.groupId = groupId;
+          if (vgroupId !== undefined) updateData.vgroupId = vgroupId;
+          if (fav !== undefined) updateData.fav = fav;
+
+          this.logger.debug(`[update_device] Updating device ${uuid} with:`, updateData);
+
+          const result = await this.apiClient.patch(
+            `/device/${connectionState.userId}`,
+            connectionState.token,
+            updateData,
+          );
+
+          this.logger.log(`[update_device] Updated device ${uuid} successfully`);
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    uuid: uuid,
+                    message: 'Device updated successfully',
+                    updated: updateData,
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[update_device] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to update device: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    // Tool 9: delete_device - Delete a device
+    server.registerTool(
+      'delete_device',
+      {
+        description:
+          'Delete an IoT device permanently. This action cannot be undone. Use with caution.',
+        inputSchema: z.object({
+          uuid: z.string().describe('Device UUID to delete'),
+        }),
+      },
+      async ({ uuid }, extra) => {
+        const sessionKey = extra?.sessionId || 'default';
+        const connectionState = this.connectionStates.get(sessionKey);
+
+        if (!connectionState?.token || !connectionState?.userId) {
+          throw new Error('Authentication required. Please use the login tool first.');
+        }
+
+        try {
+          this.logger.debug(`[delete_device] Deleting device uuid: ${uuid}`);
+
+          const result = await this.apiClient.delete(
+            `/device/${connectionState.userId}`,
+            connectionState.token,
+            { uuid },
+          );
+
+          this.logger.log(`[delete_device] Deleted device ${uuid} successfully`);
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(
+                  {
+                    success: true,
+                    uuid: uuid,
+                    message: 'Device deleted successfully',
+                  },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        } catch (error) {
+          this.logger.error('[delete_device] Failed:', error);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: `Failed to delete device: ${error.message}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      },
+    );
+
     this.logger.log(
-      'MCP tools registered successfully: login, search, fetch, list_devices, list_locations, list_groups',
+      'MCP tools registered successfully: login, search, fetch, list_devices, list_locations, list_groups, get_device, update_device, delete_device',
     );
   }
 }

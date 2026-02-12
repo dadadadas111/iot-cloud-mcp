@@ -95,11 +95,12 @@ export class ApiClientService {
     });
   }
 
-  async delete<T = any>(path: string, firebaseToken: string): Promise<T> {
+  async delete<T = any>(path: string, firebaseToken: string, data?: any): Promise<T> {
     return this.request<T>({
       method: 'DELETE',
       path,
       firebaseToken,
+      data,
     });
   }
 
