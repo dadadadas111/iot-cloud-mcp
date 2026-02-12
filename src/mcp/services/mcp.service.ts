@@ -221,7 +221,7 @@ export class McpService {
                   (l) =>
                     l.label?.toLowerCase().includes(lowerQuery) ||
                     l.desc?.toLowerCase().includes(lowerQuery) ||
-                    l._id?.toLowerCase().includes(lowerQuery),
+                    l.uuid?.toLowerCase().includes(lowerQuery),
                 );
             this.logger.debug(
               `[search] Filtered ${filteredLocations.length} locations matching query "${query}" (listAll: ${isListAll})`,
@@ -229,9 +229,9 @@ export class McpService {
 
             filteredLocations.forEach((location) => {
               results.push({
-                id: `location:${location._id}`,
-                title: `Location: ${location.label || location._id}`,
-                url: `https://mcp.dash.id.vn/location/${location._id}`,
+                id: `location:${location.uuid}`,
+                title: `Location: ${location.label || location.uuid}`,
+                url: `https://mcp.dash.id.vn/location/${location.uuid}`,
               });
             });
           } else {
@@ -261,7 +261,7 @@ export class McpService {
                   (g) =>
                     g.label?.toLowerCase().includes(lowerQuery) ||
                     g.desc?.toLowerCase().includes(lowerQuery) ||
-                    g._id?.toLowerCase().includes(lowerQuery),
+                    g.uuid?.toLowerCase().includes(lowerQuery),
                 );
             this.logger.debug(
               `[search] Filtered ${filteredGroups.length} groups matching query "${query}" (listAll: ${isListAll})`,
@@ -269,9 +269,9 @@ export class McpService {
 
             filteredGroups.forEach((group) => {
               results.push({
-                id: `group:${group._id}`,
-                title: `Group: ${group.label || group._id}`,
-                url: `https://mcp.dash.id.vn/group/${group._id}`,
+                id: `group:${group.uuid}`,
+                title: `Group: ${group.label || group.uuid}`,
+                url: `https://mcp.dash.id.vn/group/${group.uuid}`,
               });
             });
           } else {
@@ -360,7 +360,7 @@ export class McpService {
               break;
 
             case 'location':
-              this.logger.debug(`[fetch] Fetching all locations to find id: ${uuid}`);
+              this.logger.debug(`[fetch] Fetching all locations to find uuid: ${uuid}`);
               const allLocations = await this.apiClient.get(
                 `/location/${connectionState.userId}`,
                 connectionState.token,
@@ -369,7 +369,7 @@ export class McpService {
                 `[fetch] Locations response isArray: ${Array.isArray(allLocations)}, length: ${Array.isArray(allLocations) ? allLocations.length : 'N/A'}`,
               );
               fetchedData = Array.isArray(allLocations)
-                ? allLocations.find((l) => l._id === uuid)
+                ? allLocations.find((l) => l.uuid === uuid)
                 : null;
               if (!fetchedData) {
                 this.logger.warn(
@@ -382,7 +382,7 @@ export class McpService {
               break;
 
             case 'group':
-              this.logger.debug(`[fetch] Fetching all groups to find id: ${uuid}`);
+              this.logger.debug(`[fetch] Fetching all groups to find uuid: ${uuid}`);
               const allGroups = await this.apiClient.get(
                 `/group/${connectionState.userId}`,
                 connectionState.token,
@@ -390,7 +390,9 @@ export class McpService {
               this.logger.debug(
                 `[fetch] Groups response isArray: ${Array.isArray(allGroups)}, length: ${Array.isArray(allGroups) ? allGroups.length : 'N/A'}`,
               );
-              fetchedData = Array.isArray(allGroups) ? allGroups.find((g) => g._id === uuid) : null;
+              fetchedData = Array.isArray(allGroups)
+                ? allGroups.find((g) => g.uuid === uuid)
+                : null;
               if (!fetchedData) {
                 this.logger.warn(
                   `[fetch] Group ${uuid} not found in ${Array.isArray(allGroups) ? allGroups.length : 0} groups`,
@@ -558,12 +560,6 @@ export class McpService {
 
           this.logger.log(`[list_locations] Found ${locations.length} locations`);
 
-          const locationList = locations.map((l) => ({
-            id: l._id,
-            name: l.label || l._id,
-            description: l.desc || '',
-          }));
-
           return {
             content: [
               {
@@ -571,7 +567,7 @@ export class McpService {
                 text: JSON.stringify(
                   {
                     total: locations.length,
-                    locations: locationList,
+                    locations: locations,
                   },
                   null,
                   2,
@@ -633,14 +629,6 @@ export class McpService {
 
           this.logger.log(`[list_groups] Found ${groups.length} groups`);
 
-          const groupList = groups.map((g) => ({
-            id: g._id,
-            name: g.label || g._id,
-            description: g.desc || '',
-            locationId: g.locationId,
-            type: g.type === 0 ? 'group' : 'tag',
-          }));
-
           return {
             content: [
               {
@@ -648,7 +636,7 @@ export class McpService {
                 text: JSON.stringify(
                   {
                     total: groups.length,
-                    groups: groupList,
+                    groups: groups,
                   },
                   null,
                   2,
@@ -910,7 +898,7 @@ export class McpService {
         description:
           'Get current states of all IoT devices in a specific location. Returns state information for all devices within the specified location.',
         inputSchema: z.object({
-          locationUuid: z.string().describe('Location UUID (use _id from list_locations)'),
+          locationUuid: z.string().describe('Location UUID (use uuid field from list_locations)'),
         }),
       },
       async ({ locationUuid }, extra) => {

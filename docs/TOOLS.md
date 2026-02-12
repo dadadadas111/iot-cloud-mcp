@@ -55,11 +55,16 @@ Search across devices, locations, and groups by keyword. Returns ChatGPT-compati
 
 ```json
 {
-  "results": [
+  "total": 5,
+  "locations": [
     {
-      "id": "device:abc-123",
-      "title": "Device: Living Room Light",
-      "url": "https://mcp.dash.id.vn/device/abc-123"
+      "uuid": "6694e3a0093cf477c3122bfd",
+      "label": "Living Room",
+      "desc": "Main living area",
+      "userId": "user-id",
+      "extraInfo": {...},
+      "createdAt": "2024-07-15T08:53:52.285Z",
+      "updatedAt": "2024-07-15T09:55:05.965Z"
     }
   ]
 }
@@ -160,9 +165,16 @@ Get ALL groups.
   "total": 3,
   "groups": [
     {
-      "_id": "group-123",
+      "uuid": "6694e3a0093cf477c3122c03",
       "label": "Smart Lights",
-      ...
+      "desc": "Office",
+      "userId": "user-id",
+      "locationId": "location-uuid",
+      "type": 0,
+      "elementId": 49500,
+      "extraInfo": {},
+      "createdAt": "2024-07-15T08:53:52.710Z",
+      "updatedAt": "2024-07-15T08:53:52.710Z"
     }
   ]
 }
