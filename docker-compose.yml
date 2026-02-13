@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   iot-cloud-mcp:
     image: ghcr.io/dadadadas111/iot-cloud-mcp:latest
@@ -17,6 +15,14 @@ services:
       IOT_API_BASE_URL: ${IOT_API_BASE_URL}
       IOT_API_KEY: ${IOT_API_KEY}
       IOT_API_TIMEOUT: ${IOT_API_TIMEOUT:-30000}
+
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+
+      # Redis Configuration
+      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
 
       # CORS Configuration (always enabled for MCP)
       ENABLE_CORS: 'true'
