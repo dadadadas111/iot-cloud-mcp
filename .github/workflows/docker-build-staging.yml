@@ -99,19 +99,16 @@ jobs:
 
             # Detect docker-compose version and use appropriate command
             if command -v docker-compose &> /dev/null; then
-                COMPOSE_CMD="sudo docker-compose -f docker-compose.staging.yml"
+                COMPOSE_CMD="docker-compose -f docker-compose.staging.yml"
             else
-                COMPOSE_CMD="sudo docker compose -f docker-compose.staging.yml"
+                COMPOSE_CMD="docker compose -f docker-compose.staging.yml"
             fi
 
             # Stop and remove old containers
-            $COMPOSE_CMD down || true
+            sudo $COMPOSE_CMD down || true
 
-            # Set image tag for docker-compose
-            export IMAGE_TAG=staging-${SHORT_SHA}
-
-            # Start services with the new staging image
-            $COMPOSE_CMD up -d
+            # Start services with the new staging image (pass IMAGE_TAG inline)
+            sudo IMAGE_TAG=staging-${SHORT_SHA} $COMPOSE_CMD up -d
 
             # Wait for services to be healthy
             echo "Waiting for staging services to start..."
