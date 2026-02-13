@@ -1,12 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { ApiClientService } from '../../services/api-client.service';
+import { ApiClientService } from './api-client.service';
 import { AuthService } from '../../auth/auth.service';
+import { RedisService, ConnectionState } from './redis.service';
 import * as z from 'zod';
 
-export interface ConnectionState {
-  token: string | null;
-  userId: string | null;
+/**
+ * Authenticated state with guaranteed non-null values
+ */
+interface AuthenticatedState {
+  token: string;
+  userId: string;
 }
 
 /**
@@ -16,13 +20,115 @@ export interface ConnectionState {
 @Injectable()
 export class McpService {
   private readonly logger = new Logger(McpService.name);
-  // Store connection states by session ID (in production, use Redis or similar)
-  private readonly connectionStates = new Map<string, ConnectionState>();
 
   constructor(
     private apiClient: ApiClientService,
     private authService: AuthService,
+    private redisService: RedisService,
   ) {}
+
+  /**
+   * Helper: Extract session key from MCP extra context
+   * @throws Error if sessionId is missing
+   */
+  private getSessionKey(extra: any): string {
+    const sid = extra?.sessionId;
+    if (!sid) {
+      throw new Error('Missing MCP sessionId');
+    }
+    return sid;
+  }
+
+  /**
+   * Helper: Create standard "authentication required" error response
+   */
+  private authRequired(): { content: Array<{ type: 'text'; text: string }>; isError: boolean } {
+    return {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: 'Authentication required. Please use the login tool first.',
+        },
+      ],
+    };
+  }
+
+  /**
+   * Helper: Create standard "Redis unavailable" error response
+   */
+  private redisUnavailable(): {
+    content: Array<{ type: 'text'; text: string }>;
+    isError: boolean;
+  } {
+    return {
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: 'Session store unavailable. Please retry in a moment.',
+        },
+      ],
+    };
+  }
+
+  /**
+   * Helper: Require authentication and return connection state
+   * @throws Error with message 'REDIS_UNAVAILABLE' if Redis fails
+   * @returns AuthenticatedState with non-null values if authenticated, null if not authenticated
+   */
+  private async requireAuth(extra: any): Promise<AuthenticatedState | null> {
+    const sessionKey = this.getSessionKey(extra);
+    try {
+      const state = await this.redisService.getSessionState(sessionKey);
+      if (!state?.token || !state?.userId) {
+        return null;
+      }
+      // Type assertion safe because we checked both values are non-null
+      return state as AuthenticatedState;
+    } catch (e) {
+      this.logger.error('Redis error during authentication check', e);
+      throw new Error('REDIS_UNAVAILABLE');
+    }
+  }
+
+  /**
+   * Helper: Wrap tool handler with authentication check
+   * Automatically handles auth validation and error responses
+   */
+  private withAuth<TArgs>(
+    fn: (
+      args: TArgs,
+      state: AuthenticatedState,
+      extra: any,
+    ) => Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }>,
+  ) {
+    return async (
+      args: TArgs,
+      extra: any,
+    ): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> => {
+      try {
+        const state = await this.requireAuth(extra);
+        if (!state) {
+          return this.authRequired();
+        }
+        return await fn(args, state, extra);
+      } catch (e: any) {
+        if (e?.message === 'REDIS_UNAVAILABLE') {
+          return this.redisUnavailable();
+        }
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${e?.message ?? e}`,
+            },
+          ],
+        };
+      }
+    };
+  }
 
   /**
    * Create a NEW MCP Server instance
@@ -82,9 +188,9 @@ export class McpService {
             this.logger.warn('Could not decode JWT token', error);
           }
 
-          // Store in connection state using session ID
-          const sessionKey = extra?.sessionId || 'default';
-          this.connectionStates.set(sessionKey, {
+          // Store in Redis session state
+          const sessionKey = this.getSessionKey(extra);
+          await this.redisService.setSessionState(sessionKey, {
             token: loginResult.access_token,
             userId,
           });
@@ -141,169 +247,140 @@ export class McpService {
             ),
         }),
       },
-      async ({ query }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
-
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
-        }
-
+      this.withAuth(async ({ query }, state) => {
         // Empty query or "*" means return all items
         const isListAll = !query || query.trim() === '' || query === '*';
         const lowerQuery = isListAll ? '' : query.toLowerCase();
         const results: any[] = [];
 
-        try {
-          // Search devices
-          this.logger.debug(`[search] Fetching devices for userId: ${connectionState.userId}`);
-          const devices = await this.apiClient.get(
-            `/device/${connectionState.userId}`,
-            connectionState.token,
-          );
+        // Search devices
+        this.logger.debug(`[search] Fetching devices for userId: ${state.userId}`);
+        const devices = await this.apiClient.get(`/device/${state.userId}`, state.token);
+        this.logger.debug(
+          `[search] Devices response type: ${typeof devices}, isArray: ${Array.isArray(devices)}, length: ${Array.isArray(devices) ? devices.length : 'N/A'}`,
+        );
+        if (devices && typeof devices === 'object') {
+          this.logger.debug(`[search] Devices response keys: ${Object.keys(devices).join(', ')}`);
           this.logger.debug(
-            `[search] Devices response type: ${typeof devices}, isArray: ${Array.isArray(devices)}, length: ${Array.isArray(devices) ? devices.length : 'N/A'}`,
+            `[search] Devices response sample: ${JSON.stringify(devices).substring(0, 500)}`,
           );
-          if (devices && typeof devices === 'object') {
-            this.logger.debug(`[search] Devices response keys: ${Object.keys(devices).join(', ')}`);
-            this.logger.debug(
-              `[search] Devices response sample: ${JSON.stringify(devices).substring(0, 500)}`,
-            );
-          }
-
-          if (Array.isArray(devices)) {
-            const filteredDevices = isListAll
-              ? devices
-              : devices.filter(
-                  (d) =>
-                    d.label?.toLowerCase().includes(lowerQuery) ||
-                    d.mac?.toLowerCase().includes(lowerQuery) ||
-                    d.desc?.toLowerCase().includes(lowerQuery) ||
-                    d.productId?.toLowerCase().includes(lowerQuery),
-                );
-            this.logger.debug(
-              `[search] Filtered ${filteredDevices.length} devices matching query "${query}" (listAll: ${isListAll})`,
-            );
-
-            filteredDevices.forEach((device) => {
-              results.push({
-                id: `device:${device.uuid}`,
-                title: `Device: ${device.label || device.uuid}`,
-                url: `https://mcp.dash.id.vn/device/${device.uuid}`,
-              });
-            });
-          } else {
-            this.logger.warn(`[search] Devices response is not an array!`);
-          }
-
-          // Search locations
-          this.logger.debug(`[search] Fetching locations for userId: ${connectionState.userId}`);
-          const locations = await this.apiClient.get(
-            `/location/${connectionState.userId}`,
-            connectionState.token,
-          );
-          this.logger.debug(
-            `[search] Locations response type: ${typeof locations}, isArray: ${Array.isArray(locations)}, length: ${Array.isArray(locations) ? locations.length : 'N/A'}`,
-          );
-          if (locations && typeof locations === 'object' && !Array.isArray(locations)) {
-            this.logger.debug(
-              `[search] Locations response keys: ${Object.keys(locations).join(', ')}`,
-            );
-            this.logger.debug(
-              `[search] Locations response sample: ${JSON.stringify(locations).substring(0, 500)}`,
-            );
-          }
-
-          if (Array.isArray(locations)) {
-            const filteredLocations = isListAll
-              ? locations
-              : locations.filter(
-                  (l) =>
-                    l.label?.toLowerCase().includes(lowerQuery) ||
-                    l.desc?.toLowerCase().includes(lowerQuery) ||
-                    l.uuid?.toLowerCase().includes(lowerQuery),
-                );
-            this.logger.debug(
-              `[search] Filtered ${filteredLocations.length} locations matching query "${query}" (listAll: ${isListAll})`,
-            );
-
-            filteredLocations.forEach((location) => {
-              results.push({
-                id: `location:${location.uuid}`,
-                title: `Location: ${location.label || location.uuid}`,
-                url: `https://mcp.dash.id.vn/location/${location.uuid}`,
-              });
-            });
-          } else {
-            this.logger.warn(`[search] Locations response is not an array!`);
-          }
-
-          // Search groups
-          this.logger.debug(`[search] Fetching groups for userId: ${connectionState.userId}`);
-          const groups = await this.apiClient.get(
-            `/group/${connectionState.userId}`,
-            connectionState.token,
-          );
-          this.logger.debug(
-            `[search] Groups response type: ${typeof groups}, isArray: ${Array.isArray(groups)}, length: ${Array.isArray(groups) ? groups.length : 'N/A'}`,
-          );
-          if (groups && typeof groups === 'object' && !Array.isArray(groups)) {
-            this.logger.debug(`[search] Groups response keys: ${Object.keys(groups).join(', ')}`);
-            this.logger.debug(
-              `[search] Groups response sample: ${JSON.stringify(groups).substring(0, 500)}`,
-            );
-          }
-
-          if (Array.isArray(groups)) {
-            const filteredGroups = isListAll
-              ? groups
-              : groups.filter(
-                  (g) =>
-                    g.label?.toLowerCase().includes(lowerQuery) ||
-                    g.desc?.toLowerCase().includes(lowerQuery) ||
-                    g.uuid?.toLowerCase().includes(lowerQuery),
-                );
-            this.logger.debug(
-              `[search] Filtered ${filteredGroups.length} groups matching query "${query}" (listAll: ${isListAll})`,
-            );
-
-            filteredGroups.forEach((group) => {
-              results.push({
-                id: `group:${group.uuid}`,
-                title: `Group: ${group.label || group.uuid}`,
-                url: `https://mcp.dash.id.vn/group/${group.uuid}`,
-              });
-            });
-          } else {
-            this.logger.warn(`[search] Groups response is not an array!`);
-          }
-
-          this.logger.log(`[search] Total results found: ${results.length} (query: "${query}")`);
-          if (results.length > 0) {
-            this.logger.debug(`[search] First result sample: ${JSON.stringify(results[0])}`);
-          }
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({ results }),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('Search failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Search failed: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
         }
-      },
+
+        if (Array.isArray(devices)) {
+          const filteredDevices = isListAll
+            ? devices
+            : devices.filter(
+                (d) =>
+                  d.label?.toLowerCase().includes(lowerQuery) ||
+                  d.mac?.toLowerCase().includes(lowerQuery) ||
+                  d.desc?.toLowerCase().includes(lowerQuery) ||
+                  d.productId?.toLowerCase().includes(lowerQuery),
+              );
+          this.logger.debug(
+            `[search] Filtered ${filteredDevices.length} devices matching query "${query}" (listAll: ${isListAll})`,
+          );
+
+          filteredDevices.forEach((device) => {
+            results.push({
+              id: `device:${device.uuid}`,
+              title: `Device: ${device.label || device.uuid}`,
+              url: `https://mcp.dash.id.vn/device/${device.uuid}`,
+            });
+          });
+        } else {
+          this.logger.warn(`[search] Devices response is not an array!`);
+        }
+
+        // Search locations
+        this.logger.debug(`[search] Fetching locations for userId: ${state.userId}`);
+        const locations = await this.apiClient.get(`/location/${state.userId}`, state.token);
+        this.logger.debug(
+          `[search] Locations response type: ${typeof locations}, isArray: ${Array.isArray(locations)}, length: ${Array.isArray(locations) ? locations.length : 'N/A'}`,
+        );
+        if (locations && typeof locations === 'object' && !Array.isArray(locations)) {
+          this.logger.debug(
+            `[search] Locations response keys: ${Object.keys(locations).join(', ')}`,
+          );
+          this.logger.debug(
+            `[search] Locations response sample: ${JSON.stringify(locations).substring(0, 500)}`,
+          );
+        }
+
+        if (Array.isArray(locations)) {
+          const filteredLocations = isListAll
+            ? locations
+            : locations.filter(
+                (l) =>
+                  l.label?.toLowerCase().includes(lowerQuery) ||
+                  l.desc?.toLowerCase().includes(lowerQuery) ||
+                  l.uuid?.toLowerCase().includes(lowerQuery),
+              );
+          this.logger.debug(
+            `[search] Filtered ${filteredLocations.length} locations matching query "${query}" (listAll: ${isListAll})`,
+          );
+
+          filteredLocations.forEach((location) => {
+            results.push({
+              id: `location:${location.uuid}`,
+              title: `Location: ${location.label || location.uuid}`,
+              url: `https://mcp.dash.id.vn/location/${location.uuid}`,
+            });
+          });
+        } else {
+          this.logger.warn(`[search] Locations response is not an array!`);
+        }
+
+        // Search groups
+        this.logger.debug(`[search] Fetching groups for userId: ${state.userId}`);
+        const groups = await this.apiClient.get(`/group/${state.userId}`, state.token);
+        this.logger.debug(
+          `[search] Groups response type: ${typeof groups}, isArray: ${Array.isArray(groups)}, length: ${Array.isArray(groups) ? groups.length : 'N/A'}`,
+        );
+        if (groups && typeof groups === 'object' && !Array.isArray(groups)) {
+          this.logger.debug(`[search] Groups response keys: ${Object.keys(groups).join(', ')}`);
+          this.logger.debug(
+            `[search] Groups response sample: ${JSON.stringify(groups).substring(0, 500)}`,
+          );
+        }
+
+        if (Array.isArray(groups)) {
+          const filteredGroups = isListAll
+            ? groups
+            : groups.filter(
+                (g) =>
+                  g.label?.toLowerCase().includes(lowerQuery) ||
+                  g.desc?.toLowerCase().includes(lowerQuery) ||
+                  g.uuid?.toLowerCase().includes(lowerQuery),
+              );
+          this.logger.debug(
+            `[search] Filtered ${filteredGroups.length} groups matching query "${query}" (listAll: ${isListAll})`,
+          );
+
+          filteredGroups.forEach((group) => {
+            results.push({
+              id: `group:${group.uuid}`,
+              title: `Group: ${group.label || group.uuid}`,
+              url: `https://mcp.dash.id.vn/group/${group.uuid}`,
+            });
+          });
+        } else {
+          this.logger.warn(`[search] Groups response is not an array!`);
+        }
+
+        this.logger.log(`[search] Total results found: ${results.length} (query: "${query}")`);
+        if (results.length > 0) {
+          this.logger.debug(`[search] First result sample: ${JSON.stringify(results[0])}`);
+        }
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({ results }),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 3: fetch (ChatGPT-compatible)
@@ -320,126 +397,93 @@ export class McpService {
             ),
         }),
       },
-      async ({ id }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
-
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
-        }
-
+      this.withAuth(async ({ id }, state) => {
         const [type, uuid] = id.split(':');
 
         if (!type || !uuid) {
           throw new Error('Invalid ID format. Expected format: type:uuid (e.g., device:abc-123)');
         }
 
-        try {
-          let fetchedData: any;
-          let title: string;
-          let url: string;
+        let fetchedData: any;
+        let title: string;
+        let url: string;
 
-          this.logger.debug(
-            `[fetch] Fetching resource: type=${type}, uuid=${uuid}, userId=${connectionState.userId}`,
-          );
+        this.logger.debug(
+          `[fetch] Fetching resource: type=${type}, uuid=${uuid}, userId=${state.userId}`,
+        );
 
-          switch (type) {
-            case 'device':
-              this.logger.debug(
-                `[fetch] Fetching device: /device/${connectionState.userId}/${uuid}`,
-              );
-              fetchedData = await this.apiClient.get(
-                `/device/${connectionState.userId}/${uuid}`,
-                connectionState.token,
-              );
-              this.logger.debug(
-                `[fetch] Device response type: ${typeof fetchedData}, keys: ${fetchedData ? Object.keys(fetchedData).slice(0, 10).join(', ') : 'null'}`,
-              );
-              title = `Device: ${fetchedData.label || uuid}`;
-              url = `https://mcp.dash.id.vn/device/${uuid}`;
-              break;
+        switch (type) {
+          case 'device':
+            this.logger.debug(`[fetch] Fetching device: /device/${state.userId}/${uuid}`);
+            fetchedData = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token);
+            this.logger.debug(
+              `[fetch] Device response type: ${typeof fetchedData}, keys: ${fetchedData ? Object.keys(fetchedData).slice(0, 10).join(', ') : 'null'}`,
+            );
+            title = `Device: ${fetchedData.label || uuid}`;
+            url = `https://mcp.dash.id.vn/device/${uuid}`;
+            break;
 
-            case 'location':
-              this.logger.debug(`[fetch] Fetching all locations to find uuid: ${uuid}`);
-              const allLocations = await this.apiClient.get(
-                `/location/${connectionState.userId}`,
-                connectionState.token,
+          case 'location':
+            this.logger.debug(`[fetch] Fetching all locations to find uuid: ${uuid}`);
+            const allLocations = await this.apiClient.get(`/location/${state.userId}`, state.token);
+            this.logger.debug(
+              `[fetch] Locations response isArray: ${Array.isArray(allLocations)}, length: ${Array.isArray(allLocations) ? allLocations.length : 'N/A'}`,
+            );
+            fetchedData = Array.isArray(allLocations)
+              ? allLocations.find((l) => l.uuid === uuid)
+              : null;
+            if (!fetchedData) {
+              this.logger.warn(
+                `[fetch] Location ${uuid} not found in ${Array.isArray(allLocations) ? allLocations.length : 0} locations`,
               );
-              this.logger.debug(
-                `[fetch] Locations response isArray: ${Array.isArray(allLocations)}, length: ${Array.isArray(allLocations) ? allLocations.length : 'N/A'}`,
+              throw new Error(`Location ${uuid} not found`);
+            }
+            title = `Location: ${fetchedData.label || uuid}`;
+            url = `https://mcp.dash.id.vn/location/${uuid}`;
+            break;
+
+          case 'group':
+            this.logger.debug(`[fetch] Fetching all groups to find uuid: ${uuid}`);
+            const allGroups = await this.apiClient.get(`/group/${state.userId}`, state.token);
+            this.logger.debug(
+              `[fetch] Groups response isArray: ${Array.isArray(allGroups)}, length: ${Array.isArray(allGroups) ? allGroups.length : 'N/A'}`,
+            );
+            fetchedData = Array.isArray(allGroups) ? allGroups.find((g) => g.uuid === uuid) : null;
+            if (!fetchedData) {
+              this.logger.warn(
+                `[fetch] Group ${uuid} not found in ${Array.isArray(allGroups) ? allGroups.length : 0} groups`,
               );
-              fetchedData = Array.isArray(allLocations)
-                ? allLocations.find((l) => l.uuid === uuid)
-                : null;
-              if (!fetchedData) {
-                this.logger.warn(
-                  `[fetch] Location ${uuid} not found in ${Array.isArray(allLocations) ? allLocations.length : 0} locations`,
-                );
-                throw new Error(`Location ${uuid} not found`);
-              }
-              title = `Location: ${fetchedData.label || uuid}`;
-              url = `https://mcp.dash.id.vn/location/${uuid}`;
-              break;
+              throw new Error(`Group ${uuid} not found`);
+            }
+            title = `Group: ${fetchedData.label || uuid}`;
+            url = `https://mcp.dash.id.vn/group/${uuid}`;
+            break;
 
-            case 'group':
-              this.logger.debug(`[fetch] Fetching all groups to find uuid: ${uuid}`);
-              const allGroups = await this.apiClient.get(
-                `/group/${connectionState.userId}`,
-                connectionState.token,
-              );
-              this.logger.debug(
-                `[fetch] Groups response isArray: ${Array.isArray(allGroups)}, length: ${Array.isArray(allGroups) ? allGroups.length : 'N/A'}`,
-              );
-              fetchedData = Array.isArray(allGroups)
-                ? allGroups.find((g) => g.uuid === uuid)
-                : null;
-              if (!fetchedData) {
-                this.logger.warn(
-                  `[fetch] Group ${uuid} not found in ${Array.isArray(allGroups) ? allGroups.length : 0} groups`,
-                );
-                throw new Error(`Group ${uuid} not found`);
-              }
-              title = `Group: ${fetchedData.label || uuid}`;
-              url = `https://mcp.dash.id.vn/group/${uuid}`;
-              break;
-
-            default:
-              throw new Error(`Unknown resource type: ${type}`);
-          }
-
-          this.logger.log(`[fetch] Successfully fetched ${type}:${uuid} - ${title}`);
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({
-                  id,
-                  title,
-                  text: JSON.stringify(fetchedData, null, 2),
-                  url,
-                  metadata: {
-                    type,
-                    uuid,
-                    retrieved_at: new Date().toISOString(),
-                  },
-                }),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('Fetch failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Fetch failed: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
+          default:
+            throw new Error(`Unknown resource type: ${type}`);
         }
-      },
+
+        this.logger.log(`[fetch] Successfully fetched ${type}:${uuid} - ${title}`);
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                id,
+                title,
+                text: JSON.stringify(fetchedData, null, 2),
+                url,
+                metadata: {
+                  type,
+                  uuid,
+                  retrieved_at: new Date().toISOString(),
+                },
+              }),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 4: list_devices - List ALL devices without filtering
@@ -450,75 +494,50 @@ export class McpService {
           'List ALL IoT devices for the authenticated user. Use this when user asks to "show my devices", "list devices", "what devices do I have", etc. Returns complete device list without filtering.',
         inputSchema: z.object({}),
       },
-      async (args, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async (args, state) => {
+        this.logger.debug(`[list_devices] Fetching all devices for userId: ${state.userId}`);
+        const devices = await this.apiClient.get(`/device/${state.userId}`, state.token);
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
+        if (!Array.isArray(devices)) {
+          this.logger.warn(`[list_devices] Response is not an array`);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: 'No devices found or invalid response format.',
+              },
+            ],
+          };
         }
 
-        try {
-          this.logger.debug(
-            `[list_devices] Fetching all devices for userId: ${connectionState.userId}`,
-          );
-          const devices = await this.apiClient.get(
-            `/device/${connectionState.userId}`,
-            connectionState.token,
-          );
+        this.logger.log(`[list_devices] Found ${devices.length} devices`);
 
-          if (!Array.isArray(devices)) {
-            this.logger.warn(`[list_devices] Response is not an array`);
-            return {
-              content: [
+        const deviceList = devices.map((d) => ({
+          uuid: d.uuid,
+          mac: d.mac,
+          name: d.label || d.uuid,
+          description: d.desc || '',
+          productId: d.productId,
+          locationId: d.locationId,
+          groupId: d.groupId,
+        }));
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
                 {
-                  type: 'text' as const,
-                  text: 'No devices found or invalid response format.',
+                  total: devices.length,
+                  devices: deviceList,
                 },
-              ],
-            };
-          }
-
-          this.logger.log(`[list_devices] Found ${devices.length} devices`);
-
-          const deviceList = devices.map((d) => ({
-            uuid: d.uuid,
-            mac: d.mac,
-            name: d.label || d.uuid,
-            description: d.desc || '',
-            productId: d.productId,
-            locationId: d.locationId,
-            groupId: d.groupId,
-          }));
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(
-                  {
-                    total: devices.length,
-                    devices: deviceList,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[list_devices] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to list devices: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 5: list_locations - List ALL locations
@@ -529,65 +548,40 @@ export class McpService {
           'List ALL location groups for the authenticated user. Use this when user asks to "show my locations", "list locations", "what locations do I have", etc.',
         inputSchema: z.object({}),
       },
-      async (args, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async (args, state) => {
+        this.logger.debug(`[list_locations] Fetching all locations for userId: ${state.userId}`);
+        const locations = await this.apiClient.get(`/location/${state.userId}`, state.token);
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
+        if (!Array.isArray(locations)) {
+          this.logger.warn(`[list_locations] Response is not an array`);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: 'No locations found or invalid response format.',
+              },
+            ],
+          };
         }
 
-        try {
-          this.logger.debug(
-            `[list_locations] Fetching all locations for userId: ${connectionState.userId}`,
-          );
-          const locations = await this.apiClient.get(
-            `/location/${connectionState.userId}`,
-            connectionState.token,
-          );
+        this.logger.log(`[list_locations] Found ${locations.length} locations`);
 
-          if (!Array.isArray(locations)) {
-            this.logger.warn(`[list_locations] Response is not an array`);
-            return {
-              content: [
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
                 {
-                  type: 'text' as const,
-                  text: 'No locations found or invalid response format.',
+                  total: locations.length,
+                  locations: locations,
                 },
-              ],
-            };
-          }
-
-          this.logger.log(`[list_locations] Found ${locations.length} locations`);
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(
-                  {
-                    total: locations.length,
-                    locations: locations,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[list_locations] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to list locations: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 6: list_groups - List ALL device groups
@@ -598,65 +592,40 @@ export class McpService {
           'List ALL device groups for the authenticated user. Use this when user asks to "show my groups", "list groups", "what groups do I have", etc.',
         inputSchema: z.object({}),
       },
-      async (args, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async (args, state) => {
+        this.logger.debug(`[list_groups] Fetching all groups for userId: ${state.userId}`);
+        const groups = await this.apiClient.get(`/group/${state.userId}`, state.token);
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
+        if (!Array.isArray(groups)) {
+          this.logger.warn(`[list_groups] Response is not an array`);
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: 'No groups found or invalid response format.',
+              },
+            ],
+          };
         }
 
-        try {
-          this.logger.debug(
-            `[list_groups] Fetching all groups for userId: ${connectionState.userId}`,
-          );
-          const groups = await this.apiClient.get(
-            `/group/${connectionState.userId}`,
-            connectionState.token,
-          );
+        this.logger.log(`[list_groups] Found ${groups.length} groups`);
 
-          if (!Array.isArray(groups)) {
-            this.logger.warn(`[list_groups] Response is not an array`);
-            return {
-              content: [
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
                 {
-                  type: 'text' as const,
-                  text: 'No groups found or invalid response format.',
+                  total: groups.length,
+                  groups: groups,
                 },
-              ],
-            };
-          }
-
-          this.logger.log(`[list_groups] Found ${groups.length} groups`);
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(
-                  {
-                    total: groups.length,
-                    groups: groups,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[list_groups] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to list groups: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 7: get_device - Get device details by UUID
@@ -669,44 +638,21 @@ export class McpService {
           uuid: z.string().describe('Device UUID (unique identifier)'),
         }),
       },
-      async ({ uuid }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async ({ uuid }, state) => {
+        this.logger.debug(`[get_device] Fetching device uuid: ${uuid}`);
+        const device = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token);
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
-        }
+        this.logger.log(`[get_device] Retrieved device: ${device.label || uuid}`);
 
-        try {
-          this.logger.debug(`[get_device] Fetching device uuid: ${uuid}`);
-          const device = await this.apiClient.get(
-            `/device/${connectionState.userId}/${uuid}`,
-            connectionState.token,
-          );
-
-          this.logger.log(`[get_device] Retrieved device: ${device.label || uuid}`);
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(device, null, 2),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[get_device] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to get device: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(device, null, 2),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 8: update_device - Update device properties
@@ -724,63 +670,43 @@ export class McpService {
           fav: z.boolean().optional().describe('Mark as favorite (true/false)'),
         }),
       },
-      async ({ uuid, label, desc, groupId, vgroupId, fav }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async ({ uuid, label, desc, groupId, vgroupId, fav }, state) => {
+        // Build update payload
+        const updateData: any = { uuid };
+        if (label !== undefined) updateData.label = label;
+        if (desc !== undefined) updateData.desc = desc;
+        if (groupId !== undefined) updateData.groupId = groupId;
+        if (vgroupId !== undefined) updateData.vgroupId = vgroupId;
+        if (fav !== undefined) updateData.fav = fav;
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
-        }
+        this.logger.debug(`[update_device] Updating device ${uuid} with:`, updateData);
 
-        try {
-          // Build update payload
-          const updateData: any = { uuid };
-          if (label !== undefined) updateData.label = label;
-          if (desc !== undefined) updateData.desc = desc;
-          if (groupId !== undefined) updateData.groupId = groupId;
-          if (vgroupId !== undefined) updateData.vgroupId = vgroupId;
-          if (fav !== undefined) updateData.fav = fav;
+        const result = await this.apiClient.patch(
+          `/device/${state.userId}`,
+          state.token,
+          updateData,
+        );
 
-          this.logger.debug(`[update_device] Updating device ${uuid} with:`, updateData);
+        this.logger.log(`[update_device] Updated device ${uuid} successfully`);
 
-          const result = await this.apiClient.patch(
-            `/device/${connectionState.userId}`,
-            connectionState.token,
-            updateData,
-          );
-
-          this.logger.log(`[update_device] Updated device ${uuid} successfully`);
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(
-                  {
-                    success: true,
-                    uuid: uuid,
-                    message: 'Device updated successfully',
-                    updated: updateData,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[update_device] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to update device: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                {
+                  success: true,
+                  uuid: uuid,
+                  message: 'Device updated successfully',
+                  updated: updateData,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 9: delete_device - Delete a device
@@ -793,54 +719,32 @@ export class McpService {
           uuid: z.string().describe('Device UUID to delete'),
         }),
       },
-      async ({ uuid }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async ({ uuid }, state) => {
+        this.logger.debug(`[delete_device] Deleting device uuid: ${uuid}`);
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
-        }
+        const result = await this.apiClient.delete(`/device/${state.userId}`, state.token, {
+          uuid,
+        });
 
-        try {
-          this.logger.debug(`[delete_device] Deleting device uuid: ${uuid}`);
+        this.logger.log(`[delete_device] Deleted device ${uuid} successfully`);
 
-          const result = await this.apiClient.delete(
-            `/device/${connectionState.userId}`,
-            connectionState.token,
-            { uuid },
-          );
-
-          this.logger.log(`[delete_device] Deleted device ${uuid} successfully`);
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(
-                  {
-                    success: true,
-                    uuid: uuid,
-                    message: 'Device deleted successfully',
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[delete_device] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to delete device: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                {
+                  success: true,
+                  uuid: uuid,
+                  message: 'Device deleted successfully',
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 10: get_device_state - Get state of a single device by UUID
@@ -853,41 +757,21 @@ export class McpService {
           uuid: z.string().describe('Device UUID (unique identifier)'),
         }),
       },
-      async ({ uuid }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async ({ uuid }, state) => {
+        this.logger.debug(`[get_device_state] Fetching state for device: ${uuid}`);
+        const deviceState = await this.apiClient.get(`/state/devId/${uuid}`, state.token);
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
-        }
+        this.logger.log(`[get_device_state] Retrieved device state successfully`);
 
-        try {
-          this.logger.debug(`[get_device_state] Fetching state for device: ${uuid}`);
-          const state = await this.apiClient.get(`/state/devId/${uuid}`, connectionState.token);
-
-          this.logger.log(`[get_device_state] Retrieved device state successfully`);
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(state, null, 2),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[get_device_state] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to get device state: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(deviceState, null, 2),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 11: get_location_state - Get states for all devices in a location
@@ -900,41 +784,21 @@ export class McpService {
           locationUuid: z.string().describe('Location UUID (use uuid field from list_locations)'),
         }),
       },
-      async ({ locationUuid }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async ({ locationUuid }, state) => {
+        this.logger.debug(`[get_location_state] Fetching state for location: ${locationUuid}`);
+        const states = await this.apiClient.get(`/state/${locationUuid}`, state.token);
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
-        }
+        this.logger.log(`[get_location_state] Retrieved location state successfully`);
 
-        try {
-          this.logger.debug(`[get_location_state] Fetching state for location: ${locationUuid}`);
-          const states = await this.apiClient.get(`/state/${locationUuid}`, connectionState.token);
-
-          this.logger.log(`[get_location_state] Retrieved location state successfully`);
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(states, null, 2),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[get_location_state] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to get location state: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(states, null, 2),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 12: get_device_state_by_mac - Get state of a specific device by MAC address
@@ -948,46 +812,26 @@ export class McpService {
           macAddress: z.string().describe('Device MAC address (physical identifier)'),
         }),
       },
-      async ({ locationUuid, macAddress }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async ({ locationUuid, macAddress }, state) => {
+        this.logger.debug(
+          `[get_device_state_by_mac] Fetching state for location ${locationUuid}, device ${macAddress}`,
+        );
+        const deviceState = await this.apiClient.get(
+          `/state/${locationUuid}/${macAddress}`,
+          state.token,
+        );
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
-        }
+        this.logger.log(`[get_device_state_by_mac] Retrieved device state successfully`);
 
-        try {
-          this.logger.debug(
-            `[get_device_state_by_mac] Fetching state for location ${locationUuid}, device ${macAddress}`,
-          );
-          const state = await this.apiClient.get(
-            `/state/${locationUuid}/${macAddress}`,
-            connectionState.token,
-          );
-
-          this.logger.log(`[get_device_state_by_mac] Retrieved device state successfully`);
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(state, null, 2),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[get_device_state_by_mac] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to get device state: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(deviceState, null, 2),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 13: control_device - Control an IoT device
@@ -1011,109 +855,82 @@ export class McpService {
             ),
         }),
       },
-      async ({ uuid, elementIds, command }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async ({ uuid, elementIds, command }, state) => {
+        this.logger.debug(`[control_device] Getting device details for uuid: ${uuid}`);
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
+        // First, get device details to retrieve control parameters
+        const device = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token);
+
+        if (!device) {
+          throw new Error(`Device ${uuid} not found`);
         }
 
-        try {
-          this.logger.debug(`[control_device] Getting device details for uuid: ${uuid}`);
+        // Extract required fields
+        const eid = device.eid;
+        const rootUuid = device.rootUuid || device.uuid; // Use device uuid if no rootUuid
+        const endpoint = device.endpoint;
+        const partnerId = device.partnerId;
+        const protocolCtl = device.protocolCtl;
 
-          // First, get device details to retrieve control parameters
-          const device = await this.apiClient.get(
-            `/device/${connectionState.userId}/${uuid}`,
-            connectionState.token,
-          );
-
-          if (!device) {
-            throw new Error(`Device ${uuid} not found`);
-          }
-
-          // Extract required fields
-          const eid = device.eid;
-          const rootUuid = device.rootUuid || device.uuid; // Use device uuid if no rootUuid
-          const endpoint = device.endpoint;
-          const partnerId = device.partnerId;
-          const protocolCtl = device.protocolCtl;
-
-          // Validate required fields
-          if (!eid || !endpoint || !partnerId || protocolCtl === undefined) {
-            this.logger.error('[control_device] Missing required device fields:', {
-              eid,
-              endpoint,
-              partnerId,
-              protocolCtl,
-            });
-            throw new Error(
-              'Device is missing required control fields (eid, endpoint, partnerId, or protocolCtl)',
-            );
-          }
-
-          // Build control payload
-          const payload = {
+        // Validate required fields
+        if (!eid || !endpoint || !partnerId || protocolCtl === undefined) {
+          this.logger.error('[control_device] Missing required device fields:', {
             eid,
-            elementIds,
-            command,
             endpoint,
             partnerId,
-            rootUuid,
             protocolCtl,
-          };
-
-          this.logger.debug('[control_device] Sending control command:', payload);
-
-          // Send control command
-          const result = await this.apiClient.post(
-            '/control/device',
-            connectionState.token,
-            payload,
+          });
+          throw new Error(
+            'Device is missing required control fields (eid, endpoint, partnerId, or protocolCtl)',
           );
-
-          this.logger.log(
-            `[control_device] Control command sent successfully for device ${device.label || uuid}`,
-          );
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(
-                  {
-                    success: true,
-                    device: {
-                      uuid: device.uuid,
-                      label: device.label,
-                      mac: device.mac,
-                    },
-                    command_sent: {
-                      elementIds,
-                      command,
-                    },
-                    note: 'Control command published to MQTT. Device state change is not guaranteed - check device state after a few seconds.',
-                    response: result,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[control_device] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to control device: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
         }
-      },
+
+        // Build control payload
+        const payload = {
+          eid,
+          elementIds,
+          command,
+          endpoint,
+          partnerId,
+          rootUuid,
+          protocolCtl,
+        };
+
+        this.logger.debug('[control_device] Sending control command:', payload);
+
+        // Send control command
+        const result = await this.apiClient.post('/control/device', state.token, payload);
+
+        this.logger.log(
+          `[control_device] Control command sent successfully for device ${device.label || uuid}`,
+        );
+
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                {
+                  success: true,
+                  device: {
+                    uuid: device.uuid,
+                    label: device.label,
+                    mac: device.mac,
+                  },
+                  command_sent: {
+                    elementIds,
+                    command,
+                  },
+                  note: 'Control command published to MQTT. Device state change is not guaranteed - check device state after a few seconds.',
+                  response: result,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }),
     );
 
     // Tool 14: control_device_simple - Simplified device control helpers
@@ -1150,156 +967,129 @@ export class McpService {
             .describe('Specific element ID to control (optional, controls all if not specified)'),
         }),
       },
-      async ({ uuid, action, value, elementId }, extra) => {
-        const sessionKey = extra?.sessionId || 'default';
-        const connectionState = this.connectionStates.get(sessionKey);
+      this.withAuth(async ({ uuid, action, value, elementId }, state) => {
+        this.logger.debug(`[control_device_simple] Getting device details for uuid: ${uuid}`);
 
-        if (!connectionState?.token || !connectionState?.userId) {
-          throw new Error('Authentication required. Please use the login tool first.');
+        // Get device details
+        const device = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token);
+
+        if (!device) {
+          throw new Error(`Device ${uuid} not found`);
         }
 
-        try {
-          this.logger.debug(`[control_device_simple] Getting device details for uuid: ${uuid}`);
+        // Determine element IDs
+        const elementIds = elementId ? [elementId] : device.elementIds || [];
 
-          // Get device details
-          const device = await this.apiClient.get(
-            `/device/${connectionState.userId}/${uuid}`,
-            connectionState.token,
+        if (elementIds.length === 0) {
+          throw new Error('No element IDs available for this device');
+        }
+
+        // Build command based on action
+        let command: number[];
+        let actionDescription: string;
+
+        switch (action) {
+          case 'turn_on':
+            command = [1, 1]; // ON_OFF=1, value=1 (ON)
+            actionDescription = 'Turn ON';
+            break;
+          case 'turn_off':
+            command = [1, 0]; // ON_OFF=1, value=0 (OFF)
+            actionDescription = 'Turn OFF';
+            break;
+          case 'set_brightness':
+            if (value === undefined || value < 0 || value > 1000) {
+              throw new Error('Brightness value must be between 0 and 1000');
+            }
+            command = [28, value]; // BRIGHTNESS=28
+            actionDescription = `Set brightness to ${value}`;
+            break;
+          case 'set_kelvin':
+            if (value === undefined || value < 0 || value > 65000) {
+              throw new Error('Kelvin value must be between 0 and 65000');
+            }
+            command = [29, value]; // KELVIN=29
+            actionDescription = `Set kelvin to ${value}`;
+            break;
+          case 'set_temperature':
+            if (value === undefined || value < 15 || value > 30) {
+              throw new Error('Temperature must be between 15 and 30 (Celsius)');
+            }
+            command = [20, value]; // TEMP_SET=20
+            actionDescription = `Set temperature to ${value}°C`;
+            break;
+          case 'set_mode':
+            if (value === undefined || value < 0 || value > 4) {
+              throw new Error('Mode must be 0-4 (0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN)');
+            }
+            command = [17, value]; // MODE=17
+            const modes = ['AUTO', 'COOLING', 'DRY', 'HEATING', 'FAN'];
+            actionDescription = `Set mode to ${modes[value]}`;
+            break;
+          default:
+            throw new Error(`Unknown action: ${action}`);
+        }
+
+        // Extract required control fields
+        const eid = device.eid;
+        const rootUuid = device.rootUuid || device.uuid;
+        const endpoint = device.endpoint;
+        const partnerId = device.partnerId;
+        const protocolCtl = device.protocolCtl;
+
+        if (!eid || !endpoint || !partnerId || protocolCtl === undefined) {
+          throw new Error(
+            'Device is missing required control fields (eid, endpoint, partnerId, or protocolCtl)',
           );
+        }
 
-          if (!device) {
-            throw new Error(`Device ${uuid} not found`);
-          }
+        // Build control payload
+        const payload = {
+          eid,
+          elementIds,
+          command,
+          endpoint,
+          partnerId,
+          rootUuid,
+          protocolCtl,
+        };
 
-          // Determine element IDs
-          const elementIds = elementId ? [elementId] : device.elementIds || [];
+        this.logger.debug('[control_device_simple] Sending control command:', payload);
 
-          if (elementIds.length === 0) {
-            throw new Error('No element IDs available for this device');
-          }
+        // Send control command
+        const result = await this.apiClient.post('/control/device', state.token, payload);
 
-          // Build command based on action
-          let command: number[];
-          let actionDescription: string;
+        this.logger.log(
+          `[control_device_simple] ${actionDescription} command sent for device ${device.label || uuid}`,
+        );
 
-          switch (action) {
-            case 'turn_on':
-              command = [1, 1]; // ON_OFF=1, value=1 (ON)
-              actionDescription = 'Turn ON';
-              break;
-            case 'turn_off':
-              command = [1, 0]; // ON_OFF=1, value=0 (OFF)
-              actionDescription = 'Turn OFF';
-              break;
-            case 'set_brightness':
-              if (value === undefined || value < 0 || value > 1000) {
-                throw new Error('Brightness value must be between 0 and 1000');
-              }
-              command = [28, value]; // BRIGHTNESS=28
-              actionDescription = `Set brightness to ${value}`;
-              break;
-            case 'set_kelvin':
-              if (value === undefined || value < 0 || value > 65000) {
-                throw new Error('Kelvin value must be between 0 and 65000');
-              }
-              command = [29, value]; // KELVIN=29
-              actionDescription = `Set kelvin to ${value}`;
-              break;
-            case 'set_temperature':
-              if (value === undefined || value < 15 || value > 30) {
-                throw new Error('Temperature must be between 15 and 30 (Celsius)');
-              }
-              command = [20, value]; // TEMP_SET=20
-              actionDescription = `Set temperature to ${value}°C`;
-              break;
-            case 'set_mode':
-              if (value === undefined || value < 0 || value > 4) {
-                throw new Error('Mode must be 0-4 (0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN)');
-              }
-              command = [17, value]; // MODE=17
-              const modes = ['AUTO', 'COOLING', 'DRY', 'HEATING', 'FAN'];
-              actionDescription = `Set mode to ${modes[value]}`;
-              break;
-            default:
-              throw new Error(`Unknown action: ${action}`);
-          }
-
-          // Extract required control fields
-          const eid = device.eid;
-          const rootUuid = device.rootUuid || device.uuid;
-          const endpoint = device.endpoint;
-          const partnerId = device.partnerId;
-          const protocolCtl = device.protocolCtl;
-
-          if (!eid || !endpoint || !partnerId || protocolCtl === undefined) {
-            throw new Error(
-              'Device is missing required control fields (eid, endpoint, partnerId, or protocolCtl)',
-            );
-          }
-
-          // Build control payload
-          const payload = {
-            eid,
-            elementIds,
-            command,
-            endpoint,
-            partnerId,
-            rootUuid,
-            protocolCtl,
-          };
-
-          this.logger.debug('[control_device_simple] Sending control command:', payload);
-
-          // Send control command
-          const result = await this.apiClient.post(
-            '/control/device',
-            connectionState.token,
-            payload,
-          );
-
-          this.logger.log(
-            `[control_device_simple] ${actionDescription} command sent for device ${device.label || uuid}`,
-          );
-
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(
-                  {
-                    success: true,
-                    device: {
-                      uuid: device.uuid,
-                      label: device.label,
-                      mac: device.mac,
-                    },
-                    action: actionDescription,
-                    command_sent: {
-                      elementIds,
-                      command,
-                    },
-                    note: 'Control command published to MQTT. Device state change is not guaranteed - check device state after a few seconds.',
-                    response: result,
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify(
+                {
+                  success: true,
+                  device: {
+                    uuid: device.uuid,
+                    label: device.label,
+                    mac: device.mac,
                   },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('[control_device_simple] Failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Failed to control device: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
+                  action: actionDescription,
+                  command_sent: {
+                    elementIds,
+                    command,
+                  },
+                  note: 'Control command published to MQTT. Device state change is not guaranteed - check device state after a few seconds.',
+                  response: result,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      }),
     );
 
     this.logger.log(
