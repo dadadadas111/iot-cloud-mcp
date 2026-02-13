@@ -67,11 +67,18 @@ jobs:
 
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.0
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USERNAME }}
           password: ${{ secrets.VPS_PASSWORD }}
           port: ${{ secrets.VPS_PORT }}
+          envs: REGISTRY,IMAGE_NAME,GITHUB_SHA,GITHUB_TOKEN,GITHUB_ACTOR
           script: |
             set -e
 
@@ -79,13 +86,13 @@ jobs:
             cd /opt/mcp-stag
 
             # Login to GitHub Container Registry
-            echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo ${GITHUB_TOKEN} | sudo docker login ghcr.io -u ${GITHUB_ACTOR} --password-stdin
 
             # Get short SHA (first 7 characters)
-            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+            SHORT_SHA=$(echo "${GITHUB_SHA}" | cut -c1-7)
 
             # Pull the staging image
-            sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-${SHORT_SHA}
+            sudo docker pull ${REGISTRY}/${IMAGE_NAME}:staging-${SHORT_SHA}
 
             # Detect docker-compose version and use appropriate command
             if command -v docker-compose &> /dev/null; then
@@ -97,7 +104,8 @@ jobs:
             # Stop and remove old containers
             $COMPOSE_CMD down || true
 
-            # Set image tag for staging deployment
+            # Set environment variables for docker-compose
+            export IMAGE_NAME=${REGISTRY}/${IMAGE_NAME}
             export IMAGE_TAG=staging-${SHORT_SHA}
 
             # Start services with the new staging image
