@@ -36,62 +36,23 @@ A professional Model Context Protocol (MCP) server that bridges AI assistants wi
 
 ## Quick Start
 
-### Prerequisites
+**👉 See the [Quick Start Guide](docs/setup/QUICKSTART.md) for detailed setup instructions**
 
-- Node.js 18+
-- IoT Cloud API access (API key and base URL)
-
-### Installation
+### TL;DR
 
 ```bash
-# Install dependencies
+# Install and configure
 npm install
-
-# Configure environment
 cp .env.example .env
 # Edit .env with your API credentials
-```
 
-### Configuration
-
-Create `.env` file:
-
-```env
-# Server
-NODE_ENV=development
-PORT=3001
-HOST=0.0.0.0
-
-# IoT Cloud REST API
-IOT_API_BASE_URL=https://staging.openapi.rogo.com.vn/api/v2.0/iot-core
-IOT_API_KEY=your-api-key-here
-IOT_API_TIMEOUT=30000
-
-# CORS
-ENABLE_CORS=true
-CORS_ORIGINS=http://localhost:3000,https://chat.openai.com,https://claude.ai
-
-# Rate Limiting
-ENABLE_RATE_LIMIT=true
-RATE_LIMIT_MAX=100
-RATE_LIMIT_WINDOW=60000
-
-# Logging
-LOG_LEVEL=debug
-```
-
-### Running
-
-```bash
-# Development
+# Run
 npm run start:dev
-
-# Production
-npm run build
-npm run start:prod
 ```
 
 Server will be available at `http://localhost:3001`
+
+For detailed setup, configuration, and integration guides, see the [documentation](docs/).
 
 ## MCP Protocol
 
@@ -429,6 +390,16 @@ npm run test
 # Lint code
 npm run lint
 ```
+
+**For AI coding agents**, see the [Agent Guidelines](docs/development/AGENTS.md) for coding standards and conventions.
+
+## Documentation
+
+- **[Quick Start Guide](docs/setup/QUICKSTART.md)** - Get up and running in 5 minutes
+- **[API Reference](docs/api/)** - MCP tools, device control, and API documentation
+- **[Agent Guidelines](docs/development/AGENTS.md)** - Guidelines for AI coding agents
+
+For complete documentation, see the [docs](docs/) directory.
 
 ## Docker Deployment
 

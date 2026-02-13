@@ -5,43 +5,55 @@ Welcome to the IoT Cloud MCP Bridge Server documentation. This directory contain
 ## Structure
 
 ### 📚 Setup Guides
+
 Located in [`setup/`](setup/)
 
-- **[Quick Start Guide](setup/QUICK_START.md)** - Get up and running in minutes
-- **[Setup Checklist](setup/SETUP_CHECKLIST.md)** - Complete step-by-step setup instructions
+- **[Quick Start Guide](setup/QUICKSTART.md)** - Get up and running in 5 minutes
 
 ### 🚀 Deployment
+
 Located in [`deployment/`](deployment/)
 
-- **[MCP Protocol Guide](deployment/MCP_PROTOCOL.md)** - Model Context Protocol implementation (recommended)
-- **[Docker Deployment Guide](deployment/DOCKER_DEPLOYMENT.md)** - Deploy with Docker and Docker Compose (includes CI/CD setup)
-- **[ChatGPT Apps Integration](deployment/CHATGPT_APPS.md)** - Integrate with ChatGPT Apps
-- **[Render Deployment Guide](deployment/RENDER_DEPLOYMENT.md)** - Deploy to Render.com with detailed instructions
+Deployment guides will be added here for various platforms (Docker, cloud providers, etc.)
 
 ### 💻 Development
+
 Located in [`development/`](development/)
 
-- **[Implementation Notes](development/IMPLEMENTATION_NOTES.md)** - Technical implementation details and notes
-- **[Session Summary](development/SESSION_SUMMARY.md)** - Development session logs and progress tracking
+- **[Agent Guidelines](development/AGENTS.md)** - Essential guidelines for AI coding agents
+
+### 📖 API Reference
+
+Located in [`api/`](api/)
+
+- **[MCP Tools Documentation](api/TOOLS.md)** - Complete MCP tools reference
+- **[Device Control Guide](api/how-to-control-devices.md)** - How to control IoT devices
+- **[State Reading Guide](api/how-to-read-state.md)** - How to read device states
+- **[API Response Examples](api/actual-api-response.md)** - Real API response examples
+- **[Device Attributes Reference](api/device-attr-and-control.csv)** - Device attribute IDs and control codes
+- **[OpenAPI Specification](api/api.json)** - Full OpenAPI JSON specification
 
 ## Quick Links
 
-- [Main README](../README.md) - Project overview and API documentation
+- [Main README](../README.md) - Project overview and features
 - [Configuration Examples](../config/) - Example configuration files
 
 ## Getting Started
 
 If you're new to this project:
+
 1. Start with the [Main README](../README.md) for an overview
-2. Follow the [Quick Start Guide](setup/QUICK_START.md) to get running locally
-3. Use the [Setup Checklist](setup/SETUP_CHECKLIST.md) for production deployment
-4. Refer to [Render Deployment Guide](deployment/RENDER_DEPLOYMENT.md) when deploying
+2. Follow the [Quick Start Guide](setup/QUICKSTART.md) to get running locally
+3. Explore the [API Reference](api/) to understand available tools and endpoints
+4. Check [Agent Guidelines](development/AGENTS.md) if you're an AI coding agent
 
 ## Contributing to Documentation
 
 When adding new documentation:
+
 - Place setup/installation guides in `setup/`
 - Place deployment guides in `deployment/`
 - Place development notes and technical details in `development/`
+- Place API documentation, examples, and references in `api/`
 - Update this README with links to new documents
 - Use relative links for cross-references between documents
