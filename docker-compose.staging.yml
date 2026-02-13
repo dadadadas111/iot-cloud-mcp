@@ -1,8 +1,7 @@
-version: '3.8'
 
 services:
   iot-cloud-mcp-staging:
-    image: ghcr.io/dadadadas111/iot-cloud-mcp:${IMAGE_TAG:-staging-latest}
+    image: ghcr.io/dadadadas111/iot-cloud-mcp:${IMAGE_TAG}
     container_name: iot-cloud-mcp-staging
     restart: unless-stopped
     ports:
