@@ -15,8 +15,8 @@ export interface ApiRequestOptions {
 @Injectable()
 export class ApiClientService {
   private readonly logger = new Logger(ApiClientService.name);
-  private readonly baseUrl: string;
-  private readonly apiKey: string;
+  private baseUrl: string;
+  private apiKey: string;
   private readonly timeout: number;
 
   constructor(
@@ -29,6 +29,43 @@ export class ApiClientService {
 
     if (!this.baseUrl || !this.apiKey) {
       throw new Error('IOT_API_BASE_URL and IOT_API_KEY must be configured');
+    }
+  }
+
+  /**
+   * Update the IoT API base URL at runtime
+   * @param url - New base URL (e.g., https://api.iot-cloud.com)
+   */
+  updateBaseUrl(url: string): void {
+    if (!url || typeof url !== 'string') {
+      throw new Error('Base URL must be a non-empty string');
+    }
+    this.logger.log(`Updating base URL from ${this.baseUrl} to ${url}`);
+    this.baseUrl = url;
+  }
+
+  /**
+   * Update the IoT API key at runtime
+   * @param key - New API key
+   */
+  updateApiKey(key: string): void {
+    if (!key || typeof key !== 'string') {
+      throw new Error('API key must be a non-empty string');
+    }
+    this.logger.log('Updating API key (value hidden for security)');
+    this.apiKey = key;
+  }
+
+  /**
+   * Update multiple configuration values at runtime
+   * @param config - Configuration object with baseUrl and/or apiKey
+   */
+  updateConfig(config: { baseUrl?: string; apiKey?: string }): void {
+    if (config.baseUrl) {
+      this.updateBaseUrl(config.baseUrl);
+    }
+    if (config.apiKey) {
+      this.updateApiKey(config.apiKey);
     }
   }
 

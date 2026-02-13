@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  iot-cloud-mcp-staging:
+    image: ghcr.io/dadadadas111/iot-cloud-mcp:${IMAGE_TAG:-staging-latest}
+    container_name: iot-cloud-mcp-staging
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3002}:3001'
+    environment:
+      # Server
+      NODE_ENV: ${NODE_ENV:-staging}
+      PORT: ${PORT:-3001}
+      HOST: ${HOST:-0.0.0.0}
+
+      # IoT Cloud API
+      IOT_API_BASE_URL: ${IOT_API_BASE_URL}
+      IOT_API_KEY: ${IOT_API_KEY}
+      IOT_API_TIMEOUT: ${IOT_API_TIMEOUT:-30000}
+
+      # Admin API
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+
+      # Redis Configuration
+      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+
+      # CORS Configuration (always enabled for MCP)
+      ENABLE_CORS: 'true'
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+
+      # Rate Limiting
+      ENABLE_RATE_LIMIT: ${ENABLE_RATE_LIMIT:-true}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-60000}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-debug}
+
+    networks:
+      - iot-network-staging
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+networks:
+  iot-network-staging:
+    driver: bridge

@@ -1,0 +1,116 @@
+name: Build and Push Docker Image (Staging)
+
+on:
+  pull_request:
+    branches:
+      - master
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build and Push Docker Image (Staging)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=pr,prefix=staging-pr-
+            type=sha,prefix=staging-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image digest
+        run: echo ${{ steps.meta.outputs.digest }}
+
+  deploy:
+    name: Deploy to VPS (Staging)
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            set -e
+
+            # Navigate to staging project directory
+            cd /opt/mcp-stag
+
+            # Login to GitHub Container Registry
+            echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull the staging image
+            sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-${{ github.sha }}
+
+            # Detect docker-compose version and use appropriate command
+            if command -v docker-compose &> /dev/null; then
+                COMPOSE_CMD="sudo docker-compose -f docker-compose.staging.yml"
+            else
+                COMPOSE_CMD="sudo docker compose -f docker-compose.staging.yml"
+            fi
+
+            # Stop and remove old containers
+            $COMPOSE_CMD down || true
+
+            # Set image tag for staging deployment
+            export IMAGE_TAG=staging-${{ github.sha }}
+
+            # Start services with the new staging image
+            $COMPOSE_CMD up -d
+
+            # Wait for services to be healthy
+            echo "Waiting for staging services to start..."
+            sleep 15
+
+            # Check service status
+            $COMPOSE_CMD ps
+
+            # Show recent logs
+            $COMPOSE_CMD logs --tail=50 iot-cloud-mcp-staging
+
+            # Clean up old staging images
+            sudo docker image prune -af --filter "until=24h"
+
+            echo "Staging deployment completed successfully!"

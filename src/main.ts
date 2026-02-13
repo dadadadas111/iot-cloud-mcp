@@ -16,7 +16,7 @@ async function bootstrap() {
   app.enableCors({
     origin: origins.length > 0 && origins[0] !== '*' ? origins : '*',
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'x-admin-api-key'],
     credentials: true,
   });
 
@@ -45,7 +45,17 @@ async function bootstrap() {
       description: 'Enter your Firebase JWT token',
       in: 'header',
     })
+    .addApiKey(
+      {
+        type: 'apiKey',
+        name: 'x-admin-api-key',
+        in: 'header',
+        description: 'Admin API key for runtime configuration management',
+      },
+      'x-admin-api-key',
+    )
     .addServer('http://localhost:3001', 'Local Development')
+    .addServer('https://mcp-stag.dash.id.vn', 'Staging')
     .addServer('https://mcp.dash.id.vn', 'Production')
     .build();
 
