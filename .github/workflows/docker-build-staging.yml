@@ -85,6 +85,9 @@ jobs:
             # Navigate to staging project directory
             cd /opt/mcp-stag
 
+            # Remove any GitHub workflow files that might interfere
+            sudo rm -rf .github/ || true
+
             # Login to GitHub Container Registry
             echo ${GITHUB_TOKEN} | sudo docker login ghcr.io -u ${GITHUB_ACTOR} --password-stdin
 
@@ -96,16 +99,15 @@ jobs:
 
             # Detect docker-compose version and use appropriate command
             if command -v docker-compose &> /dev/null; then
-                COMPOSE_CMD="sudo docker-compose -f docker-compose.yml"
+                COMPOSE_CMD="sudo docker-compose -f docker-compose.staging.yml"
             else
-                COMPOSE_CMD="sudo docker compose -f docker-compose.yml"
+                COMPOSE_CMD="sudo docker compose -f docker-compose.staging.yml"
             fi
 
             # Stop and remove old containers
             $COMPOSE_CMD down || true
 
-            # Set environment variables for docker-compose
-            export IMAGE_NAME=${REGISTRY}/${IMAGE_NAME}
+            # Set image tag for docker-compose
             export IMAGE_TAG=staging-${SHORT_SHA}
 
             # Start services with the new staging image
