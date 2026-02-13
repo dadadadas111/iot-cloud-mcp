@@ -81,8 +81,11 @@ jobs:
             # Login to GitHub Container Registry
             echo ${{ secrets.GITHUB_TOKEN }} | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
+            # Get short SHA (first 7 characters)
+            SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+
             # Pull the staging image
-            sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-${{ github.sha }}
+            sudo docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-${SHORT_SHA}
 
             # Detect docker-compose version and use appropriate command
             if command -v docker-compose &> /dev/null; then
@@ -95,7 +98,7 @@ jobs:
             $COMPOSE_CMD down || true
 
             # Set image tag for staging deployment
-            export IMAGE_TAG=staging-${{ github.sha }}
+            export IMAGE_TAG=staging-${SHORT_SHA}
 
             # Start services with the new staging image
             $COMPOSE_CMD up -d
