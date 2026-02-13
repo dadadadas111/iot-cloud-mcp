@@ -89,9 +89,9 @@ jobs:
 
             # Detect docker-compose version and use appropriate command
             if command -v docker-compose &> /dev/null; then
-                COMPOSE_CMD="sudo docker-compose -f docker-compose.staging.yml"
+                COMPOSE_CMD="sudo docker-compose -f docker-compose.yml"
             else
-                COMPOSE_CMD="sudo docker compose -f docker-compose.staging.yml"
+                COMPOSE_CMD="sudo docker compose -f docker-compose.yml"
             fi
 
             # Stop and remove old containers
