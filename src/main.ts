@@ -10,7 +10,6 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // Enable CORS (always enable for MCP compatibility)
-  const enableCors = configService.get<string>('ENABLE_CORS') !== 'false';
   const origins = configService.get<string>('CORS_ORIGINS')?.split(',') || ['*'];
 
   app.enableCors({
