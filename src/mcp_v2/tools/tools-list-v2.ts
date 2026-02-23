@@ -15,8 +15,28 @@ export const ToolsListV2: Record<string, ToolMeta> = {
     inputSchema: z.object({ data: z.string().describe('End-user email or phone') }),
   },
   list_devices: {
-    description: 'List devices for a given end-user `userId`.',
-    inputSchema: z.object({ userId: z.string().describe('End-user userId') }).partial(),
+    description: 'List devices for a given end-user `userId` or resolve by email/phone using `data`.',
+    inputSchema: z.object({ userId: z.string().optional(), data: z.string().optional().describe('End-user email or phone') }),
+  },
+  list_locations: {
+    description: 'List locations for a given end-user `userId` or resolve by email/phone using `data`.',
+    inputSchema: z.object({ userId: z.string().optional(), data: z.string().optional().describe('End-user email or phone') }),
+  },
+  list_groups: {
+    description: "List user's groups for a given end-user `userId` or resolve by email/phone using `data`.",
+    inputSchema: z.object({ userId: z.string().optional(), data: z.string().optional().describe('End-user email or phone') }),
+  },
+  get_device: {
+    description: 'Get a single device by `userId` and `uuid`.',
+    inputSchema: z.object({ userId: z.string(), uuid: z.string() }),
+  },
+  get_state_by_location: {
+    description: 'Get device states for a `locationUuid`.',
+    inputSchema: z.object({ locationUuid: z.string() }),
+  },
+  get_state_by_devId: {
+    description: 'Get device state by `devId`.',
+    inputSchema: z.object({ devId: z.string() }),
   },
   control_device_simple: {
     description:

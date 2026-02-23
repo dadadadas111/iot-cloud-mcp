@@ -99,6 +99,81 @@ export class McpV2Service {
       }),
     ) as any;
 
+    // list_locations
+    server.registerTool(
+      'list_locations',
+      ToolsListV2.list_locations,
+      withApiKey(async ({ userId, data }, apiKey) => {
+        let uid = userId;
+        if (!uid && data) {
+          const r: any = await this.apiClient.post('/user/findUserId', apiKey, { data });
+          uid = r?.userId || r?.user_id || r?.data?.userId;
+          if (!uid) throw new Error('UserId not found');
+        }
+
+        if (!uid) throw new Error('userId is required');
+
+        const locations: any = await this.apiClient.get(`/location/${uid}`, apiKey);
+        return { content: [{ type: 'text', text: JSON.stringify({ total: Array.isArray(locations) ? locations.length : 0, locations }) }] } as any;
+      }),
+    ) as any;
+
+    // list_groups
+    server.registerTool(
+      'list_groups',
+      ToolsListV2.list_groups,
+      withApiKey(async ({ userId, data }, apiKey) => {
+        let uid = userId;
+        if (!uid && data) {
+          const r: any = await this.apiClient.post('/user/findUserId', apiKey, { data });
+          uid = r?.userId || r?.user_id || r?.data?.userId;
+          if (!uid) throw new Error('UserId not found');
+        }
+
+        if (!uid) throw new Error('userId is required');
+
+        const groups: any = await this.apiClient.get(`/group/${uid}`, apiKey);
+        return { content: [{ type: 'text', text: JSON.stringify({ total: Array.isArray(groups) ? groups.length : 0, groups }) }] } as any;
+      }),
+    ) as any;
+
+    // get_device
+    server.registerTool(
+      'get_device',
+      ToolsListV2.get_device,
+      withApiKey(async ({ userId, uuid }, apiKey) => {
+        if (!userId) throw new Error('userId is required');
+        if (!uuid) throw new Error('uuid is required');
+
+        const device: any = await this.apiClient.get(`/device/${userId}/${uuid}`, apiKey);
+        return { content: [{ type: 'text', text: JSON.stringify({ device }) }] } as any;
+      }),
+    ) as any;
+
+    // get_state_by_location
+    server.registerTool(
+      'get_state_by_location',
+      ToolsListV2.get_state_by_location,
+      withApiKey(async ({ locationUuid }, apiKey) => {
+        if (!locationUuid) throw new Error('locationUuid is required');
+
+        const state: any = await this.apiClient.get(`/state/${locationUuid}`, apiKey);
+        return { content: [{ type: 'text', text: JSON.stringify({ state }) }] } as any;
+      }),
+    ) as any;
+
+    // get_state_by_devId
+    server.registerTool(
+      'get_state_by_devId',
+      ToolsListV2.get_state_by_devId,
+      withApiKey(async ({ devId }, apiKey) => {
+        if (!devId) throw new Error('devId is required');
+
+        const state: any = await this.apiClient.get(`/state/devId/${devId}`, apiKey);
+        return { content: [{ type: 'text', text: JSON.stringify({ state }) }] } as any;
+      }),
+    ) as any;
+
     // control_device_simple
     server.registerTool(
       'control_device_simple',
