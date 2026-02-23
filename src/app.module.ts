@@ -2,8 +2,11 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { HttpModule } from '@nestjs/axios';
+
+import { AuthModule } from './auth/auth.module';
+import { ApiModule } from './api/api.module';
+import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
-import { McpV2Module } from '@/mcp_v2/mcp-v2.module';
 
 @Module({
   imports: [
@@ -26,7 +29,11 @@ import { McpV2Module } from '@/mcp_v2/mcp-v2.module';
       timeout: 30000,
       maxRedirects: 5,
     }),
-    McpV2Module
+
+    // Feature modules
+    AuthModule,
+    ApiModule,
+    AdminModule,
   ],
   controllers: [HealthController],
 })
