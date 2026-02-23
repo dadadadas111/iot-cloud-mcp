@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { ConfigService } from '@nestjs/config';
@@ -67,9 +67,10 @@ async function bootstrap() {
 
   await app.listen(port, host);
 
-  console.log(`🚀 IoT Cloud MCP Bridge Server running on http://${host}:${port}`);
-  console.log(`📚 API Documentation available at http://${host}:${port}/api/docs`);
-  console.log(`📋 OpenAPI JSON at http://${host}:${port}/api/docs-json`);
+  const logger = new Logger('Bootstrap');
+  logger.log(`IoT Cloud MCP Bridge Server running on http://${host}:${port}`);
+  logger.log(`API Documentation available at http://${host}:${port}/api/docs`);
+  logger.log(`OpenAPI JSON at http://${host}:${port}/api/docs-json`);
 }
 
 bootstrap();
