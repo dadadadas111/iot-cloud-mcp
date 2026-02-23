@@ -6,6 +6,10 @@ export interface ToolMeta {
 }
 
 export const ToolsListV2: Record<string, ToolMeta> = {
+  init_api_key: {
+    description: 'Initialize this MCP session with a project API key. MUST be called before other tools.',
+    inputSchema: z.object({ apiKey: z.string().describe('Project API key (x-api-key)') }),
+  },
   find_user_id: {
     description: 'Resolve an end-user ID by email or phone. Admin provides email/phone in `data`.',
     inputSchema: z.object({ data: z.string().describe('End-user email or phone') }),

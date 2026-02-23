@@ -29,19 +29,11 @@ export class McpV2Controller {
       if (sessionId && this.transports.has(sessionId)) {
         transport = this.transports.get(sessionId)!;
       } else {
-        const apiKey = (req.headers['x-api-key'] || req.headers['x-header-apikey']) as string | undefined;
-        if (!apiKey) {
-          res.status(400).json({ jsonrpc: '2.0', error: { code: -32602, message: 'Missing x-api-key' }, id: null });
-          return;
-        }
-
-        // Create new session id generator transport and persist apiKey when session initializes
+        // Create new session id generator transport (no apiKey required on connect)
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           onsessioninitialized: async (newSessionId) => {
             this.logger.log(`[MCP-v2] session initialized: ${newSessionId}`);
-            // store apiKey for this session
-            await this.sessionStore.setApiKey(newSessionId, apiKey!);
             this.transports.set(newSessionId, transport);
           },
         });
