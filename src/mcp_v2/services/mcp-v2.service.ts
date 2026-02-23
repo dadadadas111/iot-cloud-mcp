@@ -71,7 +71,7 @@ export class McpV2Service {
       ToolsListV2.find_user_id,
       withApiKey(async ({ data }, apiKey) => {
         // Call the upstream API to find user id by email/phone
-        const resp: any = await this.apiClient.post('/api/v2.0/iot-core/user/findUserId', apiKey, { data });
+        const resp: any = await this.apiClient.post('/user/findUserId', apiKey, { data });
         const userId = resp?.userId || resp?.user_id || resp?.data?.userId;
         if (!userId) throw new Error('UserId not found');
 
@@ -87,7 +87,7 @@ export class McpV2Service {
         // If admin provided email/phone in `data`, resolve it first
         let uid = userId;
         if (!uid && data) {
-          const r: any = await this.apiClient.post('/api/v2.0/iot-core/user/findUserId', apiKey, { data });
+          const r: any = await this.apiClient.post('/user/findUserId', apiKey, { data });
           uid = r?.userId || r?.user_id || r?.data?.userId;
           if (!uid) throw new Error('UserId not found');
         }
@@ -107,7 +107,7 @@ export class McpV2Service {
         // Resolve userId if needed
         let uid = args.userId;
         if (!uid && args.data) {
-          const r: any = await this.apiClient.post('/api/v2.0/iot-core/user/findUserId', apiKey, { data: args.data });
+          const r: any = await this.apiClient.post('/user/findUserId', apiKey, { data: args.data });
           uid = r?.userId || r?.user_id || r?.data?.userId;
           if (!uid) throw new Error('UserId not found');
         }
