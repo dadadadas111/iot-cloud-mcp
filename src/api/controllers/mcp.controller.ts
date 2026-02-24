@@ -95,19 +95,16 @@ export class McpController {
     console.log(`[MCP-DEBUG] Has API key: ${!!apiKey} (value: ${apiKey ? apiKey.substring(0, 8) + '...' : 'none'})`);
     console.log(`[MCP-DEBUG] Has Auth header: ${!!authHeader}`);
     console.log(`[MCP-DEBUG] Session ID: ${sessionId || 'none'}`);
-    // Handle OAuth discovery flow:
-    // 1. If no API key AND no OAuth token -> send 401 with WWW-Authenticate to trigger OAuth discovery
-    // 2. If API key provided -> use API key auth (current behavior)
-    // 3. If OAuth token provided -> validate token
-      console.log(`[MCP-DEBUG] 🚨 TRIGGERING OAUTH DISCOVERY: No API key and no auth header`);
+    // Handle authentication: BOTH API key AND OAuth Bearer token required
+    // 1. If missing API key OR Bearer token -> send 401 with WWW-Authenticate to trigger OAuth discovery
+    // 2. If both present -> validate OAuth token and use API key for IoT API calls
+    // 3. ChatGPT must provide both: ?api-key=xxx AND Authorization: Bearer <token>
+    if (!apiKey || !authHeader) {
+      console.log(`[MCP-DEBUG] 🚨 TRIGGERING OAUTH DISCOVERY: Missing credentials - apiKey=${!!apiKey}, authHeader=${!!authHeader}`);
       console.log(`[MCP-DEBUG] About to call sendMcpUnauthorized()...`);
       this.sendMcpUnauthorized(res, req);
-      console.log(`[MCP-DEBUG] sendMcpUnauthorized() completed`);    
-
-    if (!apiKey || !authHeader) {
-      console.log(`[MCP-DEBUG] API KEY OR AUTH HEADER MISSING: apiKey=${!!apiKey}, authHeader=${!!authHeader}`);
-      this.sendMcpUnauthorized(res, req);
-      return; 
+      console.log(`[MCP-DEBUG] sendMcpUnauthorized() completed`);
+      return;
     }
 
     // Extract Bearer token if present and validate it
