@@ -78,19 +78,21 @@ export class McpController {
       url: req.url,
     });
 
-    // Validate API key is provided
+    // Handle OAuth discovery flow:
+    // 1. If no API key AND no OAuth token -> send 401 with WWW-Authenticate to trigger OAuth discovery
+    // 2. If API key provided -> use API key auth (current behavior)
+    // 3. If OAuth token provided -> validate token
+
+    if (!apiKey && !authHeader) {
+      console.log(`[MCP] No API key or OAuth token provided - sending OAuth discovery headers`);
+      this.sendMcpUnauthorized(res, req);
+      return;
+    }
+
+    // For now, require API key (OAuth-only access can be added later)
     if (!apiKey) {
       console.error(`[MCP] Missing required api-key parameter`);
-      if (!res.headersSent) {
-        res.status(400).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32602,
-            message: 'Missing required api-key parameter. Use URL format: /api/mcp?api-key=YOUR_API_KEY',
-          },
-          id: null,
-        });
-      }
+      this.sendMcpUnauthorized(res, req);
       return;
     }
 
