@@ -18,6 +18,33 @@ export class McpController {
   ) {}
 
   /**
+   * Get base URL for this server (used for WWW-Authenticate headers)
+   */
+  private getBaseUrl(req: Request): string {
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3001';
+    return `${protocol}://${host}`;
+  }
+
+  /**
+   * Send 401 Unauthorized with proper WWW-Authenticate header for MCP spec compliance
+   */
+  private sendMcpUnauthorized(res: Response, req: Request): void {
+    if (!res.headersSent) {
+      const baseUrl = this.getBaseUrl(req);
+      res.setHeader('WWW-Authenticate', `Bearer realm="MCP", resource="${baseUrl}/.well-known/oauth-protected-resource"`);
+      res.status(401).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32600,
+          message: 'Authorization required. See WWW-Authenticate header for resource metadata.',
+        },
+        id: null,
+      });
+    }
+  }
+
+  /**
    * Main MCP endpoint - handles all HTTP methods
    * GET: Establishes SSE stream for server-to-client messages
    * POST: Receives client-to-server JSON-RPC messages

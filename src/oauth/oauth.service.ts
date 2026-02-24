@@ -11,14 +11,15 @@ export interface AuthorizationRequest {
   state?: string;
   codeChallenge?: string;
   codeChallengeMethod?: string;
+  resource?: string; // RFC 8707 Resource Indicator
   createdAt: Date;
   expiresAt: Date;
 }
-
 export interface AuthorizationCode {
   code: string;
   authRequestId: string;
   userId: string;
+  resource?: string; // RFC 8707 Resource Indicator
   tokenData: {
     access_token: string;
     refresh_token: string;
@@ -30,14 +31,13 @@ export interface AuthorizationCode {
   createdAt: Date;
   expiresAt: Date;
 }
-
 export interface TokenExchangeRequest {
   code: string;
   redirectUri: string;
   clientId?: string;
   codeVerifier?: string;
+  resource?: string; // RFC 8707 Resource Indicator
 }
-
 @Injectable()
 export class OAuthService {
   private readonly logger = new Logger(OAuthService.name);
@@ -67,6 +67,7 @@ export class OAuthService {
     state?: string;
     codeChallenge?: string;
     codeChallengeMethod?: string;
+    resource?: string; // RFC 8707 Resource Indicator
   }): Promise<AuthorizationRequest> {
     const id = randomUUID();
     const now = new Date();
@@ -142,6 +143,7 @@ export class OAuthService {
       code,
       authRequestId: authRequest.id,
       userId,
+      resource: authRequest.resource, // Pass through resource parameter
       tokenData: {
         access_token: loginResult.access_token,
         refresh_token: loginResult.refresh_token,
@@ -167,7 +169,7 @@ export class OAuthService {
    * Exchange authorization code for access tokens
    */
   async exchangeCodeForTokens(request: TokenExchangeRequest) {
-    const { code, redirectUri, clientId, codeVerifier } = request;
+    const { code, redirectUri, clientId, codeVerifier, resource } = request;
 
     // Get and validate auth code
     const authCode = this.authCodes.get(code);
@@ -203,18 +205,31 @@ export class OAuthService {
       }
     }
 
+    // Validate resource parameter if provided (RFC 8707)
+    if (resource && authCode.resource && resource !== authCode.resource) {
+      this.logger.warn(`Resource parameter mismatch: expected=${authCode.resource}, got=${resource}`);
+      throw new BadRequestException('Resource parameter mismatch');
+    }
+
     this.logger.log(`Exchanging authorization code for tokens: user=${authCode.userId}`);
 
     // Clean up the auth code (one-time use)
     this.authCodes.delete(code);
 
     // Return the tokens that were obtained during the original login
-    return {
+    const tokenResponse = {
       access_token: authCode.tokenData.access_token,
       token_type: authCode.tokenData.token_type,
       expires_in: authCode.tokenData.expires_in,
       refresh_token: authCode.tokenData.refresh_token,
     };
+
+    // Include resource parameter in response if present (RFC 8707)
+    if (authCode.resource) {
+      tokenResponse['resource'] = authCode.resource;
+    }
+
+    return tokenResponse;
   }
 
   /**

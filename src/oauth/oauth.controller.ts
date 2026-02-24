@@ -46,6 +46,11 @@ class TokenRequestDto {
   @IsString()
   @IsOptional()
   refresh_token?: string;
+
+  @ApiProperty({ description: 'Resource indicator (RFC 8707)' })
+  @IsString()
+  @IsOptional()
+  resource?: string;
 }
 
 @ApiTags('OAuth2')
@@ -91,6 +96,35 @@ export class OAuthController {
     };
   }
 
+  @Get('.well-known/oauth-protected-resource')
+  @ApiOperation({
+    summary: 'MCP Protected Resource Metadata (RFC 9728)',
+    description: 'Returns MCP resource server metadata with authorization servers for MCP clients',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'MCP resource metadata',
+    schema: {
+      type: 'object',
+      properties: {
+        resource: { type: 'string' },
+        authorization_servers: { type: 'array', items: { type: 'string' } },
+        scopes_supported: { type: 'array', items: { type: 'string' } },
+        resource_documentation: { type: 'string' },
+      },
+    },
+  })
+  getMcpResourceMetadata() {
+    const baseUrl = this.getBaseUrl();
+
+    return {
+      resource: baseUrl,
+      authorization_servers: [baseUrl],
+      scopes_supported: ['iot:read', 'iot:write', 'iot:control'],
+      resource_documentation: `${baseUrl}/api/docs`,
+    };
+  }
+
   @Get('oauth/authorize')
   @ApiOperation({
     summary: 'OAuth2 Authorization Endpoint',
@@ -116,6 +150,7 @@ export class OAuthController {
     required: false,
     example: 'S256',
   })
+  @ApiQuery({ name: 'resource', description: 'Resource indicator (RFC 8707)', required: false })
   @ApiResponse({ status: 302, description: 'Redirect to login UI or callback with auth code' })
   async authorize(
     @Query('response_type') responseType: string,
@@ -125,6 +160,7 @@ export class OAuthController {
     @Query('state') state?: string,
     @Query('code_challenge') codeChallenge?: string,
     @Query('code_challenge_method') codeChallengeMethod?: string,
+    @Query('resource') resource?: string,
   ) {
     // Validate required parameters
     if (responseType !== 'code') {
@@ -149,6 +185,7 @@ export class OAuthController {
       state,
       codeChallenge,
       codeChallengeMethod,
+      resource, // Include resource parameter
     });
 
     // Redirect to login UI with auth request ID
@@ -263,6 +300,7 @@ export class OAuthController {
         redirectUri: redirect_uri,
         clientId: client_id,
         codeVerifier: code_verifier,
+        resource: tokenRequest.resource, // Include resource parameter
       });
     } else if (grant_type === 'refresh_token') {
       const { refresh_token } = tokenRequest;
@@ -371,7 +409,7 @@ export class OAuthController {
         <h1>IoT Cloud Login</h1>
         <p class="subtitle">Sign in to authorize access to your IoT devices</p>
         
-        <form method="POST" action="/oauth/login">
+        <form method="POST" action="api/oauth/login">
             <input type="hidden" name="auth_request_id" value="${authRequestId}" />
             
             <div class="form-group">
