@@ -4,6 +4,7 @@ import { Response, Request } from 'express';
 import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { McpService } from '../../mcp/services/mcp.service';
+import { OAuthService } from '../../oauth/oauth.service';
 
 @ApiTags('MCP Protocol')
 @Controller('mcp')
@@ -11,7 +12,10 @@ export class McpController {
   // Store transports by session ID (stateful mode)
   private readonly transports = new Map<string, StreamableHTTPServerTransport>();
 
-  constructor(private mcpService: McpService) {}
+  constructor(
+    private mcpService: McpService,
+    private oauthService: OAuthService,
+  ) {}
 
   /**
    * Main MCP endpoint - handles all HTTP methods
@@ -19,13 +23,13 @@ export class McpController {
    * POST: Receives client-to-server JSON-RPC messages
    * DELETE: Terminates session
    *
-   * NO AUTHENTICATION - Clients connect here, then use login tool
+   * Supports both OAuth Bearer tokens and traditional login tool authentication
    */
   @All()
   @ApiOperation({
     summary: 'MCP Streamable HTTP endpoint',
     description:
-      'Main MCP endpoint using official SDK transport. No authentication required - use login tool to authenticate. ' +
+      'Main MCP endpoint using official SDK transport. Supports OAuth Bearer tokens or login tool authentication. ' +
       'Supports GET (SSE stream), POST (JSON-RPC messages), DELETE (session termination).',
   })
   @ApiResponse({
@@ -35,12 +39,30 @@ export class McpController {
   @ApiExcludeEndpoint() // Hide from Swagger since it's a special protocol endpoint
   async handleMcpRequest(@Req() req: Request, @Res() res: Response): Promise<void> {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    const authHeader = req.headers.authorization as string | undefined;
 
     console.log(`[MCP] ${req.method} request`, {
       sessionId,
+      hasAuth: !!authHeader,
       hasBody: !!req.body,
       url: req.url,
     });
+
+    // Extract Bearer token if present and validate it
+    let oauthToken: { userId: string; token: string } | null = null;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      try {
+        oauthToken = await this.oauthService.validateAccessToken(token);
+        if (oauthToken) {
+          console.log(`[MCP] OAuth authentication successful for user: ${oauthToken.userId}`);
+        } else {
+          console.log(`[MCP] OAuth token validation failed`);
+        }
+      } catch (error) {
+        console.warn(`[MCP] OAuth token validation error:`, error.message);
+      }
+    }
 
     try {
       let transport: StreamableHTTPServerTransport;
@@ -69,10 +91,15 @@ export class McpController {
           }
         };
 
-        // CRITICAL FIX: Create NEW server instance per transport
-        // Each transport needs its own server connection
+        // Create NEW server instance per transport with OAuth context
         console.log('[MCP] Creating new server instance for transport');
         const server = await this.mcpService.createServer();
+
+        // If OAuth token is present, pre-authenticate the session
+        if (oauthToken && transport.sessionId) {
+          await this.mcpService.setOAuthSession(transport.sessionId, oauthToken);
+        }
+
         await server.connect(transport);
       }
 

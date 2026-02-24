@@ -93,6 +93,22 @@ export class McpService {
   }
 
   /**
+   * Pre-authenticate a session with OAuth token
+   * This allows skipping the login tool when OAuth Bearer token is provided
+   */
+  async setOAuthSession(sessionId: string, oauthToken: { userId: string; token: string }): Promise<void> {
+    try {
+      await this.redisService.setSessionState(sessionId, {
+        token: oauthToken.token,
+        userId: oauthToken.userId,
+      });
+      this.logger.log(`OAuth session pre-authenticated: ${sessionId} for user: ${oauthToken.userId}`);
+    } catch (error) {
+      this.logger.error('Failed to set OAuth session state:', error);
+    }
+  }
+
+  /**
    * Helper: Wrap tool handler with authentication check
    * Automatically handles auth validation and error responses
    */

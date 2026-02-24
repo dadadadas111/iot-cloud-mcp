@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { ApiModule } from './api/api.module';
 import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
+import { OAuthModule } from './oauth/oauth.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { HealthController } from './health.controller';
     AuthModule,
     ApiModule,
     AdminModule,
+    OAuthModule,
   ],
   controllers: [HealthController],
 })

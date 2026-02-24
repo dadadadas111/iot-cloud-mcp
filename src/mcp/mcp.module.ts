@@ -8,6 +8,6 @@ import { RedisService } from '@/mcp/services/redis.service';
 @Module({
   imports: [HttpModule, AuthModule],
   providers: [McpService, ApiClientService, RedisService],
-  exports: [McpService, ApiClientService],
+  exports: [McpService, ApiClientService, RedisService],
 })
 export class McpModule {}
