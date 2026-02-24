@@ -31,7 +31,7 @@ export class McpController {
     }
     const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3001';
     // Return root URL without /api prefix since .well-known endpoints are at root level
-    return `${protocol}://${host}`;
+    return `${protocol}://${host}/api`;
   }
 
   /**
