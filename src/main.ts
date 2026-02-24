@@ -28,8 +28,8 @@ async function bootstrap() {
     }),
   );
 
-  // Global prefix
-  app.setGlobalPrefix('api');
+  // Global prefix removed - now using per-controller prefixes
+  // app.setGlobalPrefix('api');
 
   // Swagger documentation
   const config = new DocumentBuilder()
@@ -59,7 +59,7 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document);
+  SwaggerModule.setup('docs', app, document);
 
   const port = configService.get<number>('PORT') || 3001;
   const host = configService.get<string>('HOST') || '0.0.0.0';
@@ -67,8 +67,8 @@ async function bootstrap() {
   await app.listen(port, host);
 
   console.log(`🚀 IoT Cloud MCP Bridge Server running on http://${host}:${port}`);
-  console.log(`📚 API Documentation available at http://${host}:${port}/api/docs`);
-  console.log(`📋 OpenAPI JSON at http://${host}:${port}/api/docs-json`);
+  console.log(`📚 API Documentation available at http://${host}:${port}/docs`);
+  console.log(`📋 OpenAPI JSON at http://${host}:${port}/docs-json`);
 }
 
 bootstrap();

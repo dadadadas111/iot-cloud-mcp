@@ -7,7 +7,7 @@ import { McpService } from '../../mcp/services/mcp.service';
 import { OAuthService } from '../../oauth/oauth.service';
 
 @ApiTags('MCP Protocol')
-@Controller('mcp')
+@Controller('api/mcp')
 export class McpController {
   // Store transports by session ID (stateful mode)
   private readonly transports = new Map<string, StreamableHTTPServerTransport>();

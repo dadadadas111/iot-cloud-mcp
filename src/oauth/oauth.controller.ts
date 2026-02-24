@@ -54,7 +54,7 @@ class TokenRequestDto {
 }
 
 @ApiTags('OAuth2')
-@Controller()
+@Controller('api')
 export class OAuthController {
   constructor(
     private oauthService: OAuthService,
