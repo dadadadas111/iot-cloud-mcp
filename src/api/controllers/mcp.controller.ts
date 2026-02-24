@@ -77,31 +77,7 @@ export class McpController {
     const authHeader = req.headers.authorization as string | undefined;
     const apiKey = req.query['api-key'] as string | undefined;
 
-    
-    console.log(`[MCP-DEBUG] === DETAILED REQUEST ANALYSIS ===`);
-    console.log(`[MCP-DEBUG] Method: ${req.method}`);
-    console.log(`[MCP-DEBUG] Full URL: ${req.url}`);
-    console.log(`[MCP-DEBUG] Path: ${req.path}`);
-    console.log(`[MCP-DEBUG] Headers:`, {
-      'user-agent': req.headers['user-agent'],
-      'authorization': req.headers.authorization ? `PRESENT (${req.headers.authorization.substring(0, 20)}...)` : 'MISSING',
-      'accept': req.headers.accept,
-      'origin': req.headers.origin,
-      'referer': req.headers.referer,
-      'content-type': req.headers['content-type']
-    });
-    console.log(`[MCP-DEBUG] Query params:`, req.query);
-    console.log(`[MCP-DEBUG] Body:`, req.body);
-    console.log(`[MCP-DEBUG] Has API key: ${!!apiKey} (value: ${apiKey ? apiKey.substring(0, 8) + '...' : 'none'})`);
-    console.log(`[MCP-DEBUG] Has Auth header: ${!!authHeader}`);
-    console.log(`[MCP-DEBUG] Session ID: ${sessionId || 'none'}`);
-    // Handle authentication: BOTH API key AND OAuth Bearer token required
-    // 1. If missing API key OR Bearer token -> send 401 with WWW-Authenticate to trigger OAuth discovery
-    // 2. If both present -> validate OAuth token and use API key for IoT API calls
-    // 3. ChatGPT must provide both: ?api-key=xxx AND Authorization: Bearer <token>
     if (!apiKey || !authHeader) {
-      console.log(`[MCP-DEBUG] 🚨 TRIGGERING OAUTH DISCOVERY: Missing credentials - apiKey=${!!apiKey}, authHeader=${!!authHeader}`);
-      console.log(`[MCP-DEBUG] About to call sendMcpUnauthorized()...`);
       this.sendMcpUnauthorized(res, req);
       console.log(`[MCP-DEBUG] sendMcpUnauthorized() completed`);
       return;
@@ -122,6 +98,8 @@ export class McpController {
         console.warn(`[MCP] OAuth token validation error:`, error.message);
       }
     }
+
+    console.log('[MCP-DEBUG] oauth token: ', oauthToken);
 
     try {
       let transport: StreamableHTTPServerTransport;
