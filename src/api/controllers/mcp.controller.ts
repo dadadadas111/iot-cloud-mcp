@@ -30,8 +30,8 @@ export class McpController {
       protocol = (host.includes('dash.id.vn') || host.includes('localhost') === false) ? 'https' : (req.protocol || 'http');
     }
     const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3001';
-    // Include the global prefix '/api' to match where OAuth endpoints are actually served
-    return `${protocol}://${host}/api`;
+    // Return root URL without /api prefix since .well-known endpoints are at root level
+    return `${protocol}://${host}`;
   }
 
   /**
@@ -130,8 +130,14 @@ export class McpController {
         // Reuse existing transport for this session
         transport = this.transports.get(sessionId)!;
         console.log(`[MCP] Reusing transport for session: ${sessionId}`);
+        
         // Update API key for existing session
         await this.mcpService.setSessionApiKey(sessionId, apiKey);
+        
+        // Update OAuth session for existing session if token provided
+        if (oauthToken) {
+          await this.mcpService.setOAuthSession(sessionId, oauthToken);
+        }
       } else {
         // Create new transport (stateful mode with session management)
         transport = new StreamableHTTPServerTransport({
@@ -156,6 +162,9 @@ export class McpController {
         console.log('[MCP] Creating new server instance for transport');
         const server = await this.mcpService.createServer();
 
+        // Connect the server to the transport first
+        await server.connect(transport);
+
         // If OAuth token is present, pre-authenticate the session
         if (oauthToken && transport.sessionId) {
           await this.mcpService.setOAuthSession(transport.sessionId, oauthToken);
@@ -165,8 +174,6 @@ export class McpController {
         if (transport.sessionId) {
           await this.mcpService.setSessionApiKey(transport.sessionId, apiKey);
         }
-
-        await server.connect(transport);
       }
 
       // Handle the request using the SDK transport

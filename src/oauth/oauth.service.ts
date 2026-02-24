@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { AuthService } from '../auth/auth.service';
 import { RedisService } from '../mcp/services/redis.service';
+import { ExternalAuthService } from './external-auth.service';
 import { randomBytes, createHash } from 'crypto';
 import { randomUUID } from 'node:crypto';
 
@@ -12,6 +13,7 @@ export interface AuthorizationRequest {
   codeChallenge?: string;
   codeChallengeMethod?: string;
   resource?: string; // RFC 8707 Resource Indicator
+  apiKey?: string; // API key for IoT API access
   createdAt: Date;
   expiresAt: Date;
 }
@@ -20,6 +22,7 @@ export interface AuthorizationCode {
   authRequestId: string;
   userId: string;
   resource?: string; // RFC 8707 Resource Indicator
+  apiKey?: string; // API key for external token exchange
   tokenData: {
     access_token: string;
     refresh_token: string;
@@ -53,6 +56,7 @@ export class OAuthService {
   constructor(
     private authService: AuthService,
     private redisService: RedisService,
+    private externalAuthService: ExternalAuthService,
   ) {
     // Clean up expired entries every 5 minutes
     setInterval(() => this.cleanupExpiredEntries(), 5 * 60 * 1000);
@@ -68,6 +72,7 @@ export class OAuthService {
     codeChallenge?: string;
     codeChallengeMethod?: string;
     resource?: string; // RFC 8707 Resource Indicator
+    apiKey?: string; // API key for IoT API access
   }): Promise<AuthorizationRequest> {
     const id = randomUUID();
     const now = new Date();
@@ -119,8 +124,9 @@ export class OAuthService {
     authRequest: AuthorizationRequest,
     loginResult: any,
   ): Promise<string> {
-    const code = this.generateAuthCode();
-    const now = new Date();
+    if (!authRequest.apiKey) {
+      throw new UnauthorizedException('API key required for code generation');
+    }
 
     // Extract userId from JWT token
     let userId: string | null = null;
@@ -139,11 +145,16 @@ export class OAuthService {
       throw new UnauthorizedException('Could not extract user ID from token');
     }
 
+    // Generate external auth code using IoT API
+    const code = await this.externalAuthService.generateAuthCode(userId, authRequest.apiKey);
+    const now = new Date();
+
     const authCode: AuthorizationCode = {
       code,
       authRequestId: authRequest.id,
       userId,
-      resource: authRequest.resource, // Pass through resource parameter
+      resource: authRequest.resource,
+      apiKey: authRequest.apiKey, // Store API key for token exchange
       tokenData: {
         access_token: loginResult.access_token,
         refresh_token: loginResult.refresh_token,
@@ -157,7 +168,7 @@ export class OAuthService {
     };
 
     this.authCodes.set(code, authCode);
-    this.logger.log(`Created authorization code for user: ${userId}, request: ${authRequest.id}`);
+    this.logger.log(`Created external authorization code for user: ${userId}, request: ${authRequest.id}`);
 
     // Clean up the auth request since it's no longer needed
     this.authRequests.delete(authRequest.id);
@@ -171,7 +182,7 @@ export class OAuthService {
   async exchangeCodeForTokens(request: TokenExchangeRequest) {
     const { code, redirectUri, clientId, codeVerifier, resource } = request;
 
-    // Get and validate auth code
+    // Get and validate auth code from local storage (for PKCE and redirect validation)
     const authCode = this.authCodes.get(code);
     if (!authCode) {
       this.logger.warn(`Invalid authorization code: ${code}`);
@@ -183,10 +194,6 @@ export class OAuthService {
       this.authCodes.delete(code);
       throw new BadRequestException('Authorization code expired');
     }
-
-    // Get original auth request to validate redirect URI
-    // Since we cleaned up the auth request, we'll validate against what we stored in the code
-    // In a production system, you might want to store the redirect URI in the auth code
 
     // Validate PKCE if it was used
     if (authCode.codeChallenge && authCode.codeChallengeMethod) {
@@ -211,25 +218,60 @@ export class OAuthService {
       throw new BadRequestException('Resource parameter mismatch');
     }
 
-    this.logger.log(`Exchanging authorization code for tokens: user=${authCode.userId}`);
-
-    // Clean up the auth code (one-time use)
-    this.authCodes.delete(code);
-
-    // Return the tokens that were obtained during the original login
-    const tokenResponse = {
-      access_token: authCode.tokenData.access_token,
-      token_type: authCode.tokenData.token_type,
-      expires_in: authCode.tokenData.expires_in,
-      refresh_token: authCode.tokenData.refresh_token,
-    };
-
-    // Include resource parameter in response if present (RFC 8707)
-    if (authCode.resource) {
-      tokenResponse['resource'] = authCode.resource;
+    // Check if we have API key for external exchange
+    if (!authCode.apiKey) {
+      // Fallback to stored tokenData if no API key available
+      this.logger.warn('No API key found, returning stored token data');
+      this.authCodes.delete(code);
+      const tokenResponse = {
+        access_token: authCode.tokenData.access_token,
+        token_type: authCode.tokenData.token_type,
+        expires_in: authCode.tokenData.expires_in,
+        refresh_token: authCode.tokenData.refresh_token,
+      };
+      if (authCode.resource) {
+        tokenResponse['resource'] = authCode.resource;
+      }
+      return tokenResponse;
     }
 
-    return tokenResponse;
+    this.logger.log(`Exchanging authorization code via external API: user=${authCode.userId}`);
+
+    // Clean up the auth code first (one-time use)
+    this.authCodes.delete(code);
+
+    try {
+      // Exchange code for tokens using external IoT API
+      const externalResponse = await this.externalAuthService.exchangeCodeForToken(code, authCode.apiKey);
+      
+      // Convert external response to our format
+      const tokenResponse = {
+        access_token: externalResponse.access_token,
+        token_type: externalResponse.token_type,
+        expires_in: typeof externalResponse.expires_in === 'string' ? parseInt(externalResponse.expires_in) : externalResponse.expires_in,
+        refresh_token: externalResponse.refresh_token,
+      };
+
+      // Include resource parameter in response if present (RFC 8707)
+      if (authCode.resource) {
+        tokenResponse['resource'] = authCode.resource;
+      }
+
+      return tokenResponse;
+    } catch (error) {
+      this.logger.error('External token exchange failed:', error.message);
+      // Fallback to stored token data
+      const tokenResponse = {
+        access_token: authCode.tokenData.access_token,
+        token_type: authCode.tokenData.token_type,
+        expires_in: authCode.tokenData.expires_in,
+        refresh_token: authCode.tokenData.refresh_token,
+      };
+      if (authCode.resource) {
+        tokenResponse['resource'] = authCode.resource;
+      }
+      return tokenResponse;
+    }
   }
 
   /**
@@ -274,13 +316,6 @@ export class OAuthService {
       this.logger.warn('Error validating access token:', error.message);
       return null;
     }
-  }
-
-  /**
-   * Generate secure authorization code
-   */
-  private generateAuthCode(): string {
-    return randomBytes(32).toString('base64url');
   }
 
   /**

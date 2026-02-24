@@ -78,7 +78,12 @@ export class McpService {
    */
   async setOAuthSession(sessionId: string, oauthToken: { userId: string; token: string }): Promise<void> {
     try {
+      // Get existing session state to preserve apiKey
+      const existingState = await this.redisService.getSessionState(sessionId);
+      
+      // Merge OAuth token with existing state (preserve apiKey)
       await this.redisService.setSessionState(sessionId, {
+        ...existingState,
         token: oauthToken.token,
         userId: oauthToken.userId,
       });
