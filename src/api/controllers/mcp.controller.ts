@@ -162,9 +162,6 @@ export class McpController {
         console.log('[MCP] Creating new server instance for transport');
         const server = await this.mcpService.createServer();
 
-        // Connect the server to the transport first
-        await server.connect(transport);
-
         // If OAuth token is present, pre-authenticate the session
         if (oauthToken && transport.sessionId) {
           await this.mcpService.setOAuthSession(transport.sessionId, oauthToken);
@@ -174,6 +171,9 @@ export class McpController {
         if (transport.sessionId) {
           await this.mcpService.setSessionApiKey(transport.sessionId, apiKey);
         }
+
+        // Connect the server to the transport first
+        await server.connect(transport);
       }
 
       // Handle the request using the SDK transport
