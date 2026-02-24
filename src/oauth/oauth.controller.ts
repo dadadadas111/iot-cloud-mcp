@@ -4,20 +4,18 @@ import {
   Post,
   Query,
   Body,
-  Headers,
+  Res,
   Req,
   HttpCode,
   HttpStatus,
   BadRequestException,
   UnauthorizedException,
-  Res,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiProperty, ApiQuery } from '@nestjs/swagger';
 import { IsString, IsOptional } from 'class-validator';
 import { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { OAuthService } from './oauth.service';
-import { randomUUID } from 'crypto';
 
 class TokenRequestDto {
   @ApiProperty({ description: 'Grant type', example: 'authorization_code' })
@@ -53,35 +51,6 @@ class TokenRequestDto {
   @IsString()
   @IsOptional()
   resource?: string;
-}
-
-class ClientRegistrationDto {
-  @ApiProperty({ description: 'Client redirect URIs', type: [String], required: false })
-  @IsOptional()
-  redirect_uris?: string[];
-
-  @ApiProperty({ description: 'Token endpoint auth method', example: 'none', required: false })
-  @IsString()
-  @IsOptional()
-  token_endpoint_auth_method?: string;
-
-  @ApiProperty({ description: 'Grant types', type: [String], required: false })
-  @IsOptional()
-  grant_types?: string[];
-
-  @ApiProperty({ description: 'Response types', type: [String], required: false })
-  @IsOptional()
-  response_types?: string[];
-
-  @ApiProperty({ description: 'Client name', required: false })
-  @IsString()
-  @IsOptional()
-  client_name?: string;
-
-  @ApiProperty({ description: 'Application type', example: 'web', required: false })
-  @IsString()
-  @IsOptional()
-  application_type?: string;
 }
 
 @ApiTags('OAuth2')
@@ -125,8 +94,7 @@ export class OAuthController {
       grant_types_supported: ['authorization_code', 'refresh_token'],
       code_challenge_methods_supported: ['S256'],
       scopes_supported: ['iot:read', 'iot:write', 'iot:control'],
-      token_endpoint_auth_methods_supported: ['none', 'client_secret_post', 'client_secret_basic'],
-      registration_endpoint: `${rootUrl}/register`,
+      token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
     };
   }
 
@@ -352,65 +320,6 @@ export class OAuthController {
     } else {
       throw new BadRequestException(`Unsupported grant_type: ${grant_type}`);
     }
-  }
-
-  @Post('oauth/register')
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({
-    summary: 'OAuth2 Dynamic Client Registration (RFC 7591)',
-    description: 'Registers a new OAuth2 client dynamically for MCP integration',
-  })
-  @ApiResponse({
-    status: 201,
-    description: 'Client registration response',
-    schema: {
-      type: 'object',
-      properties: {
-        client_id: { type: 'string' },
-        client_id_issued_at: { type: 'number' },
-        redirect_uris: { type: 'array', items: { type: 'string' } },
-        token_endpoint_auth_method: { type: 'string' },
-        grant_types: { type: 'array', items: { type: 'string' } },
-        response_types: { type: 'array', items: { type: 'string' } },
-      },
-    },
-  })
-  async registerClient(
-    @Body() clientMetadata: ClientRegistrationDto,
-    @Headers('authorization') authHeader?: string,
-  ) {
-    // Generate unique client ID
-    const clientId = randomUUID();
-
-    // For MCP clients, we typically use 'none' auth method
-    const authMethod = clientMetadata.token_endpoint_auth_method || 'none';
-
-    // Store client metadata (for now, just in memory - extend with database later)
-    await this.oauthService.storeClientMetadata(clientId, {
-      ...clientMetadata,
-      token_endpoint_auth_method: authMethod,
-      created_at: new Date(),
-    });
-
-    // Return RFC 7591 compliant registration response
-    const response: any = {
-      client_id: clientId,
-      client_id_issued_at: Math.floor(Date.now() / 1000),
-      redirect_uris: clientMetadata.redirect_uris || [],
-      token_endpoint_auth_method: authMethod,
-      grant_types: clientMetadata.grant_types || ['authorization_code', 'refresh_token'],
-      response_types: clientMetadata.response_types || ['code'],
-    };
-
-    if (clientMetadata.client_name) {
-      response.client_name = clientMetadata.client_name;
-    }
-
-    if (clientMetadata.application_type) {
-      response.application_type = clientMetadata.application_type;
-    }
-
-    return response;
   }
 
   private getBaseUrl(): string {
