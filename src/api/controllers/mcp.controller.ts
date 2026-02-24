@@ -21,7 +21,14 @@ export class McpController {
    * Get base URL for this server (used for WWW-Authenticate headers)
    */
   private getBaseUrl(req: Request): string {
-    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+    // For production servers, always use HTTPS. Check for forwarded protocol first.
+    let protocol = req.headers['x-forwarded-proto'] as string;
+    
+    // If no forwarded protocol, check if this is a production host
+    if (!protocol) {
+      const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3001';
+      protocol = (host.includes('dash.id.vn') || host.includes('localhost') === false) ? 'https' : (req.protocol || 'http');
+    }
     const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3001';
     // Include the global prefix '/api' to match where OAuth endpoints are actually served
     return `${protocol}://${host}/api`;
@@ -71,23 +78,44 @@ export class McpController {
     const apiKey = req.query['api-key'] as string | undefined;
 
     console.log(`[MCP] ${req.method} request`, {
-      sessionId,
-      hasAuth: !!authHeader,
-      hasApiKey: !!apiKey,
-      hasBody: !!req.body,
-      url: req.url,
+    
+    console.log(`[MCP-DEBUG] === DETAILED REQUEST ANALYSIS ===`);
+    console.log(`[MCP-DEBUG] Method: ${req.method}`);
+    console.log(`[MCP-DEBUG] Full URL: ${req.url}`);
+    console.log(`[MCP-DEBUG] Path: ${req.path}`);
+    console.log(`[MCP-DEBUG] Headers:`, {
+      'user-agent': req.headers['user-agent'],
+      'authorization': req.headers.authorization ? `PRESENT (${req.headers.authorization.substring(0, 20)}...)` : 'MISSING',
+      'accept': req.headers.accept,
+      'origin': req.headers.origin,
+      'referer': req.headers.referer,
+      'content-type': req.headers['content-type']
     });
-
+    console.log(`[MCP-DEBUG] Query params:`, req.query);
+    console.log(`[MCP-DEBUG] Body:`, req.body);
+    console.log(`[MCP-DEBUG] Has API key: ${!!apiKey} (value: ${apiKey ? apiKey.substring(0, 8) + '...' : 'none'})`);
+    console.log(`[MCP-DEBUG] Has Auth header: ${!!authHeader}`);
+    console.log(`[MCP-DEBUG] Session ID: ${sessionId || 'none'}`);
     // Handle OAuth discovery flow:
     // 1. If no API key AND no OAuth token -> send 401 with WWW-Authenticate to trigger OAuth discovery
     // 2. If API key provided -> use API key auth (current behavior)
     // 3. If OAuth token provided -> validate token
+      console.log(`[MCP-DEBUG] 🚨 TRIGGERING OAUTH DISCOVERY: No API key and no auth header`);
+      console.log(`[MCP-DEBUG] About to call sendMcpUnauthorized()...`);
+      this.sendMcpUnauthorized(res, req);
+      console.log(`[MCP-DEBUG] sendMcpUnauthorized() completed`);
+      return;
+    }
 
-    if (!apiKey && !authHeader) {
-      console.log(`[MCP] No API key or OAuth token provided - sending OAuth discovery headers`);
+    // For now, require API key (OAuth-only access can be added later)
+    if (!apiKey) {
+      console.log(`[MCP-DEBUG] 🚨 MISSING API KEY: Auth header present but no API key`);
+      console.log(`[MCP-DEBUG] Auth header value: ${authHeader}`);
       this.sendMcpUnauthorized(res, req);
       return;
     }
+
+    console.log(`[MCP-DEBUG] ✅ API KEY PROVIDED: Proceeding with normal flow`);
 
     // For now, require API key (OAuth-only access can be added later)
     if (!apiKey) {

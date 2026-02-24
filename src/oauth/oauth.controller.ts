@@ -121,7 +121,7 @@ export class OAuthController {
       resource: baseUrl,
       authorization_servers: [baseUrl],
       scopes_supported: ['iot:read', 'iot:write', 'iot:control'],
-      resource_documentation: `${baseUrl}/api/docs`,
+      resource_documentation: `${baseUrl}/docs`,
     };
   }
 
@@ -316,9 +316,13 @@ export class OAuthController {
   }
 
   private getBaseUrl(): string {
-
-      // In production, use configured base URL or construct from host/port
-      return this.configService.get<string>('BASE_URL') || 'https://mcp-stag.dash.id.vn/api';
+    // Return the base URL including /api prefix where OAuth endpoints are served
+    const configBaseUrl = this.configService.get<string>('BASE_URL');
+    if (configBaseUrl) {
+      return configBaseUrl;
+    }
+    // Fallback for staging - include /api since that's where endpoints are served
+    return 'https://mcp-stag.dash.id.vn/api';
   }
 
   private generateLoginHTML(authRequestId: string): string {
