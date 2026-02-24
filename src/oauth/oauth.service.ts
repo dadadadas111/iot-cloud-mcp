@@ -53,6 +53,9 @@ export class OAuthService {
   private readonly AUTH_REQUEST_TTL = 600; // 10 minutes
   private readonly AUTH_CODE_TTL = 60; // 1 minute
 
+  // Client metadata for Dynamic Client Registration (RFC 7591)
+  private registeredClients = new Map<string, any>();
+
   constructor(
     private authService: AuthService,
     private redisService: RedisService,
@@ -345,5 +348,40 @@ export class OAuthService {
     if (cleanedRequests > 0 || cleanedCodes > 0) {
       this.logger.log(`Cleaned up ${cleanedRequests} auth requests and ${cleanedCodes} auth codes`);
     }
+  }
+
+  /**
+   * Store client metadata for Dynamic Client Registration
+   */
+  async storeClientMetadata(clientId: string, metadata: any): Promise<void> {
+    this.registeredClients.set(clientId, metadata);
+    this.logger.log(`Registered client: ${clientId}`);
+  }
+
+  /**
+   * Get client metadata by ID
+   */
+  async getClientMetadata(clientId: string): Promise<any | undefined> {
+    return this.registeredClients.get(clientId);
+  }
+
+  /**
+   * Validate client credentials for token endpoint
+   */
+  async validateClient(clientId: string, clientSecret?: string): Promise<boolean> {
+    const client = this.registeredClients.get(clientId);
+
+    if (!client) {
+      // Allow unregistered clients for backward compatibility
+      return true;
+    }
+
+    // For public clients (token_endpoint_auth_method: 'none')
+    if (client.token_endpoint_auth_method === 'none') {
+      return true;
+    }
+
+    // For confidential clients, verify secret
+    return client.client_secret === clientSecret;
   }
 }
