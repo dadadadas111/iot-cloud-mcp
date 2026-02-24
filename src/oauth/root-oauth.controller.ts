@@ -53,87 +53,19 @@ class TokenRequestDto {
   resource?: string;
 }
 
-@ApiTags('OAuth2')
-@Controller()
-export class OAuthController {
+@ApiTags('OAuth2 Root Endpoints')
+@Controller() // No prefix - serves at root level
+export class RootOAuthController {
   constructor(
     private oauthService: OAuthService,
     private configService: ConfigService,
   ) {}
 
-  @Get('.well-known/oauth-authorization-server')
+  @Get('authorize')
   @ApiOperation({
-    summary: 'OAuth2 Discovery Endpoint',
-    description: 'Returns OAuth2 server metadata for automatic client configuration',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'OAuth2 server metadata',
-    schema: {
-      type: 'object',
-      properties: {
-        issuer: { type: 'string' },
-        authorization_endpoint: { type: 'string' },
-        token_endpoint: { type: 'string' },
-        response_types_supported: { type: 'array', items: { type: 'string' } },
-        grant_types_supported: { type: 'array', items: { type: 'string' } },
-        code_challenge_methods_supported: { type: 'array', items: { type: 'string' } },
-      },
-    },
-  })
-  getDiscoveryDocument() {
-    const baseUrl = this.getBaseUrl();
-    const rootUrl = baseUrl.replace(/\/api$/, '');
-    // Return root-level endpoints for ChatGPT compatibility
-
-    return {
-      issuer: rootUrl,
-      authorization_endpoint: `${rootUrl}/authorize`,
-      token_endpoint: `${rootUrl}/token`,
-      response_types_supported: ['code'],
-      grant_types_supported: ['authorization_code', 'refresh_token'],
-      code_challenge_methods_supported: ['S256'],
-      scopes_supported: ['iot:read', 'iot:write', 'iot:control'],
-      token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
-    };
-  }
-
-  @Get('.well-known/oauth-protected-resource')
-  @ApiOperation({
-    summary: 'MCP Protected Resource Metadata (RFC 9728)',
-    description: 'Returns MCP resource server metadata with authorization servers for MCP clients',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'MCP resource metadata',
-    schema: {
-      type: 'object',
-      properties: {
-        resource: { type: 'string' },
-        authorization_servers: { type: 'array', items: { type: 'string' } },
-        scopes_supported: { type: 'array', items: { type: 'string' } },
-        resource_documentation: { type: 'string' },
-      },
-    },
-  })
-  getMcpResourceMetadata() {
-    const baseUrl = this.getBaseUrl();
-    const rootUrl = baseUrl.replace(/\/api$/, '');
-    // Return root domain as authorization server for ChatGPT compatibility
-
-    return {
-      resource: baseUrl,
-      authorization_servers: [rootUrl],
-      scopes_supported: ['iot:read', 'iot:write', 'iot:control'],
-      resource_documentation: `${baseUrl}/docs`,
-    };
-  }
-
-  @Get('oauth/authorize')
-  @ApiOperation({
-    summary: 'OAuth2 Authorization Endpoint',
+    summary: 'OAuth2 Authorization Endpoint (Root Level)',
     description:
-      'Initiates OAuth2 authorization flow. Redirects to login UI or directly to callback with auth code.',
+      'Root-level OAuth2 authorization endpoint for ChatGPT compatibility. Identical logic to /api/oauth/authorize.',
   })
   @ApiQuery({
     name: 'response_type',
@@ -194,15 +126,15 @@ export class OAuthController {
 
     // Redirect to login UI with auth request ID
     const baseUrl = this.getBaseUrl();
-    const loginUrl = `${baseUrl}/oauth/login?auth_request_id=${authRequest.id}`;
+    const loginUrl = `${baseUrl}/login?auth_request_id=${authRequest.id}`;
 
     res.redirect(loginUrl);
   }
 
-  @Get('oauth/login')
+  @Get('login')
   @ApiOperation({
-    summary: 'OAuth2 Login UI',
-    description: 'Displays login form for OAuth2 authorization flow',
+    summary: 'OAuth2 Login UI (Root Level)',
+    description: 'Root-level login form for OAuth2 authorization flow',
   })
   @ApiQuery({
     name: 'auth_request_id',
@@ -225,11 +157,11 @@ export class OAuthController {
     res.send(html);
   }
 
-  @Post('oauth/login')
+  @Post('login')
   @HttpCode(HttpStatus.FOUND) // 302 redirect
   @ApiOperation({
-    summary: 'Process OAuth2 Login',
-    description: 'Handles login form submission and redirects with authorization code',
+    summary: 'Process OAuth2 Login (Root Level)',
+    description: 'Root-level login form submission handler',
   })
   async processLogin(
     @Body('auth_request_id') authRequestId: string,
@@ -265,16 +197,17 @@ export class OAuthController {
     } catch (error) {
       // Redirect back to login form with error
       const baseUrl = this.getBaseUrl();
-      const errorUrl = `${baseUrl}/oauth/login?auth_request_id=${authRequestId}&error=${encodeURIComponent(error.message)}`;
+      const errorUrl = `${baseUrl}/login?auth_request_id=${authRequestId}&error=${encodeURIComponent(error.message)}`;
       res.redirect(errorUrl);
     }
   }
 
-  @Post('oauth/token')
+  @Post('token')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'OAuth2 Token Endpoint',
-    description: 'Exchanges authorization code for access tokens or refreshes tokens',
+    summary: 'OAuth2 Token Endpoint (Root Level)',
+    description:
+      'Root-level token endpoint for ChatGPT compatibility. Identical logic to /api/oauth/token.',
   })
   @ApiResponse({
     status: 200,
@@ -320,13 +253,14 @@ export class OAuthController {
   }
 
   private getBaseUrl(): string {
-    // Return the base URL including /api prefix where OAuth endpoints are served
+    // Return the ROOT base URL (no /api prefix) for root-level endpoints
     const configBaseUrl = this.configService.get<string>('BASE_URL');
     if (configBaseUrl) {
-      return configBaseUrl;
+      // Remove /api suffix if present to get root domain
+      return configBaseUrl.replace(/\/api$/, '');
     }
-    // Fallback for staging - include /api since that's where endpoints are served
-    return 'https://mcp-stag.dash.id.vn/api';
+    // Fallback for staging - root domain only
+    return 'https://mcp-stag.dash.id.vn';
   }
 
   private generateLoginHTML(authRequestId: string): string {
@@ -417,7 +351,7 @@ export class OAuthController {
         <h1>IoT Cloud Login</h1>
         <p class="subtitle">Sign in to authorize access to your IoT devices</p>
         
-        <form method="POST" action="/api/oauth/login">
+        <form method="POST" action="/login">
             <input type="hidden" name="auth_request_id" value="${authRequestId}" />
             
             <div class="form-group">
