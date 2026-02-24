@@ -59,7 +59,75 @@ export class RootOAuthController {
   constructor(
     private oauthService: OAuthService,
     private configService: ConfigService,
-  ) {}
+  ) { }
+
+  @Get('.well-known/oauth-authorization-server')
+  @ApiOperation({
+    summary: 'OAuth2 Discovery Endpoint',
+    description: 'Returns OAuth2 server metadata for automatic client configuration',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'OAuth2 server metadata',
+    schema: {
+      type: 'object',
+      properties: {
+        issuer: { type: 'string' },
+        authorization_endpoint: { type: 'string' },
+        token_endpoint: { type: 'string' },
+        response_types_supported: { type: 'array', items: { type: 'string' } },
+        grant_types_supported: { type: 'array', items: { type: 'string' } },
+        code_challenge_methods_supported: { type: 'array', items: { type: 'string' } },
+      },
+    },
+  })
+  getDiscoveryDocument() {
+    const baseUrl = this.getBaseUrl();
+    const rootUrl = baseUrl.replace(/\/api$/, '');
+    // Return root-level endpoints for ChatGPT compatibility
+
+    return {
+      issuer: rootUrl,
+      authorization_endpoint: `${rootUrl}/authorize`,
+      token_endpoint: `${rootUrl}/token`,
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
+      code_challenge_methods_supported: ['S256'],
+      scopes_supported: ['iot:read', 'iot:write', 'iot:control'],
+      token_endpoint_auth_methods_supported: ['none', 'client_secret_post'],
+    };
+  }
+
+  @Get('.well-known/oauth-protected-resource')
+  @ApiOperation({
+    summary: 'MCP Protected Resource Metadata (RFC 9728)',
+    description: 'Returns MCP resource server metadata with authorization servers for MCP clients',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'MCP resource metadata',
+    schema: {
+      type: 'object',
+      properties: {
+        resource: { type: 'string' },
+        authorization_servers: { type: 'array', items: { type: 'string' } },
+        scopes_supported: { type: 'array', items: { type: 'string' } },
+        resource_documentation: { type: 'string' },
+      },
+    },
+  })
+  getMcpResourceMetadata() {
+    const baseUrl = this.getBaseUrl();
+    const rootUrl = baseUrl.replace(/\/api$/, '');
+    // Return root domain as authorization server for ChatGPT compatibility
+
+    return {
+      resource: baseUrl,
+      authorization_servers: [rootUrl],
+      scopes_supported: ['iot:read', 'iot:write', 'iot:control'],
+      resource_documentation: `${baseUrl}/docs`,
+    };
+  }
 
   @Get('authorize')
   @ApiOperation({
