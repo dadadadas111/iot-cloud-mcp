@@ -155,7 +155,6 @@ export class RootOAuthController {
     example: 'S256',
   })
   @ApiQuery({ name: 'resource', description: 'Resource indicator (RFC 8707)', required: false })
-  @ApiQuery({ name: 'api_key', description: 'IoT API key for authentication', required: false })
   @ApiResponse({ status: 302, description: 'Redirect to login UI or callback with auth code' })
   async authorize(
     @Query('response_type') responseType: string,
@@ -166,8 +165,9 @@ export class RootOAuthController {
     @Query('code_challenge') codeChallenge?: string,
     @Query('code_challenge_method') codeChallengeMethod?: string,
     @Query('resource') resource?: string,
-    @Query('api_key') apiKey?: string,
   ) {
+
+    const apiKey = this.configService.get<string>('IOT_API_KEY');
     // Validate required parameters
     if (responseType !== 'code') {
       throw new BadRequestException('Unsupported response_type. Must be "code".');
