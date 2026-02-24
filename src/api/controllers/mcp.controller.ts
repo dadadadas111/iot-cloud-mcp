@@ -23,7 +23,8 @@ export class McpController {
   private getBaseUrl(req: Request): string {
     const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
     const host = req.headers['x-forwarded-host'] || req.get('host') || 'localhost:3001';
-    return `${protocol}://${host}`;
+    // Include the global prefix '/api' to match where OAuth endpoints are actually served
+    return `${protocol}://${host}/api`;
   }
 
   /**

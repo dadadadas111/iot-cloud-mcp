@@ -409,7 +409,7 @@ export class OAuthController {
         <h1>IoT Cloud Login</h1>
         <p class="subtitle">Sign in to authorize access to your IoT devices</p>
         
-        <form method="POST" action="api/oauth/login">
+        <form method="POST" action="/api/oauth/login">
             <input type="hidden" name="auth_request_id" value="${authRequestId}" />
             
             <div class="form-group">
