@@ -28,39 +28,6 @@ async function bootstrap() {
     }),
   );
 
-  // Global prefix removed - now using per-controller prefixes
-  // app.setGlobalPrefix('api');
-
-  // Swagger documentation
-  const config = new DocumentBuilder()
-    .setTitle('IoT Cloud MCP Bridge API')
-    .setDescription('MCP Bridge Server for IoT Cloud REST API - Compatible with ChatGPT Actions')
-    .setVersion('1.0')
-    .addBearerAuth({
-      type: 'http',
-      scheme: 'bearer',
-      bearerFormat: 'JWT',
-      name: 'Authorization',
-      description: 'Enter your Firebase JWT token',
-      in: 'header',
-    })
-    .addApiKey(
-      {
-        type: 'apiKey',
-        name: 'x-admin-api-key',
-        in: 'header',
-        description: 'Admin API key for runtime configuration management',
-      },
-      'x-admin-api-key',
-    )
-    .addServer('http://localhost:3001', 'Local Development')
-    .addServer('https://mcp-stag.dash.id.vn', 'Staging')
-    .addServer('https://mcp.dash.id.vn', 'Production')
-    .build();
-
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
-
   const port = configService.get<number>('PORT') || 3001;
   const host = configService.get<string>('HOST') || '0.0.0.0';
 

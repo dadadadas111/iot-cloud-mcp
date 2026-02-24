@@ -2,11 +2,11 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { HttpModule } from '@nestjs/axios';
-
-import { AuthModule } from './auth/auth.module';
-import { ApiModule } from './api/api.module';
 import { HealthController } from './health.controller';
-import { OAuthModule } from './oauth/oauth.module';
+import { ApiClientModule } from './api-client/api-client.module';
+import { McpModule } from './mcp/mcp.module';
+import { OauthModule } from './oauth/oauth.module';
+import { RedisClientModule } from './redis-client/redis-client.module';
 
 @Module({
   imports: [
@@ -30,11 +30,14 @@ import { OAuthModule } from './oauth/oauth.module';
       maxRedirects: 5,
     }),
 
-    // Feature modules
-    AuthModule,
-    ApiModule,
-    OAuthModule,
+    ApiClientModule,
+
+    McpModule,
+
+    OauthModule,
+
+    RedisClientModule,
   ],
   controllers: [HealthController],
 })
-export class AppModule {}
+export class AppModule { }
