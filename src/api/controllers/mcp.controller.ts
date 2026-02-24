@@ -77,7 +77,6 @@ export class McpController {
     const authHeader = req.headers.authorization as string | undefined;
     const apiKey = req.query['api-key'] as string | undefined;
 
-    console.log(`[MCP] ${req.method} request`, {
     
     console.log(`[MCP-DEBUG] === DETAILED REQUEST ANALYSIS ===`);
     console.log(`[MCP-DEBUG] Method: ${req.method}`);
@@ -103,25 +102,12 @@ export class McpController {
       console.log(`[MCP-DEBUG] 🚨 TRIGGERING OAUTH DISCOVERY: No API key and no auth header`);
       console.log(`[MCP-DEBUG] About to call sendMcpUnauthorized()...`);
       this.sendMcpUnauthorized(res, req);
-      console.log(`[MCP-DEBUG] sendMcpUnauthorized() completed`);
-      return;
-    }
+      console.log(`[MCP-DEBUG] sendMcpUnauthorized() completed`);    
 
-    // For now, require API key (OAuth-only access can be added later)
-    if (!apiKey) {
-      console.log(`[MCP-DEBUG] 🚨 MISSING API KEY: Auth header present but no API key`);
-      console.log(`[MCP-DEBUG] Auth header value: ${authHeader}`);
+    if (!apiKey || !authHeader) {
+      console.log(`[MCP-DEBUG] API KEY OR AUTH HEADER MISSING: apiKey=${!!apiKey}, authHeader=${!!authHeader}`);
       this.sendMcpUnauthorized(res, req);
-      return;
-    }
-
-    console.log(`[MCP-DEBUG] ✅ API KEY PROVIDED: Proceeding with normal flow`);
-
-    // For now, require API key (OAuth-only access can be added later)
-    if (!apiKey) {
-      console.error(`[MCP] Missing required api-key parameter`);
-      this.sendMcpUnauthorized(res, req);
-      return;
+      return; 
     }
 
     // Extract Bearer token if present and validate it
