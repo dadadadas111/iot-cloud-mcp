@@ -73,26 +73,6 @@ export class McpService {
   }
 
   /**
-   * Helper: Require authentication and return connection state
-   * @throws Error with message 'REDIS_UNAVAILABLE' if Redis fails
-   * @returns AuthenticatedState with non-null values if authenticated, null if not authenticated
-   */
-  private async requireAuth(extra: any): Promise<AuthenticatedState | null> {
-    const sessionKey = this.getSessionKey(extra);
-    try {
-      const state = await this.redisService.getSessionState(sessionKey);
-      if (!state?.token || !state?.userId) {
-        return null;
-      }
-      // Type assertion safe because we checked both values are non-null
-      return state as AuthenticatedState;
-    } catch (e) {
-      this.logger.error('Redis error during authentication check', e);
-      throw new Error('REDIS_UNAVAILABLE');
-    }
-  }
-
-  /**
    * Pre-authenticate a session with OAuth token
    * This allows skipping the login tool when OAuth Bearer token is provided
    */
@@ -109,39 +89,82 @@ export class McpService {
   }
 
   /**
-   * Helper: Wrap tool handler with authentication check
-   * Automatically handles auth validation and error responses
+   * Set API key for a session
+   * This API key will be used for all IoT API requests in this session
    */
-  private withAuth<TArgs>(
+  async setSessionApiKey(sessionId: string, apiKey: string): Promise<void> {
+    try {
+      // Get existing session state
+      const existingState = await this.redisService.getSessionState(sessionId);
+      
+      // Update with API key
+      await this.redisService.setSessionState(sessionId, {
+        ...existingState,
+        apiKey,
+      });
+      
+      this.logger.log(`API key set for session: ${sessionId}`);
+    } catch (error) {
+      this.logger.error('Failed to set session API key:', error);
+    }
+  }
+
+  /**
+   * Helper: Get session state with API key validation
+   */
+  private async getSessionWithApiKey(extra: any): Promise<{ state: AuthenticatedState; apiKey: string }> {
+    const sessionKey = this.getSessionKey(extra);
+    const sessionState = await this.redisService.getSessionState(sessionKey);
+    
+    if (!sessionState?.token || !sessionState?.userId) {
+      throw new Error('AUTHENTICATION_REQUIRED');
+    }
+    
+    if (!sessionState?.apiKey) {
+      throw new Error('API_KEY_REQUIRED');
+    }
+    
+    return {
+      state: { token: sessionState.token, userId: sessionState.userId },
+      apiKey: sessionState.apiKey
+    };
+  }
+
+  /**
+   * Helper: Wrap tool handler with authentication and API key validation
+   * Provides both auth state and API key to the handler
+   */
+  private withApiKey<TArgs>(
     fn: (
       args: TArgs,
       state: AuthenticatedState,
+      apiKey: string,
       extra: any,
-    ) => Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }>,
+    ) => Promise<any>,
   ) {
-    return async (
-      args: TArgs,
-      extra: any,
-    ): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> => {
+    return async (args: TArgs, extra: any): Promise<any> => {
       try {
-        const state = await this.requireAuth(extra);
-        if (!state) {
-          return this.authRequired();
-        }
-        return await fn(args, state, extra);
+        const { state, apiKey } = await this.getSessionWithApiKey(extra);
+        return await fn(args, state, apiKey, extra);
       } catch (e: any) {
         if (e?.message === 'REDIS_UNAVAILABLE') {
           return this.redisUnavailable();
         }
-        return {
-          isError: true,
-          content: [
-            {
-              type: 'text',
-              text: `Error: ${e?.message ?? e}`,
-            },
-          ],
-        };
+        if (e?.message === 'AUTHENTICATION_REQUIRED') {
+          return this.authRequired();
+        }
+        if (e?.message === 'API_KEY_REQUIRED') {
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: 'API key not found in session. Please reconnect with ?api-key=YOUR_API_KEY parameter.',
+              },
+            ],
+          };
+        }
+        throw e; // Re-throw unexpected errors
       }
     };
   }
@@ -178,76 +201,92 @@ export class McpService {
    */
   private registerTools(server: McpServer): void {
     // Tool 1: login - Authenticate users
-    server.registerTool(
-      'login',
-      {
-        description:
-          'Authenticate with email and password to get access to IoT devices. MUST be called first before using other tools.',
-        inputSchema: z.object({
-          email: z.string().describe('User email address'),
-          password: z.string().describe('User password'),
-        }),
-      },
-      async ({ email, password }, extra) => {
-        try {
-          const loginResult = await this.authService.login(email, password);
+    // server.registerTool(
+    //   'login',
+    //   {
+    //     description:
+    //       'Authenticate with email and password to get access to IoT devices. MUST be called first before using other tools.',
+    //     inputSchema: z.object({
+    //       email: z.string().describe('User email address'),
+    //       password: z.string().describe('User password'),
+    //     }),
+    //   },
+    //   async ({ email, password }, extra) => {
+    //     try {
+    //       // Get API key from session
+    //       const sessionKey = this.getSessionKey(extra);
+    //       const sessionState = await this.redisService.getSessionState(sessionKey);
+    //       const apiKey = sessionState?.apiKey;
+          
+    //       if (!apiKey) {
+    //         return {
+    //           isError: true,
+    //           content: [
+    //             {
+    //               type: 'text',
+    //               text: 'API key not found in session. Please reconnect with ?api-key=YOUR_API_KEY parameter.',
+    //             },
+    //           ],
+    //         };
+    //       }
+    //       const loginResult = await this.authService.login(email, password, apiKey);
 
-          // Decode JWT to extract userId
-          let userId: string | null = null;
-          try {
-            const tokenParts = loginResult.access_token.split('.');
-            if (tokenParts.length === 3) {
-              const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
-              userId = payload.user_id || payload.sub || null;
-            }
-          } catch (error) {
-            this.logger.warn('Could not decode JWT token', error);
-          }
+    //       // Decode JWT to extract userId
+    //       let userId: string | null = null;
+    //       try {
+    //         const tokenParts = loginResult.access_token.split('.');
+    //         if (tokenParts.length === 3) {
+    //           const payload = JSON.parse(Buffer.from(tokenParts[1], 'base64').toString());
+    //           userId = payload.user_id || payload.sub || null;
+    //         }
+    //       } catch (error) {
+    //         this.logger.warn('Could not decode JWT token', error);
+    //       }
 
-          // Store in Redis session state
-          const sessionKey = this.getSessionKey(extra);
-          await this.redisService.setSessionState(sessionKey, {
-            token: loginResult.access_token,
-            userId,
-          });
+    //       // Store in Redis session state
+    //       // const sessionKey = this.getSessionKey(extra);
+    //       await this.redisService.setSessionState(sessionKey, {
+    //         token: loginResult.access_token,
+    //         userId,
+    //       });
 
-          this.logger.log(
-            `User ${email} logged in successfully, userId: ${userId}, session: ${sessionKey}`,
-          );
+    //       this.logger.log(
+    //         `User ${email} logged in successfully, userId: ${userId}, session: ${sessionKey}`,
+    //       );
 
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify(
-                  {
-                    success: true,
-                    message:
-                      'Login successful. You can now use other tools to interact with your IoT devices.',
-                    token_type: loginResult.token_type,
-                    expires_in: loginResult.expires_in,
-                    user_id: userId,
-                  },
-                  null,
-                  2,
-                ),
-              },
-            ],
-          };
-        } catch (error) {
-          this.logger.error('Login failed:', error);
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Login failed: ${error.message}`,
-              },
-            ],
-            isError: true,
-          };
-        }
-      },
-    );
+    //       return {
+    //         content: [
+    //           {
+    //             type: 'text' as const,
+    //             text: JSON.stringify(
+    //               {
+    //                 success: true,
+    //                 message:
+    //                   'Login successful. You can now use other tools to interact with your IoT devices.',
+    //                 token_type: loginResult.token_type,
+    //                 expires_in: loginResult.expires_in,
+    //                 user_id: userId,
+    //               },
+    //               null,
+    //               2,
+    //             ),
+    //           },
+    //         ],
+    //       };
+    //     } catch (error) {
+    //       this.logger.error('Login failed:', error);
+    //       return {
+    //         content: [
+    //           {
+    //             type: 'text' as const,
+    //             text: `Login failed: ${error.message}`,
+    //           },
+    //         ],
+    //         isError: true,
+    //       };
+    //     }
+    //   },
+    // );
 
     // Tool 2: search (ChatGPT-compatible)
     server.registerTool(
@@ -263,7 +302,7 @@ export class McpService {
             ),
         }),
       },
-      this.withAuth(async ({ query }, state) => {
+      this.withApiKey(async ({ query }, state, apiKey) => {
         // Empty query or "*" means return all items
         const isListAll = !query || query.trim() === '' || query === '*';
         const lowerQuery = isListAll ? '' : query.toLowerCase();
@@ -271,7 +310,7 @@ export class McpService {
 
         // Search devices
         this.logger.debug(`[search] Fetching devices for userId: ${state.userId}`);
-        const devices = await this.apiClient.get(`/device/${state.userId}`, state.token);
+        const devices = await this.apiClient.get(`/device/${state.userId}`, state.token, undefined, apiKey);
         this.logger.debug(
           `[search] Devices response type: ${typeof devices}, isArray: ${Array.isArray(devices)}, length: ${Array.isArray(devices) ? devices.length : 'N/A'}`,
         );
@@ -309,7 +348,7 @@ export class McpService {
 
         // Search locations
         this.logger.debug(`[search] Fetching locations for userId: ${state.userId}`);
-        const locations = await this.apiClient.get(`/location/${state.userId}`, state.token);
+        const locations = await this.apiClient.get(`/location/${state.userId}`, state.token, undefined, apiKey);
         this.logger.debug(
           `[search] Locations response type: ${typeof locations}, isArray: ${Array.isArray(locations)}, length: ${Array.isArray(locations) ? locations.length : 'N/A'}`,
         );
@@ -348,7 +387,7 @@ export class McpService {
 
         // Search groups
         this.logger.debug(`[search] Fetching groups for userId: ${state.userId}`);
-        const groups = await this.apiClient.get(`/group/${state.userId}`, state.token);
+        const groups = await this.apiClient.get(`/group/${state.userId}`, state.token, undefined, apiKey);
         this.logger.debug(
           `[search] Groups response type: ${typeof groups}, isArray: ${Array.isArray(groups)}, length: ${Array.isArray(groups) ? groups.length : 'N/A'}`,
         );
@@ -413,25 +452,15 @@ export class McpService {
             ),
         }),
       },
-      this.withAuth(async ({ id }, state) => {
+      this.withApiKey(async ({ id }, state, apiKey) => {
         const [type, uuid] = id.split(':');
-
-        if (!type || !uuid) {
-          throw new Error('Invalid ID format. Expected format: type:uuid (e.g., device:abc-123)');
-        }
-
         let fetchedData: any;
         let title: string;
         let url: string;
-
-        this.logger.debug(
-          `[fetch] Fetching resource: type=${type}, uuid=${uuid}, userId=${state.userId}`,
-        );
-
         switch (type) {
           case 'device':
             this.logger.debug(`[fetch] Fetching device: /device/${state.userId}/${uuid}`);
-            fetchedData = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token);
+            fetchedData = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token, undefined, apiKey);
             this.logger.debug(
               `[fetch] Device response type: ${typeof fetchedData}, keys: ${fetchedData ? Object.keys(fetchedData).slice(0, 10).join(', ') : 'null'}`,
             );
@@ -441,7 +470,7 @@ export class McpService {
 
           case 'location':
             this.logger.debug(`[fetch] Fetching all locations to find uuid: ${uuid}`);
-            const allLocations = await this.apiClient.get(`/location/${state.userId}`, state.token);
+            const allLocations = await this.apiClient.get(`/location/${state.userId}`, state.token, undefined, apiKey);
             this.logger.debug(
               `[fetch] Locations response isArray: ${Array.isArray(allLocations)}, length: ${Array.isArray(allLocations) ? allLocations.length : 'N/A'}`,
             );
@@ -460,7 +489,7 @@ export class McpService {
 
           case 'group':
             this.logger.debug(`[fetch] Fetching all groups to find uuid: ${uuid}`);
-            const allGroups = await this.apiClient.get(`/group/${state.userId}`, state.token);
+            const allGroups = await this.apiClient.get(`/group/${state.userId}`, state.token, undefined, apiKey);
             this.logger.debug(
               `[fetch] Groups response isArray: ${Array.isArray(allGroups)}, length: ${Array.isArray(allGroups) ? allGroups.length : 'N/A'}`,
             );
@@ -510,9 +539,9 @@ export class McpService {
           'List ALL IoT devices for the authenticated user. Use this when user asks to "show my devices", "list devices", "what devices do I have", etc. Returns complete device list without filtering.',
         inputSchema: z.object({}),
       },
-      this.withAuth(async (args, state) => {
+      this.withApiKey(async (args, state, apiKey) => {
         this.logger.debug(`[list_devices] Fetching all devices for userId: ${state.userId}`);
-        const devices = await this.apiClient.get(`/device/${state.userId}`, state.token);
+        const devices = await this.apiClient.get(`/device/${state.userId}`, state.token, undefined, apiKey);
 
         if (!Array.isArray(devices)) {
           this.logger.warn(`[list_devices] Response is not an array`);
@@ -564,9 +593,9 @@ export class McpService {
           'List ALL location groups for the authenticated user. Use this when user asks to "show my locations", "list locations", "what locations do I have", etc.',
         inputSchema: z.object({}),
       },
-      this.withAuth(async (args, state) => {
+      this.withApiKey(async (args, state, apiKey) => {
         this.logger.debug(`[list_locations] Fetching all locations for userId: ${state.userId}`);
-        const locations = await this.apiClient.get(`/location/${state.userId}`, state.token);
+        const locations = await this.apiClient.get(`/location/${state.userId}`, state.token, undefined, apiKey);
 
         if (!Array.isArray(locations)) {
           this.logger.warn(`[list_locations] Response is not an array`);
@@ -608,9 +637,9 @@ export class McpService {
           'List ALL device groups for the authenticated user. Use this when user asks to "show my groups", "list groups", "what groups do I have", etc.',
         inputSchema: z.object({}),
       },
-      this.withAuth(async (args, state) => {
+      this.withApiKey(async (args, state, apiKey) => {
         this.logger.debug(`[list_groups] Fetching all groups for userId: ${state.userId}`);
-        const groups = await this.apiClient.get(`/group/${state.userId}`, state.token);
+        const groups = await this.apiClient.get(`/group/${state.userId}`, state.token, undefined, apiKey);
 
         if (!Array.isArray(groups)) {
           this.logger.warn(`[list_groups] Response is not an array`);
@@ -654,9 +683,9 @@ export class McpService {
           uuid: z.string().describe('Device UUID (unique identifier)'),
         }),
       },
-      this.withAuth(async ({ uuid }, state) => {
+      this.withApiKey(async ({ uuid }, state, apiKey) => {
         this.logger.debug(`[get_device] Fetching device uuid: ${uuid}`);
-        const device = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token);
+        const device = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token, undefined, apiKey);
 
         this.logger.log(`[get_device] Retrieved device: ${device.label || uuid}`);
 
@@ -686,7 +715,7 @@ export class McpService {
           fav: z.boolean().optional().describe('Mark as favorite (true/false)'),
         }),
       },
-      this.withAuth(async ({ uuid, label, desc, groupId, vgroupId, fav }, state) => {
+      this.withApiKey(async ({ uuid, label, desc, groupId, vgroupId, fav }, state, apiKey) => {
         // Build update payload
         const updateData: any = { uuid };
         if (label !== undefined) updateData.label = label;
@@ -701,6 +730,7 @@ export class McpService {
           `/device/${state.userId}`,
           state.token,
           updateData,
+          apiKey,
         );
 
         this.logger.log(`[update_device] Updated device ${uuid} successfully`);
@@ -735,12 +765,12 @@ export class McpService {
           uuid: z.string().describe('Device UUID to delete'),
         }),
       },
-      this.withAuth(async ({ uuid }, state) => {
+      this.withApiKey(async ({ uuid }, state, apiKey) => {
         this.logger.debug(`[delete_device] Deleting device uuid: ${uuid}`);
 
         const result = await this.apiClient.delete(`/device/${state.userId}`, state.token, {
           uuid,
-        });
+        }, apiKey);
 
         this.logger.log(`[delete_device] Deleted device ${uuid} successfully`);
 
@@ -773,9 +803,9 @@ export class McpService {
           uuid: z.string().describe('Device UUID (unique identifier)'),
         }),
       },
-      this.withAuth(async ({ uuid }, state) => {
+      this.withApiKey(async ({ uuid }, state, apiKey) => {
         this.logger.debug(`[get_device_state] Fetching state for device: ${uuid}`);
-        const deviceState = await this.apiClient.get(`/state/devId/${uuid}`, state.token);
+        const deviceState = await this.apiClient.get(`/state/devId/${uuid}`, state.token, undefined, apiKey);
 
         this.logger.log(`[get_device_state] Retrieved device state successfully`);
 
@@ -800,9 +830,9 @@ export class McpService {
           locationUuid: z.string().describe('Location UUID (use uuid field from list_locations)'),
         }),
       },
-      this.withAuth(async ({ locationUuid }, state) => {
+      this.withApiKey(async ({ locationUuid }, state, apiKey) => {
         this.logger.debug(`[get_location_state] Fetching state for location: ${locationUuid}`);
-        const states = await this.apiClient.get(`/state/${locationUuid}`, state.token);
+        const states = await this.apiClient.get(`/state/${locationUuid}`, state.token, undefined, apiKey);
 
         this.logger.log(`[get_location_state] Retrieved location state successfully`);
 
@@ -828,13 +858,15 @@ export class McpService {
           macAddress: z.string().describe('Device MAC address (physical identifier)'),
         }),
       },
-      this.withAuth(async ({ locationUuid, macAddress }, state) => {
+      this.withApiKey(async ({ locationUuid, macAddress }, state, apiKey) => {
         this.logger.debug(
           `[get_device_state_by_mac] Fetching state for location ${locationUuid}, device ${macAddress}`,
         );
         const deviceState = await this.apiClient.get(
           `/state/${locationUuid}/${macAddress}`,
           state.token,
+          undefined,
+          apiKey,
         );
 
         this.logger.log(`[get_device_state_by_mac] Retrieved device state successfully`);
@@ -871,11 +903,11 @@ export class McpService {
             ),
         }),
       },
-      this.withAuth(async ({ uuid, elementIds, command }, state) => {
+      this.withApiKey(async ({ uuid, elementIds, command }, state, apiKey) => {
         this.logger.debug(`[control_device] Getting device details for uuid: ${uuid}`);
 
         // First, get device details to retrieve control parameters
-        const device = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token);
+        const device = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token, undefined, apiKey);
 
         if (!device) {
           throw new Error(`Device ${uuid} not found`);
@@ -915,7 +947,7 @@ export class McpService {
         this.logger.debug('[control_device] Sending control command:', payload);
 
         // Send control command
-        const result = await this.apiClient.post('/control/device', state.token, payload);
+        const result = await this.apiClient.post('/control/device', state.token, payload, apiKey);
 
         this.logger.log(
           `[control_device] Control command sent successfully for device ${device.label || uuid}`,
@@ -983,11 +1015,11 @@ export class McpService {
             .describe('Specific element ID to control (optional, controls all if not specified)'),
         }),
       },
-      this.withAuth(async ({ uuid, action, value, elementId }, state) => {
+      this.withApiKey(async ({ uuid, action, value, elementId }, state, apiKey) => {
         this.logger.debug(`[control_device_simple] Getting device details for uuid: ${uuid}`);
 
         // Get device details
-        const device = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token);
+        const device = await this.apiClient.get(`/device/${state.userId}/${uuid}`, state.token, undefined, apiKey);
 
         if (!device) {
           throw new Error(`Device ${uuid} not found`);
@@ -1073,7 +1105,7 @@ export class McpService {
         this.logger.debug('[control_device_simple] Sending control command:', payload);
 
         // Send control command
-        const result = await this.apiClient.post('/control/device', state.token, payload);
+        const result = await this.apiClient.post('/control/device', state.token, payload, apiKey);
 
         this.logger.log(
           `[control_device_simple] ${actionDescription} command sent for device ${device.label || uuid}`,

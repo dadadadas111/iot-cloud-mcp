@@ -40,13 +40,31 @@ export class McpController {
   async handleMcpRequest(@Req() req: Request, @Res() res: Response): Promise<void> {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     const authHeader = req.headers.authorization as string | undefined;
+    const apiKey = req.query['api-key'] as string | undefined;
 
     console.log(`[MCP] ${req.method} request`, {
       sessionId,
       hasAuth: !!authHeader,
+      hasApiKey: !!apiKey,
       hasBody: !!req.body,
       url: req.url,
     });
+
+    // Validate API key is provided
+    if (!apiKey) {
+      console.error(`[MCP] Missing required api-key parameter`);
+      if (!res.headersSent) {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          error: {
+            code: -32602,
+            message: 'Missing required api-key parameter. Use URL format: /api/mcp?api-key=YOUR_API_KEY',
+          },
+          id: null,
+        });
+      }
+      return;
+    }
 
     // Extract Bearer token if present and validate it
     let oauthToken: { userId: string; token: string } | null = null;
@@ -71,6 +89,8 @@ export class McpController {
         // Reuse existing transport for this session
         transport = this.transports.get(sessionId)!;
         console.log(`[MCP] Reusing transport for session: ${sessionId}`);
+        // Update API key for existing session
+        await this.mcpService.setSessionApiKey(sessionId, apiKey);
       } else {
         // Create new transport (stateful mode with session management)
         transport = new StreamableHTTPServerTransport({
@@ -98,6 +118,11 @@ export class McpController {
         // If OAuth token is present, pre-authenticate the session
         if (oauthToken && transport.sessionId) {
           await this.mcpService.setOAuthSession(transport.sessionId, oauthToken);
+        }
+
+        // Set API key for the session
+        if (transport.sessionId) {
+          await this.mcpService.setSessionApiKey(transport.sessionId, apiKey);
         }
 
         await server.connect(transport);

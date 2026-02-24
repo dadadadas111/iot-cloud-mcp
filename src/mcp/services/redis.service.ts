@@ -3,8 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 export interface ConnectionState {
-  token: string | null;
-  userId: string | null;
+  token?: string | null | undefined;
+  userId?: string | null | undefined;
+  apiKey?: string;
 }
 
 /**

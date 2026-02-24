@@ -58,15 +58,14 @@ For detailed setup, configuration, and integration guides, see the [documentatio
 
 ### Connection
 
-**Endpoint:** `/api/mcp` (supports GET for SSE, POST for messages, DELETE for session termination)
+**Endpoint:** `/api/mcp?api-key=YOUR_API_KEY` (supports GET for SSE, POST for messages, DELETE for session termination)
 
-**No Authentication Required** - Agents can connect freely.
+**API Key Required** - Each client must provide their own IoT API key via the `api-key` query parameter.
 
 **Uses Official MCP SDK** - Implements the MCP Streamable HTTP protocol specification
-
 ```bash
-# Test SSE connection (will receive session ID in response headers)
-curl -N http://localhost:3001/api/mcp
+# Test SSE connection (replace YOUR_API_KEY with actual API key)
+curl -N "http://localhost:3001/api/mcp?api-key=YOUR_API_KEY"
 ```
 
 ### Available Tools

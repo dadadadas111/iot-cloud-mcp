@@ -18,9 +18,9 @@ export class AuthService {
 
   constructor(private httpService: HttpService, private configService: ConfigService) {}
 
-  async login(email: string, password: string): Promise<LoginResponse> {
+  async login(email: string, password: string, apiKey?: string): Promise<LoginResponse> {
     const apiUrl = this.configService.get<string>('IOT_API_BASE_URL');
-    const apiKey = this.configService.get<string>('IOT_API_KEY');
+    const effectiveApiKey = apiKey || this.configService.get<string>('IOT_API_KEY');
 
     this.logger.log(`Attempting login for user: ${email}`);
 
@@ -31,7 +31,7 @@ export class AuthService {
           { email, password },
           {
             headers: {
-              'x-header-apikey': apiKey,
+              'x-header-apikey': effectiveApiKey,
               'Content-Type': 'application/json',
               accept: 'application/json',
             },
@@ -46,9 +46,9 @@ export class AuthService {
     }
   }
 
-  async refreshToken(refreshToken: string): Promise<LoginResponse> {
+  async refreshToken(refreshToken: string, apiKey?: string): Promise<LoginResponse> {
     const apiUrl = this.configService.get<string>('IOT_API_BASE_URL');
-    const apiKey = this.configService.get<string>('IOT_API_KEY');
+    const effectiveApiKey = apiKey || this.configService.get<string>('IOT_API_KEY');
 
     this.logger.log('Attempting token refresh');
 
@@ -59,7 +59,7 @@ export class AuthService {
           { refresh_token: refreshToken },
           {
             headers: {
-              'x-header-apikey': apiKey,
+              'x-header-apikey': effectiveApiKey,
               'Content-Type': 'application/json',
               accept: 'application/json',
             },

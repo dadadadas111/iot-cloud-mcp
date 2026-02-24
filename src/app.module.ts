@@ -5,7 +5,6 @@ import { HttpModule } from '@nestjs/axios';
 
 import { AuthModule } from './auth/auth.module';
 import { ApiModule } from './api/api.module';
-import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
 import { OAuthModule } from './oauth/oauth.module';
 
@@ -34,7 +33,6 @@ import { OAuthModule } from './oauth/oauth.module';
     // Feature modules
     AuthModule,
     ApiModule,
-    AdminModule,
     OAuthModule,
   ],
   controllers: [HealthController],

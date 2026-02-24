@@ -10,6 +10,7 @@ export interface ApiRequestOptions {
   firebaseToken: string;
   data?: any;
   params?: any;
+  apiKey?: string;
 }
 
 @Injectable()
@@ -70,14 +71,14 @@ export class ApiClientService {
   }
 
   async request<T = any>(options: ApiRequestOptions): Promise<T> {
-    const { method, path, firebaseToken, data, params } = options;
+    const { method, path, firebaseToken, data, params, apiKey } = options;
 
     const config: AxiosRequestConfig = {
       method,
       url: `${this.baseUrl}${path}`,
       headers: {
         Authorization: `Bearer ${firebaseToken}`,
-        'x-header-apikey': this.apiKey,
+        'x-header-apikey': apiKey || this.apiKey,
         'Content-Type': 'application/json',
         accept: 'application/json',
       },
@@ -105,39 +106,43 @@ export class ApiClientService {
     }
   }
 
-  async get<T = any>(path: string, firebaseToken: string, params?: any): Promise<T> {
+  async get<T = any>(path: string, firebaseToken: string, params?: any, apiKey?: string): Promise<T> {
     return this.request<T>({
       method: 'GET',
       path,
       firebaseToken,
       params,
+      apiKey,
     });
   }
 
-  async post<T = any>(path: string, firebaseToken: string, data?: any): Promise<T> {
+  async post<T = any>(path: string, firebaseToken: string, data?: any, apiKey?: string): Promise<T> {
     return this.request<T>({
       method: 'POST',
       path,
       firebaseToken,
       data,
+      apiKey,
     });
   }
 
-  async patch<T = any>(path: string, firebaseToken: string, data?: any): Promise<T> {
+  async patch<T = any>(path: string, firebaseToken: string, data?: any, apiKey?: string): Promise<T> {
     return this.request<T>({
       method: 'PATCH',
       path,
       firebaseToken,
       data,
+      apiKey,
     });
   }
 
-  async delete<T = any>(path: string, firebaseToken: string, data?: any): Promise<T> {
+  async delete<T = any>(path: string, firebaseToken: string, data?: any, apiKey?: string): Promise<T> {
     return this.request<T>({
       method: 'DELETE',
       path,
       firebaseToken,
       data,
+      apiKey,
     });
   }
 
