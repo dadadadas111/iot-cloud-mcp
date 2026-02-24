@@ -278,17 +278,9 @@ export class OAuthController {
   }
 
   private getBaseUrl(): string {
-    const host = this.configService.get<string>('HOST') || 'localhost';
-    const port = this.configService.get<number>('PORT') || 3001;
-    const isProduction = this.configService.get<string>('NODE_ENV') === 'production';
-    const isStaging = this.configService.get<string>('NODE_ENV') === 'staging';
 
-    if (isProduction || isStaging) {
       // In production, use configured base URL or construct from host/port
-      return this.configService.get<string>('BASE_URL') || `https://${host}`;
-    }
-
-    return `http://${host}:${port}`;
+      return this.configService.get<string>('BASE_URL') || 'https://mcp-stag.dash.id.vn/api';
   }
 
   private generateLoginHTML(authRequestId: string): string {
