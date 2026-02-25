@@ -5,7 +5,7 @@ services:
     container_name: iot-cloud-mcp-staging
     restart: unless-stopped
     ports:
-      - '${PORT:-3002}:3001'
+      - '${PORT:-3002}:3002'
     environment:
       # Server
       NODE_ENV: ${NODE_ENV:-staging}
@@ -14,17 +14,7 @@ services:
 
       # IoT Cloud API
       IOT_API_BASE_URL: ${IOT_API_BASE_URL}
-      IOT_API_KEY: ${IOT_API_KEY}
       IOT_API_TIMEOUT: ${IOT_API_TIMEOUT:-30000}
-
-      # Admin API
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
-
-      # Redis Configuration
-      REDIS_HOST: ${REDIS_HOST:-localhost}
-      REDIS_PORT: ${REDIS_PORT:-6379}
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      REDIS_DB: ${REDIS_DB:-0}
 
       # CORS Configuration (always enabled for MCP)
       ENABLE_CORS: 'true'
@@ -37,6 +27,8 @@ services:
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-debug}
+
+      BASE_URL: ${BASE_URL:-https://mcp-stag.dash.id.vn}
 
     networks:
       - iot-network-staging
