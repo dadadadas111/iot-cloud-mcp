@@ -20,7 +20,7 @@ export class DiscoveryService {
    */
   getProtectedResourceMetadata(projectApiKey: string): any {
     const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
-    const resourceUrl = `${baseUrl}/api/${projectApiKey}`;
+    const resourceUrl = `${baseUrl}/mcp/${projectApiKey}`;
 
     this.logger.log(`Generating protected resource metadata for ${projectApiKey}`);
 

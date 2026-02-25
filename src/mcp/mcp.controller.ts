@@ -15,6 +15,7 @@ import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
 import { McpProtocolHandlerService } from './services/mcp-protocol-handler.service';
 import { decodeJwt } from '../common/utils/jwt.utils';
+import { ConfigService } from '@nestjs/config';
 
 /**
  * McpController
@@ -30,6 +31,7 @@ export class McpController {
     private readonly sessionManager: SessionManagerService,
     private readonly serverFactory: McpServerFactory,
     private readonly protocolHandler: McpProtocolHandlerService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -68,7 +70,8 @@ export class McpController {
     // Validate Bearer token
     if (!authorization || !authorization.startsWith('Bearer ')) {
       this.logger.warn(`Missing or invalid Authorization header for project: ${projectApiKey}`);
-      res.setHeader('WWW-Authenticate', 'Bearer realm="MCP Gateway"');
+      const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
+      res.setHeader('WWW-Authenticate', `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${projectApiKey}"`);
       res.status(HttpStatus.UNAUTHORIZED).json({
         jsonrpc: '2.0',
         error: {
@@ -93,7 +96,8 @@ export class McpController {
       this.logger.debug(`Token decoded - UserId: ${userId}`);
     } catch (error) {
       this.logger.error(`JWT decode failed for project ${projectApiKey}: ${error.message}`);
-      res.setHeader('WWW-Authenticate', 'Bearer realm="MCP Gateway"');
+      const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
+      res.setHeader('WWW-Authenticate', `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${projectApiKey}"`);
       res.status(HttpStatus.UNAUTHORIZED).json({
         jsonrpc: '2.0',
         error: {
