@@ -15,7 +15,7 @@ async function bootstrap() {
   app.enableCors({
     origin: origins.length > 0 && origins[0] !== '*' ? origins : '*',
     methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'x-admin-api-key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'x-admin-api-key', 'x-project-api-key', 'mcp-protocol-version'],
     credentials: true,
   });
 

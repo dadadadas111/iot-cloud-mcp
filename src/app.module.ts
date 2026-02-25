@@ -3,10 +3,12 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { HttpModule } from '@nestjs/axios';
 import { HealthController } from './health.controller';
-import { ApiClientModule } from './api-client/api-client.module';
+import { CommonModule } from './common/common.module';
+import { ProxyModule } from './proxy/proxy.module';
+import { DiscoveryModule } from './discovery/discovery.module';
+import { AuthModule } from './auth/auth.module';
+import { ToolsModule } from './tools/tools.module';
 import { McpModule } from './mcp/mcp.module';
-import { OauthModule } from './oauth/oauth.module';
-import { RedisClientModule } from './redis-client/redis-client.module';
 
 @Module({
   imports: [
@@ -30,13 +32,23 @@ import { RedisClientModule } from './redis-client/redis-client.module';
       maxRedirects: 5,
     }),
 
-    ApiClientModule,
+    // Shared utilities
+    CommonModule,
 
+    // Proxy to Old API
+    ProxyModule,
+
+    // OAuth Discovery
+    DiscoveryModule,
+
+    // OAuth Authentication
+    AuthModule,
+
+    // MCP Tools
+    ToolsModule,
+
+    // MCP Protocol
     McpModule,
-
-    OauthModule,
-
-    RedisClientModule,
   ],
   controllers: [HealthController],
 })
