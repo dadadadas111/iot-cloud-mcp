@@ -13,7 +13,7 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
-import { ApiKey } from '../common/decorators/api-key.decorator';
+import { McpProtocolHandlerService } from './services/mcp-protocol-handler.service';
 import { decodeJwt } from '../common/utils/jwt.utils';
 
 /**
@@ -29,6 +29,7 @@ export class McpController {
   constructor(
     private readonly sessionManager: SessionManagerService,
     private readonly serverFactory: McpServerFactory,
+    private readonly protocolHandler: McpProtocolHandlerService,
   ) {}
 
   /**
@@ -126,12 +127,14 @@ export class McpController {
     res.setHeader('X-MCP-Session-Id', sessionId);
 
     try {
-      // Process MCP request through server instance
-      const mcpResponse = await this.processMcpRequest(session.server, body);
-
+      // Process MCP request through protocol handler
+      const mcpResponse = await this.protocolHandler.handleRequest(body, {
+        authorization,
+        projectApiKey,
+      });
       // Add session ID to response for client tracking
       if (mcpResponse && typeof mcpResponse === 'object') {
-        mcpResponse._sessionId = sessionId;
+        (mcpResponse as any)._sessionId = sessionId;
       }
 
       this.logger.log(`MCP request processed - SessionId: ${sessionId}, Method: ${body?.method}`);
@@ -155,43 +158,4 @@ export class McpController {
     }
   }
 
-  /**
-   * Processes MCP JSON-RPC 2.0 request through server instance
-   * @param server - MCP Server instance
-   * @param request - JSON-RPC 2.0 request
-   * @returns JSON-RPC 2.0 response
-   */
-  private async processMcpRequest(server: any, request: any): Promise<any> {
-    // Handle different MCP methods
-    const method = request?.method;
-
-    if (!method) {
-      return {
-        jsonrpc: '2.0',
-        error: {
-          code: -32600,
-          message: 'Invalid Request: method required',
-        },
-        id: request?.id || null,
-      };
-    }
-
-    // Delegate to server's request handler
-    // The MCP SDK server should have a handler for JSON-RPC requests
-    if (typeof server.handleRequest === 'function') {
-      return await server.handleRequest(request);
-    }
-
-    // Fallback: manual method routing (if SDK doesn't provide handleRequest)
-    this.logger.warn(`Manual method routing for: ${method}`);
-
-    return {
-      jsonrpc: '2.0',
-      error: {
-        code: -32601,
-        message: `Method not found: ${method}`,
-      },
-      id: request?.id || null,
-    };
-  }
 }

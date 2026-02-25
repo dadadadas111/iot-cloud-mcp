@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { McpController } from './mcp.controller';
 import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
+import { McpProtocolHandlerService } from './services/mcp-protocol-handler.service';
 import { ToolsModule } from '../tools/tools.module';
 import { AuthModule } from '../auth/auth.module';
 import { CommonModule } from '../common/common.module';
@@ -24,7 +25,7 @@ import { CommonModule } from '../common/common.module';
     CommonModule, // For shared utilities and decorators
   ],
   controllers: [McpController],
-  providers: [SessionManagerService, McpServerFactory],
-  exports: [SessionManagerService, McpServerFactory],
+  providers: [SessionManagerService, McpServerFactory, McpProtocolHandlerService],
+  exports: [SessionManagerService, McpServerFactory, McpProtocolHandlerService],
 })
 export class McpModule {}
