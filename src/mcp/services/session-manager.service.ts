@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { McpSession } from '../dto/mcp-session.dto';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /**
  * SessionManagerService
@@ -25,7 +25,7 @@ export class SessionManagerService {
    * @param server - MCP Server instance
    * @returns Newly created session ID (UUID)
    */
-  createSession(projectApiKey: string, userId: string, server: Server): string {
+  createSession(projectApiKey: string, userId: string, server: McpServer): string {
     const sessionId = uuidv4();
     const now = new Date();
 

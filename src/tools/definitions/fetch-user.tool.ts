@@ -7,14 +7,11 @@
 import { z } from 'zod';
 
 /**
- * fetchUser tool parameter schema
- * Validates input parameters for user fetching
+ * fetchUser tool has no parameters - userId is extracted from Bearer token
  */
-const FetchUserParamsSchema = z.object({
-  userId: z.string().min(1, 'userId is required').describe('The user ID to fetch'),
-});
+const FetchUserParamsSchema = z.object({});
 
-/** Type for fetchUser parameters */
+/** Type for fetchUser parameters (empty object) */
 export type FetchUserParams = z.infer<typeof FetchUserParamsSchema>;
 
 /**
@@ -25,20 +22,15 @@ export type FetchUserParams = z.infer<typeof FetchUserParamsSchema>;
  */
 export const FETCH_USER_TOOL = {
   name: 'fetchUser',
-  description: 'Fetch user data from the Old API Server by userId',
+  description: 'Fetch the authenticated user\'s data from the IoT API Server (userId extracted from token)',
   inputSchema: {
     type: 'object' as const,
-    properties: {
-      userId: {
-        type: 'string',
-        description: 'The user ID to fetch',
-      },
-    },
-    required: ['userId'],
+    properties: {},
+    required: [],
   },
   metadata: {
     name: 'fetchUser',
-    description: 'Fetch user data from the Old API Server by userId',
+    description: 'Fetch the authenticated user\'s data from the IoT API Server (userId extracted from token)',
     securitySchemes: {
       oauth2: {
         type: 'oauth2',

@@ -5,6 +5,7 @@
  */
 
 import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
 import { decodeJwt, extractBearerToken, getUserIdFromToken } from '../../common/utils/jwt.utils';
 import { FETCH_USER_TOOL, FetchUserParams } from '../definitions/fetch-user.tool';
@@ -37,7 +38,7 @@ export class ToolExecutorService {
     toolName: string,
     params: Record<string, unknown>,
     context: ToolContext,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  ): Promise<CallToolResult> {
     if (toolName === FETCH_USER_TOOL.name) {
       return this.executeFetchUser(params as FetchUserParams, context);
     }
@@ -47,21 +48,21 @@ export class ToolExecutorService {
 
   /**
    * Execute fetchUser tool
-   * Extracts userId from token and calls OldApiService.fetchUser
+   * Extracts userId from Bearer token and fetches user data from IoT API
    *
-   * @param params - Tool parameters containing userId
+   * @param params - Empty object (tool requires no parameters)
    * @param context - Request context with authorization header and projectApiKey
    * @returns MCP-formatted user data response
    */
   private async executeFetchUser(
     params: FetchUserParams,
     context: ToolContext,
-  ): Promise<{ content: Array<{ type: string; text: string }> }> {
+  ): Promise<CallToolResult> {
     if (!context.authorization) {
       return {
         content: [
           {
-            type: 'text',
+            type: 'text' as const,
             text: JSON.stringify({
               isError: true,
               error: 'Missing authorization header',
@@ -89,7 +90,7 @@ export class ToolExecutorService {
       return {
         content: [
           {
-            type: 'text',
+            type: 'text' as const,
             text: JSON.stringify(userData),
           },
         ],
@@ -100,7 +101,7 @@ export class ToolExecutorService {
       return {
         content: [
           {
-            type: 'text',
+            type: 'text' as const,
             text: JSON.stringify({
               isError: true,
               error: errorMessage,

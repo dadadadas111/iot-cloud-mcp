@@ -1,4 +1,4 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /**
  * MCP Session DTO
@@ -18,7 +18,7 @@ export interface McpSession {
   /**
    * MCP Server instance for this session
    */
-  server: Server;
+  server: McpServer;
 
   /**
    * User ID extracted from JWT token

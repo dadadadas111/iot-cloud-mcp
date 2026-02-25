@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ToolRegistryService } from '../../tools/services/tool-registry.service';
 
 /**
@@ -22,11 +22,11 @@ export class McpServerFactory {
    * @param projectApiKey - Project API key (used for server naming)
    * @returns Configured MCP Server instance
    */
-  createServer(projectApiKey: string): Server {
+  createServer(projectApiKey: string): McpServer {
     this.logger.log(`Creating MCP server for project: ${projectApiKey}`);
 
     // Create server with name and capabilities
-    const server = new Server(
+    const server = new McpServer(
       {
         name: `mcp-gateway-${projectApiKey}`,
         version: '1.0.0',
@@ -39,7 +39,7 @@ export class McpServerFactory {
     );
 
     // Register all available tools on this server instance
-    this.toolRegistry.registerTools(server as any, projectApiKey);
+    this.toolRegistry.registerTools(server, projectApiKey);
 
 
     this.logger.log(`MCP server created and tools registered for project: ${projectApiKey}`);
@@ -53,7 +53,7 @@ export class McpServerFactory {
    * @param projectApiKey - Project API key
    * @returns Configured MCP Server instance
    */
-  getOrCreateServer(projectApiKey: string): Server {
+  getOrCreateServer(projectApiKey: string): McpServer {
     // For PoC: always create new server per session
     // Future: implement caching/pooling if needed
     return this.createServer(projectApiKey);
