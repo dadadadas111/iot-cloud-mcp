@@ -3,4 +3,4 @@
  */
 
 export * from './tenant-context.interface';
-export * from './old-api.interface';
+export * from './iot-api.interface';

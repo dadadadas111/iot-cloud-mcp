@@ -1,14 +1,14 @@
 /**
- * Old API Response DTOs
- * Type definitions for responses from the Old API Server
+ * IoT API Response DTOs
+ * Type definitions for responses from the IoT API Server
  * Matches actual API structure from docs/EXTERNAL-API.md
  */
 
 /**
- * Login response from Old API (/iot-core/authen/login)
+ * Login response from IoT API (/iot-core/authen/login)
  * Returns Firebase JWT token and refresh token
  */
-export interface OldApiLoginResponse {
+export interface IotApiLoginResponse {
   /** Firebase JWT access token */
   access_token: string;
   /** Token type (always 'Bearer') */
@@ -22,10 +22,10 @@ export interface OldApiLoginResponse {
 }
 
 /**
- * Token response from Old API (/iot-core/authen/token/accesstoken)
+ * Token response from IoT API (/iot-core/authen/token/accesstoken)
  * Used for both authorization_code and refresh_token grant types
  */
-export interface OldApiTokenResponse {
+export interface IotApiTokenResponse {
   /** Firebase JWT access token */
   access_token: string;
   /** Token type (always 'Bearer') */
@@ -39,19 +39,19 @@ export interface OldApiTokenResponse {
 }
 
 /**
- * Auth code response from Old API (/iot-core/authen/auth_code/{userId})
+ * Auth code response from IoT API (/iot-core/authen/auth_code/{userId})
  * Returns authorization code for OAuth flow
  */
-export interface OldApiAuthCodeResponse {
+export interface IotApiAuthCodeResponse {
   /** Authorization code to exchange for tokens */
   code: string;
 }
 
 /**
- * User profile response from Old API (/iot-core/user/{userId})
+ * User profile response from IoT API (/iot-core/user/{userId})
  * Contains IoT user information
  */
-export interface OldApiUserResponse {
+export interface IotApiUserResponse {
   /** User unique identifier */
   userId: string;
   /** User code */
@@ -73,10 +73,10 @@ export interface OldApiUserResponse {
 }
 
 /**
- * Generic error response from the Old API
+ * Generic error response from the IoT API
  * Used for error handling and debugging
  */
-export interface OldApiErrorResponse {
+export interface IotApiErrorResponse {
   /** Error code identifier */
   code?: string | number;
   /** Human-readable error message */

@@ -1,6 +1,6 @@
 /**
- * Old API Service
- * Handles HTTP calls to the Old API Server
+ * IoT API Service
+ * Handles HTTP calls to the IoT API Server
  * Project API key is provided per-request via URL parameter (:projectApiKey), NOT from environment config
  * This enables multi-tenant isolation where each request specifies its own project API key
  */
@@ -11,18 +11,18 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { logProxyCall } from '../../common/utils/logger.utils';
 import {
-  OldApiLoginResponse,
-  OldApiTokenResponse,
-  OldApiUserResponse,
-  OldApiAuthCodeResponse,
-} from '../dto/old-api-response.dto';
+  IotApiLoginResponse,
+  IotApiTokenResponse,
+  IotApiUserResponse,
+  IotApiAuthCodeResponse,
+} from '../dto/iot-api-response.dto';
 
 /**
- * Service for interacting with the Old API Server
+ * Service for interacting with the IoT API Server
  * Manages authentication flow and user data retrieval
  */
 @Injectable()
-export class OldApiService {
+export class IotApiService {
   private baseUrl: string;
 
   constructor(
@@ -38,7 +38,7 @@ export class OldApiService {
    */
   private getHeaders(projectApiKey: string) {
     return {
-  'x-header-apikey': projectApiKey,
+      'x-header-apikey': projectApiKey,
       'Content-Type': 'application/json',
     };
   }
@@ -56,14 +56,14 @@ export class OldApiService {
     projectApiKey: string,
     email: string,
     password: string,
-  ): Promise<OldApiLoginResponse> {
+  ): Promise<IotApiLoginResponse> {
     try {
       logProxyCall('Initiating login', { email });
 
       const endpoint = `${this.baseUrl}/iot-core/authen/login`;
 
       const response = await firstValueFrom(
-        this.httpService.post<OldApiLoginResponse>(
+        this.httpService.post<IotApiLoginResponse>(
           endpoint,
           { email, password },
           { headers: this.getHeaders(projectApiKey) },
@@ -86,17 +86,14 @@ export class OldApiService {
    * @param userId - Firebase user ID from JWT token
    * @returns Authorization code response
    */
-  async registerAuthCode(
-    projectApiKey: string,
-    userId: string,
-  ): Promise<OldApiAuthCodeResponse> {
+  async registerAuthCode(projectApiKey: string, userId: string): Promise<IotApiAuthCodeResponse> {
     try {
       logProxyCall('Registering auth code', { userId });
 
       const endpoint = `${this.baseUrl}/iot-core/authen/auth_code/${userId}`;
 
       const response = await firstValueFrom(
-        this.httpService.post<OldApiAuthCodeResponse>(
+        this.httpService.post<IotApiAuthCodeResponse>(
           endpoint,
           {},
           { headers: this.getHeaders(projectApiKey) },
@@ -119,17 +116,14 @@ export class OldApiService {
    * @param code - Authorization code from registerAuthCode()
    * @returns Token response with access and refresh tokens
    */
-  async exchangeAuthCode(
-    projectApiKey: string,
-    code: string,
-  ): Promise<OldApiTokenResponse> {
+  async exchangeAuthCode(projectApiKey: string, code: string): Promise<IotApiTokenResponse> {
     try {
       logProxyCall('Exchanging auth code for tokens', { code });
 
       const endpoint = `${this.baseUrl}/iot-core/authen/token/accesstoken`;
 
       const response = await firstValueFrom(
-        this.httpService.post<OldApiTokenResponse>(
+        this.httpService.post<IotApiTokenResponse>(
           endpoint,
           { grant_type: 'authorization_code', code },
           { headers: this.getHeaders(projectApiKey) },
@@ -152,14 +146,14 @@ export class OldApiService {
    * @param refreshToken - Refresh token from previous authentication
    * @returns New token response with fresh access token
    */
-  async refreshToken(projectApiKey: string, refreshToken: string): Promise<OldApiTokenResponse> {
+  async refreshToken(projectApiKey: string, refreshToken: string): Promise<IotApiTokenResponse> {
     try {
       logProxyCall('Refreshing access token');
 
       const endpoint = `${this.baseUrl}/iot-core/authen/token/accesstoken`;
 
       const response = await firstValueFrom(
-        this.httpService.post<OldApiTokenResponse>(
+        this.httpService.post<IotApiTokenResponse>(
           endpoint,
           { grant_type: 'refresh_token', refresh_token: refreshToken },
           { headers: this.getHeaders(projectApiKey) },
@@ -182,14 +176,16 @@ export class OldApiService {
    * @param userId - User ID extracted from JWT token
    * @returns User data response
    */
-  async fetchUser(projectApiKey: string, userId: string): Promise<OldApiUserResponse> {
+  async fetchUser(projectApiKey: string, userId: string): Promise<IotApiUserResponse> {
     try {
       logProxyCall('Fetching user data', { userId });
 
       const endpoint = `${this.baseUrl}/iot-core/user/${userId}`;
 
       const response = await firstValueFrom(
-        this.httpService.get<OldApiUserResponse>(endpoint, { headers: this.getHeaders(projectApiKey) }),
+        this.httpService.get<IotApiUserResponse>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
       );
 
       logProxyCall('User data fetched successfully', { userId });

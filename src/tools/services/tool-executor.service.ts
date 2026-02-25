@@ -5,7 +5,7 @@
  */
 
 import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { OldApiService } from '../../proxy/services/old-api.service';
+import { IotApiService } from '../../proxy/services/iot-api.service';
 import { decodeJwt, extractBearerToken, getUserIdFromToken } from '../../common/utils/jwt.utils';
 import { FETCH_USER_TOOL, FetchUserParams } from '../definitions/fetch-user.tool';
 
@@ -22,7 +22,7 @@ interface ToolContext {
  */
 @Injectable()
 export class ToolExecutorService {
-  constructor(private oldApiService: OldApiService) {}
+  constructor(private iotApiService: IotApiService) {}
 
   /**
    * Execute a tool with given parameters and context
@@ -80,8 +80,8 @@ export class ToolExecutorService {
       const decoded = decodeJwt(token);
       const userId = getUserIdFromToken(decoded);
 
-      // Fetch user data from Old API using userId
-      const userData = await this.oldApiService.fetchUser(
+      // Fetch user data from IoT API using userId
+      const userData = await this.iotApiService.fetchUser(
         context.projectApiKey || 'unknown',
         userId,
       );

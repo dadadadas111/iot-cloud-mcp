@@ -1,24 +1,24 @@
 /**
  * Proxy Module
- * Handles HTTP communication with the Old API Server
- * Exposes OldApiService for use across the application
+ * Handles HTTP communication with the IoT API Server
+ * Exposes IotApiService for use across the application
  */
 
 import { Module } from '@nestjs/common';
 import { HttpModule } from '@nestjs/axios';
 import { CommonModule } from '../common/common.module';
-import { OldApiService } from './services/old-api.service';
+import { IotApiService } from './services/iot-api.service';
 
 /**
  * ProxyModule provides:
- * - OldApiService: Service for calling Old API endpoints
+ * - IotApiService: Service for calling IoT API endpoints
  *
  * This module encapsulates all external API communication
  * and provides a clean interface for the rest of the application
  */
 @Module({
   imports: [HttpModule, CommonModule],
-  providers: [OldApiService],
-  exports: [OldApiService],
+  providers: [IotApiService],
+  exports: [IotApiService],
 })
 export class ProxyModule {}

@@ -1,8 +1,8 @@
 /**
- * Legacy API compatibility interfaces
+ * IoT API compatibility interfaces
  */
 
-export interface OldApiRequest {
+export interface IotApiRequest {
   method: string;
   endpoint: string;
   headers?: Record<string, string>;
@@ -11,7 +11,7 @@ export interface OldApiRequest {
   query?: Record<string, string>;
 }
 
-export interface OldApiResponse {
+export interface IotApiResponse {
   status: number;
   statusText: string;
   headers: Record<string, string>;

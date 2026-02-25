@@ -1,25 +1,25 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { OldApiService } from '../../proxy/services/old-api.service';
+import { IotApiService } from '../../proxy/services/iot-api.service';
 import { TokenResponseDto } from '../dto/token-response.dto';
 import { decodeJwt } from '../../common/utils/jwt.utils';
 
 /**
  * OAuth 2.1 Service
- * Orchestrates OAuth flow with Old API
+ * Orchestrates OAuth flow with IoT API
  */
 @Injectable()
 export class OAuthService {
   private readonly logger = new Logger(OAuthService.name);
 
   constructor(
-    private readonly oldApiService: OldApiService,
+    private readonly iotApiService: IotApiService,
     private readonly configService: ConfigService,
   ) {}
 
   /**
-   * Handle user login via Old API
-   * Forwards credentials to Old API, registers auth code, returns code
+   * Handle user login via IoT API
+   * Forwards credentials to IoT API, registers auth code, returns code
    *
    * @param projectApiKey - Project API key
    * @param email - User email
@@ -30,7 +30,7 @@ export class OAuthService {
    * @param state - OAuth state parameter
    * @param scope - Optional scope
    * @param resource - Optional resource indicator
-   * @returns Authorization code from Old API
+   * @returns Authorization code from IoT API
    */
   async handleLogin(
     projectApiKey: string,
@@ -47,7 +47,7 @@ export class OAuthService {
 
     try {
       // Step 1: Login to get JWT token
-      const loginResult = await this.oldApiService.login(projectApiKey, email, password);
+      const loginResult = await this.iotApiService.login(projectApiKey, email, password);
       
       // Step 2: Decode JWT to get userId (Firebase uses 'user_id' in their custom tokens)
       const decoded = decodeJwt(loginResult.access_token);
@@ -57,8 +57,8 @@ export class OAuthService {
         throw new Error('JWT token does not contain user_id or sub claim');
       }
 
-      // Step 3: Register auth code with Old API
-      const authCodeResult = await this.oldApiService.registerAuthCode(projectApiKey, userId);
+      // Step 3: Register auth code with IoT API
+      const authCodeResult = await this.iotApiService.registerAuthCode(projectApiKey, userId);
 
       this.logger.log(`Login successful for ${email}, auth code generated`);
       return authCodeResult.code;
@@ -70,7 +70,7 @@ export class OAuthService {
 
   /**
    * Exchange authorization code for access token
-   * Calls Old API exchangeAuthCode endpoint
+   * Calls IoT API exchangeAuthCode endpoint
    *
    * @param projectApiKey - Project API key
    * @param code - Authorization code from handleLogin
@@ -89,8 +89,8 @@ export class OAuthService {
     this.logger.log(`Exchanging code for project ${projectApiKey}`);
 
     try {
-      // Exchange code with Old API (no redirect_uri needed)
-      const result = await this.oldApiService.exchangeAuthCode(projectApiKey, code);
+      // Exchange code with IoT API (no redirect_uri needed)
+      const result = await this.iotApiService.exchangeAuthCode(projectApiKey, code);
 
       this.logger.log('Code exchange successful, returning tokens');
 
@@ -111,7 +111,7 @@ export class OAuthService {
 
   /**
    * Refresh access token using refresh token
-   * Calls Old API refreshToken endpoint
+   * Calls IoT API refreshToken endpoint
    *
    * @param projectApiKey - Project API key
    * @param refreshToken - Refresh token JWT
@@ -126,8 +126,8 @@ export class OAuthService {
     this.logger.log(`Refreshing token for project ${projectApiKey}`);
 
     try {
-      // Refresh token with Old API
-      const result = await this.oldApiService.refreshToken(projectApiKey, refreshToken);
+      // Refresh token with IoT API
+      const result = await this.iotApiService.refreshToken(projectApiKey, refreshToken);
 
       this.logger.log('Token refresh successful');
 
