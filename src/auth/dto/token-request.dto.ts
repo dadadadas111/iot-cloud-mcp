@@ -45,12 +45,16 @@ export class TokenRequestDto {
   @IsUrl()
   @IsOptional()
   redirect_uri?: string;
-
   @ApiPropertyOptional({
-    description: 'Resource indicator (RFC 8707)',
-    example: 'https://api.example.com',
+    description: 'Client identifier (optional for public clients)',
+    example: 'my-client-app',
   })
-  @IsUrl()
+  @IsString()
+  @IsOptional()
+  client_id?: string;
+
+
+  @IsString()
   @IsOptional()
   resource?: string;
 }

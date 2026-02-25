@@ -50,6 +50,11 @@ export class AuthController {
     @Res() res: Response,
   ): Promise<void> {
     this.logger.log(`Authorization request for project ${projectApiKey}`);
+    this.logger.log(`  redirect_uri: ${query.redirect_uri}`);
+    this.logger.log(`  response_type: ${query.response_type}`);
+    this.logger.log(`  state: ${query.state}`);
+    this.logger.log(`  code_challenge: ${query.code_challenge?.substring(0, 20)}...`);
+    this.logger.log(`  code_challenge_method: ${query.code_challenge_method}`);
 
     // Generate and return login page
     const html = generateLoginPage(projectApiKey, query);
@@ -82,6 +87,7 @@ export class AuthController {
     @Res() res: Response,
   ): Promise<void> {
     this.logger.log(`Login attempt for ${body.email} in project ${projectApiKey}`);
+    this.logger.log(`  Redirect URI from form: ${body.redirect_uri}`);
 
     // Authenticate user and generate authorization code
     const authCode = await this.oauthService.handleLogin(

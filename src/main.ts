@@ -19,6 +19,24 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Global request logging middleware
+  app.use((req, res, next) => {
+    const start = Date.now();
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Origin: ${req.headers.origin || 'none'} - Content-Type: ${req.headers['content-type'] || 'none'}`);
+    
+    // Log response
+    const originalSend = res.send;
+    res.send = function(data) {
+      const duration = Date.now() - start;
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode} - ${duration}ms`);
+      if (res.statusCode >= 400) {
+        console.log(`  Error body: ${typeof data === 'string' ? data.substring(0, 200) : JSON.stringify(data).substring(0, 200)}`);
+      }
+      return originalSend.call(this, data);
+    };
+    next();
+  });
+
   // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({

@@ -1,0 +1,1 @@
+{"resource":"http://localhost:3001/mcp/d7953e98-c479-4f08-bc3b-80d4c9b3c03d","authorization_servers":["http://localhost:3001/auth/d7953e98-c479-4f08-bc3b-80d4c9b3c03d"],"bearer_methods_supported":["header"],"scopes_supported":["mcp.tools.read","mcp.tools.write"]}
