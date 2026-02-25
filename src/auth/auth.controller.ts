@@ -2,10 +2,12 @@ import {
   Controller,
   Get,
   Post,
+  Options,
   Body,
   Query,
   Param,
   Res,
+  Headers,
   HttpStatus,
   Logger,
   BadRequestException,
@@ -99,10 +101,26 @@ export class AuthController {
     redirectUrl.searchParams.set('code', authCode);
     redirectUrl.searchParams.set('state', body.state);
 
-    this.logger.log(`Login successful, redirecting to ${body.redirect_uri}`);
+    this.logger.log(`Login successful, redirecting to ${redirectUrl.toString()}`);
     res.redirect(HttpStatus.FOUND, redirectUrl.toString());
   }
 
+  /**
+   * CORS Preflight Handler for Token Endpoint
+   * Explicitly handles OPTIONS requests for token endpoint
+   */
+  @Options('token')
+  @ApiOperation({ summary: 'CORS preflight for token endpoint' })
+  @ApiParam({ name: 'projectApiKey', description: 'Project API key' })
+  tokenOptions(@Res() res: Response): void {
+    this.logger.log('CORS preflight request received for token endpoint');
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, x-admin-api-key, x-project-api-key, mcp-protocol-version');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400');
+    res.status(HttpStatus.NO_CONTENT).send();
+  }
   /**
    * OAuth 2.1 Token Endpoint
    * Exchanges authorization code or refresh token for access token
@@ -116,8 +134,32 @@ export class AuthController {
   async token(
     @Param('projectApiKey') projectApiKey: string,
     @Body() body: TokenRequestDto,
+    @Headers() headers: Record<string, string>,
   ): Promise<TokenResponseDto> {
     this.logger.log(`Token request for project ${projectApiKey}, grant_type: ${body.grant_type}`);
+    this.logger.log(`Token request headers: ${JSON.stringify({
+      authorization: headers.authorization || headers.Authorization || 'MISSING',
+      'content-type': headers['content-type'],
+      origin: headers.origin,
+    })}`);
+    this.logger.log(`Token request body: ${JSON.stringify(body)}`);
+
+    // Parse Basic Auth header if present (ChatGPT MCP client pattern)
+    let clientId: string | undefined;
+    let clientSecret: string | undefined;
+    const authHeader = headers.authorization || headers.Authorization;
+    if (authHeader && authHeader.startsWith('Basic ')) {
+      try {
+        const base64Credentials = authHeader.substring(6);
+        const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
+        const [id, secret] = credentials.split(':');
+        clientId = id;
+        clientSecret = secret;
+        this.logger.log(`Basic Auth parsed: client_id=${clientId}`);
+      } catch (error) {
+        this.logger.warn(`Failed to parse Basic Auth header: ${error.message}`);
+      }
+    }
 
     // Handle authorization_code grant
     if (body.grant_type === 'authorization_code') {
