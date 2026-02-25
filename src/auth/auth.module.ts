@@ -1,12 +1,17 @@
 import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
 import { AuthController } from './auth.controller';
-import { AuthService } from './auth.service';
+import { OAuthService } from './services/oauth.service';
+import { DiscoveryService } from './services/discovery.service';
+import { ProxyModule } from '../proxy/proxy.module';
 
+/**
+ * OAuth 2.1 Authentication Module
+ * Implements OAuth 2.1 authorization flow with Old API orchestration
+ */
 @Module({
-  imports: [HttpModule],
+  imports: [ProxyModule],
   controllers: [AuthController],
-  providers: [AuthService],
-  exports: [AuthService],
+  providers: [OAuthService, DiscoveryService],
+  exports: [OAuthService],
 })
 export class AuthModule {}

@@ -1,13 +1,31 @@
 import { Module } from '@nestjs/common';
-import { HttpModule } from '@nestjs/axios';
-import { McpService } from './services/mcp.service';
-import { AuthModule } from '@/auth/auth.module';
-import { ApiClientService } from '@/mcp/services/api-client.service';
-import { RedisService } from '@/mcp/services/redis.service';
+import { McpController } from './mcp.controller';
+import { SessionManagerService } from './services/session-manager.service';
+import { McpServerFactory } from './services/mcp-server.factory';
+import { McpProtocolHandlerService } from './services/mcp-protocol-handler.service';
+import { ToolsModule } from '../tools/tools.module';
+import { AuthModule } from '../auth/auth.module';
+import { CommonModule } from '../common/common.module';
 
+/**
+ * McpModule
+ * Implements Model Context Protocol with per-tenant MCP servers.
+ * Provides streamable HTTP transport for MCP JSON-RPC 2.0 protocol.
+ *
+ * Features:
+ * - Per-tenant MCP server instances for isolation
+ * - In-memory session management (PoC)
+ * - JWT-based authentication
+ * - Tool registry integration
+ */
 @Module({
-  imports: [HttpModule, AuthModule],
-  providers: [McpService, ApiClientService, RedisService],
-  exports: [McpService, ApiClientService],
+  imports: [
+    ToolsModule, // For tool registration
+    AuthModule, // For JWT validation
+    CommonModule, // For shared utilities and decorators
+  ],
+  controllers: [McpController],
+  providers: [SessionManagerService, McpServerFactory, McpProtocolHandlerService],
+  exports: [SessionManagerService, McpServerFactory, McpProtocolHandlerService],
 })
 export class McpModule {}

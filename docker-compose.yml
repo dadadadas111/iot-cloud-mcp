@@ -13,10 +13,7 @@ services:
 
       # IoT Cloud API
       IOT_API_BASE_URL: ${IOT_API_BASE_URL}
-      IOT_API_KEY: ${IOT_API_KEY}
       IOT_API_TIMEOUT: ${IOT_API_TIMEOUT:-30000}
-
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
 
       # Redis Configuration
       REDIS_HOST: ${REDIS_HOST:-localhost}
@@ -35,6 +32,8 @@ services:
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-info}
+
+      BASE_URL: ${BASE_URL:-https://mcp.dash.id.vn}
 
     networks:
       - iot-network

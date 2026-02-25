@@ -2,11 +2,13 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { HttpModule } from '@nestjs/axios';
-
-import { AuthModule } from './auth/auth.module';
-import { ApiModule } from './api/api.module';
-import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
+import { CommonModule } from './common/common.module';
+import { ProxyModule } from './proxy/proxy.module';
+import { DiscoveryModule } from './discovery/discovery.module';
+import { AuthModule } from './auth/auth.module';
+import { ToolsModule } from './tools/tools.module';
+import { McpModule } from './mcp/mcp.module';
 
 @Module({
   imports: [
@@ -30,11 +32,24 @@ import { HealthController } from './health.controller';
       maxRedirects: 5,
     }),
 
-    // Feature modules
+    // Shared utilities
+    CommonModule,
+
+    // Proxy to Old API
+    ProxyModule,
+
+    // OAuth Discovery
+    DiscoveryModule,
+
+    // OAuth Authentication
     AuthModule,
-    ApiModule,
-    AdminModule,
+
+    // MCP Tools
+    ToolsModule,
+
+    // MCP Protocol
+    McpModule,
   ],
   controllers: [HealthController],
 })
-export class AppModule {}
+export class AppModule { }
