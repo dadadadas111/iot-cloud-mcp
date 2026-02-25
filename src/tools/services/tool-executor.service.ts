@@ -39,6 +39,104 @@ export class ToolExecutorService {
   constructor(private iotApiService: IotApiService) { }
 
   /**
+   * Validate parameters for a tool
+   * @param toolName - Name of the tool
+   * @param params - Parameters to validate
+   * @returns Error message if validation fails, otherwise null
+   */
+  private validateParams(toolName: string, params: Record<string, unknown>): string | null {
+    switch (toolName) {
+      case FETCH_USER_TOOL.name:
+        // No parameters required for fetchUser
+        if (Object.keys(params).length > 0) {
+          return 'fetchUser tool does not accept any parameters.';
+        }
+        break;
+      case SEARCH_TOOL.name:
+        if (!params.query || typeof params.query !== 'string') {
+          return 'search tool requires a "query" parameter of type string.';
+        }
+        break;
+      case FETCH_TOOL.name:
+        if (!params.id || typeof params.id !== 'string') {
+          return 'fetch tool requires an "id" parameter of type string.';
+        }
+        break;
+      case LIST_DEVICES_TOOL.name:
+        if (params.locationId && typeof params.locationId !== 'string') {
+          return 'listDevices tool accepts an optional "locationId" parameter of type string.';
+        }
+        break;
+      case LIST_LOCATIONS_TOOL.name:
+        // No parameters required for listLocations
+        if (Object.keys(params).length > 0) {
+          return 'listLocations tool does not accept any parameters.';
+        }
+        break;
+      case LIST_GROUPS_TOOL.name:
+        if (params.locationId && typeof params.locationId !== 'string') {
+          return 'listGroups tool accepts an optional "locationId" parameter of type string.';
+        }
+        break;
+      case GET_DEVICE_TOOL.name:
+        if (!params.uuid || typeof params.uuid !== 'string') {
+          return 'getDevice tool requires a "uuid" parameter of type string.';
+        }
+        break;
+      case UPDATE_DEVICE_TOOL.name:
+        if (!params.uuid || typeof params.uuid !== 'string') {
+          return 'updateDevice tool requires a "uuid" parameter of type string.';
+        }
+        if (Object.keys(params).length <= 1) {
+          return 'updateDevice tool requires at least one field to update.';
+        }
+        break;
+      case DELETE_DEVICE_TOOL.name:
+        if (!params.uuid || typeof params.uuid !== 'string') {
+          return 'deleteDevice tool requires a "uuid" parameter of type string.';
+        }
+        break;
+      case GET_DEVICE_STATE_TOOL.name:
+        if (!params.deviceUuid || typeof params.deviceUuid !== 'string') {
+          return 'getDeviceState tool requires a "deviceUuid" parameter of type string.';
+        }
+        break;
+      case GET_LOCATION_STATE_TOOL.name:
+        if (!params.locationUuid || typeof params.locationUuid !== 'string') {
+          return 'getLocationState tool requires a "locationUuid" parameter of type string.';
+        }
+        break;
+      case GET_DEVICE_STATE_BY_MAC_TOOL.name:
+        if (!params.locationUuid || typeof params.locationUuid !== 'string') {
+          return 'getDeviceStateByMac tool requires a "locationUuid" parameter of type string.';
+        }
+        if (!params.macAddress || typeof params.macAddress !== 'string') {
+          return 'getDeviceStateByMac tool requires a "macAddress" parameter of type string.';
+        }
+        break;
+      case CONTROL_DEVICE_TOOL.name:
+        if (!params.uuid || typeof params.uuid !== 'string') {
+          return 'controlDevice tool requires a "uuid" parameter of type string.';
+        }
+        if (!params.command || !Array.isArray(params.command)) {
+          return 'controlDevice tool requires a "command" parameter of type array.';
+        }
+        break;
+      case CONTROL_DEVICE_SIMPLE_TOOL.name:
+        if (!params.uuid || typeof params.uuid !== 'string') {
+          return 'controlDeviceSimple tool requires a "uuid" parameter of type string.';
+        }
+        if (!params.action || typeof params.action !== 'string') {
+          return 'controlDeviceSimple tool requires an "action" parameter of type string.';
+        }
+        break;
+      default:
+        return `Unknown tool: ${toolName}`;
+    }
+    return null;
+  }
+
+  /**
    * Execute a tool with given parameters and context
    * Handles authentication, service delegation, and response formatting
    *
@@ -52,6 +150,22 @@ export class ToolExecutorService {
     params: Record<string, unknown>,
     context: ToolContext,
   ): Promise<CallToolResult> {
+    // Validate parameters before executing the tool
+    const validationError = this.validateParams(toolName, params);
+    if (validationError) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({
+              isError: true,
+              error: validationError,
+            }),
+          },
+        ],
+      };
+    }
+
     if (toolName === FETCH_USER_TOOL.name) {
       return this.executeFetchUser(params as FetchUserParams, context);
     }
