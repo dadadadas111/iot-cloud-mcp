@@ -195,4 +195,363 @@ export class IotApiService {
       throw error;
     }
   }
+
+  /**
+   * List all devices (/iot-core/device/{userId})
+   * Optional locationId filter via query parameter
+   *
+   * @param projectApiKey - Project API key from URL parameter (:projectApiKey)
+   * @param userId - User ID extracted from JWT token
+   * @param locationId - Optional location ID filter
+   * @returns Array of devices
+   */
+  async listDevices(projectApiKey: string, userId: string, locationId?: string): Promise<any[]> {
+    try {
+      logProxyCall('Listing devices', { userId, locationId });
+
+      const params = locationId ? `?locationId=${locationId}` : '';
+      const endpoint = `${this.baseUrl}/iot-core/device/${userId}${params}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<any[]>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Devices listed successfully', { count: response.data?.length || 0 });
+      return response.data;
+    } catch (error) {
+      logProxyCall('List devices failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * List all locations (/iot-core/location/{userId})
+   *
+   * @param projectApiKey - Project API key from URL parameter (:projectApiKey)
+   * @param userId - User ID extracted from JWT token
+   * @returns Array of locations
+   */
+  async listLocations(projectApiKey: string, userId: string): Promise<any[]> {
+    try {
+      logProxyCall('Listing locations', { userId });
+
+      const endpoint = `${this.baseUrl}/iot-core/location/${userId}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<any[]>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Locations listed successfully', { count: response.data?.length || 0 });
+      return response.data;
+    } catch (error) {
+      logProxyCall('List locations failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * List all groups (/iot-core/group/{userId})
+   * Optional locationId filter via query parameter
+   *
+   * @param projectApiKey - Project API key from URL parameter (:projectApiKey)
+   * @param userId - User ID extracted from JWT token
+   * @param locationId - Optional location ID filter
+   * @returns Array of groups
+   */
+  async listGroups(projectApiKey: string, userId: string, locationId?: string): Promise<any[]> {
+    try {
+      logProxyCall('Listing groups', { userId, locationId });
+
+      const params = locationId ? `?locationId=${locationId}` : '';
+      const endpoint = `${this.baseUrl}/iot-core/group/${userId}${params}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<any[]>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Groups listed successfully', { count: response.data?.length || 0 });
+      return response.data;
+    } catch (error) {
+      logProxyCall('List groups failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * Get device by UUID (/iot-core/device/{userId}/{uuid})
+   *
+   * @param projectApiKey - Project API key from URL parameter (:projectApiKey)
+   * @param userId - User ID extracted from JWT token
+   * @param uuid - Device UUID
+   * @returns Device object
+   */
+  async getDevice(projectApiKey: string, userId: string, uuid: string): Promise<any> {
+    try {
+      logProxyCall('Getting device', { userId, uuid });
+
+      const endpoint = `${this.baseUrl}/iot-core/device/${userId}/${uuid}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<any>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Device fetched successfully', { uuid });
+      return response.data;
+    } catch (error) {
+      logProxyCall('Get device failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * Get location by UUID (/iot-core/location/{userId}/{uuid})
+   *
+   * @param projectApiKey - Project API key from URL parameter (:projectApiKey)
+   * @param userId - User ID extracted from JWT token
+   * @param uuid - Location UUID
+   * @returns Location object
+   */
+  async getLocation(projectApiKey: string, userId: string, uuid: string): Promise<any> {
+    try {
+      logProxyCall('Getting location', { userId, uuid });
+
+      const endpoint = `${this.baseUrl}/iot-core/location/${userId}/${uuid}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<any>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Location fetched successfully', { uuid });
+      return response.data;
+    } catch (error) {
+      logProxyCall('Get location failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * Get group by UUID (/iot-core/group/{userId}/{uuid})
+   *
+   * @param projectApiKey - Project API key from URL parameter (:projectApiKey)
+   * @param userId - User ID extracted from JWT token
+   * @param uuid - Group UUID
+   * @returns Group object
+   */
+  async getGroup(projectApiKey: string, userId: string, uuid: string): Promise<any> {
+    try {
+      logProxyCall('Getting group', { userId, uuid });
+
+      const endpoint = `${this.baseUrl}/iot-core/group/${userId}/${uuid}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<any>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Group fetched successfully', { uuid });
+      return response.data;
+    } catch (error) {
+      logProxyCall('Get group failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * Update device properties (label, desc, locationId, groupId)
+   * @param projectApiKey - Project API key for authentication
+   * @param userId - User ID
+   * @param uuid - Device UUID
+   * @param updates - Fields to update
+   */
+  async updateDevice(
+    projectApiKey: string,
+    userId: string,
+    uuid: string,
+    updates: {
+      label?: string;
+      desc?: string;
+      locationId?: string;
+      groupId?: string;
+    },
+  ): Promise<any> {
+    try {
+      logProxyCall('Updating device', { userId, uuid, updates });
+
+      const endpoint = `${this.baseUrl}/iot-core/device/${userId}`;
+
+      const response = await firstValueFrom(
+        this.httpService.patch<any>(
+          endpoint,
+          { uuid, ...updates },
+          {
+            headers: this.getHeaders(projectApiKey),
+          },
+        ),
+      );
+
+      logProxyCall('Device updated successfully', { uuid });
+      return response.data;
+    } catch (error) {
+      logProxyCall('Update device failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * Delete device permanently
+   * @param projectApiKey - Project API key for authentication
+   * @param userId - User ID
+   * @param uuid - Device UUID to delete
+   */
+  async deleteDevice(
+    projectApiKey: string,
+    userId: string,
+    uuid: string,
+  ): Promise<any> {
+    try {
+      logProxyCall('Deleting device', { userId, uuid });
+
+      const endpoint = `${this.baseUrl}/iot-core/device/${userId}`;
+
+      const response = await firstValueFrom(
+        this.httpService.delete<any>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+          data: { uuid },
+        }),
+      );
+
+      logProxyCall('Device deleted successfully', { uuid });
+      return response.data;
+    } catch (error) {
+      logProxyCall('Delete device failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * Get device state by device UUID
+   * @param projectApiKey - Project API key for authentication
+   * @param deviceUuid - Device UUID
+   */
+  async getDeviceState(projectApiKey: string, deviceUuid: string): Promise<any> {
+    try {
+      logProxyCall('Getting device state', { deviceUuid });
+
+      const endpoint = `${this.baseUrl}/iot-core/state/devId/${deviceUuid}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<any>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Device state fetched successfully', { deviceUuid });
+      return response.data;
+    } catch (error) {
+      logProxyCall('Get device state failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * Get state of all devices in a location
+   * @param projectApiKey - Project API key for authentication
+   * @param locationUuid - Location UUID
+   */
+  async getLocationState(projectApiKey: string, locationUuid: string): Promise<any> {
+    try {
+      logProxyCall('Getting location state', { locationUuid });
+
+      const endpoint = `${this.baseUrl}/iot-core/state/${locationUuid}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<any>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Location state fetched successfully', { locationUuid });
+      return response.data;
+    } catch (error) {
+      logProxyCall('Get location state failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * Get device state by MAC address within a location
+   * @param projectApiKey - Project API key for authentication
+   * @param locationUuid - Location UUID
+   * @param macAddress - Device MAC address
+   */
+  async getDeviceStateByMac(
+    projectApiKey: string,
+    locationUuid: string,
+    macAddress: string,
+  ): Promise<any> {
+    try {
+      logProxyCall('Getting device state by MAC', { locationUuid, macAddress });
+
+      const endpoint = `${this.baseUrl}/iot-core/state/${locationUuid}/${macAddress}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<any>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Device state by MAC fetched successfully', { macAddress });
+      return response.data;
+    } catch (error) {
+      logProxyCall('Get device state by MAC failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
+
+  /**
+   * Control device by sending command
+   * @param projectApiKey - Project API key for authentication
+   * @param controlPayload - Control request body with eid, elementIds, command, endpoint, partnerId, rootUuid, protocolCtl
+   */
+  async controlDevice(
+    projectApiKey: string,
+    controlPayload: {
+      eid: number;
+      elementIds: number[];
+      command: number[];
+      endpoint: string;
+      partnerId: string;
+      rootUuid: string;
+      protocolCtl: number;
+    },
+  ): Promise<any> {
+    try {
+      logProxyCall('Controlling device', { eid: controlPayload.eid, command: controlPayload.command });
+
+      const endpoint = `${this.baseUrl}/iot-core/control/device`;
+
+      const response = await firstValueFrom(
+        this.httpService.post<any>(endpoint, controlPayload, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Device control command sent successfully', { eid: controlPayload.eid });
+      return response.data;
+    } catch (error) {
+      logProxyCall('Control device failed', { error: (error as Error).message });
+      throw error;
+    }
+  }
 }

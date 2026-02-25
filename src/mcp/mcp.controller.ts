@@ -135,6 +135,7 @@ export class McpController {
       const mcpResponse = await this.protocolHandler.handleRequest(body, {
         authorization,
         projectApiKey,
+        mcpServer: session.server, // Pass McpServer instance for tool listing
       });
       // Add session ID to response for client tracking
       if (mcpResponse && typeof mcpResponse === 'object') {

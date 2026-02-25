@@ -52,7 +52,7 @@ export class McpProtocolHandlerService {
    */
   async handleRequest(
     request: McpRequest,
-    context: { authorization?: string; projectApiKey: string },
+    context: { authorization?: string; projectApiKey: string; mcpServer?: any },
   ): Promise<McpResponse> {
     const { method, id, params } = request;
 
@@ -67,7 +67,7 @@ export class McpProtocolHandlerService {
           break;
 
         case 'tools/list':
-          result = await this.handleToolsList();
+          result = await this.handleToolsList(context.mcpServer);
           break;
 
         case 'tools/call':
@@ -134,12 +134,33 @@ export class McpProtocolHandlerService {
 
   /**
    * Handle tools/list method
-   * Returns list of available tools
+   * Returns list of available tools from the McpServer instance
    *
+   * @param mcpServer - McpServer instance with registered tools
    * @returns List of tools with schemas
    */
-  private async handleToolsList(): Promise<any> {
+  private async handleToolsList(mcpServer?: any): Promise<any> {
     this.logger.debug('Tools list requested');
+
+    // If mcpServer is provided, extract registered tools from it
+    if (mcpServer && mcpServer._registeredTools) {
+      const tools = Object.entries(mcpServer._registeredTools)
+        .filter(([, tool]: [string, any]) => tool.enabled !== false)
+        .map(([name, tool]: [string, any]) => ({
+          name,
+          description: tool.description || tool.title || '',
+          inputSchema: tool.inputSchema || { type: 'object', properties: {} },
+        }));
+
+      this.logger.log(`Returning ${tools.length} registered tools`);
+
+      return {
+        tools,
+      };
+    }
+
+    // Fallback to hardcoded tool (should not happen in normal operation)
+    this.logger.warn('McpServer not provided, falling back to hardcoded tool');
 
     return {
       tools: [
@@ -148,7 +169,6 @@ export class McpProtocolHandlerService {
           description: FETCH_USER_TOOL.description,
           inputSchema: FETCH_USER_TOOL.inputSchema,
         },
-        // Add more tools here as needed
       ],
     };
   }
