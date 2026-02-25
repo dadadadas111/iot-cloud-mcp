@@ -152,7 +152,7 @@ export class OAuthService {
    * @returns Base URL for authorization endpoints
    */
   getAuthServerUrl(projectApiKey: string): string {
-    const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3000');
+    const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
     return `${baseUrl}/auth/${projectApiKey}`;
   }
 }

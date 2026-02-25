@@ -19,7 +19,7 @@ export class DiscoveryService {
    * @returns Resource metadata object
    */
   getProtectedResourceMetadata(projectApiKey: string): any {
-    const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3000');
+    const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
     const resourceUrl = `${baseUrl}/api/${projectApiKey}`;
 
     this.logger.log(`Generating protected resource metadata for ${projectApiKey}`);
@@ -43,7 +43,7 @@ export class DiscoveryService {
    * @returns Authorization server metadata object
    */
   getAuthorizationServerMetadata(projectApiKey: string): any {
-    const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3000');
+    const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
     const issuer = `${baseUrl}/auth/${projectApiKey}`;
 
     this.logger.log(`Generating authorization server metadata for ${projectApiKey}`);

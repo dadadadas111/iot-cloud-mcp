@@ -63,7 +63,7 @@ export class AuthorizeQueryDto {
     description: 'Resource indicator (RFC 8707)',
     example: 'https://api.example.com',
   })
-  @IsUrl()
+  @IsString()
   @IsOptional()
   resource?: string;
 }
