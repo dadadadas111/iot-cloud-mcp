@@ -97,8 +97,8 @@ export class ToolExecutorService {
         }
         break;
       case GET_DEVICE_STATE_TOOL.name:
-        if (!params.deviceUuid || typeof params.deviceUuid !== 'string') {
-          return 'getDeviceState tool requires a "deviceUuid" parameter of type string.';
+        if (!params.uuid || typeof params.uuid !== 'string') {
+          return 'getDeviceState tool requires a "uuid" parameter of type string.';
         }
         break;
       case GET_LOCATION_STATE_TOOL.name:
@@ -924,7 +924,7 @@ export class ToolExecutorService {
     try {
       const state = await this.iotApiService.getDeviceState(
         context.projectApiKey || 'unknown',
-        params.deviceUuid,
+        params.uuid,
       );
 
       return {

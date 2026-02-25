@@ -73,7 +73,7 @@ export class IotApiService {
       logProxyCall('Login successful', { email });
       return response.data;
     } catch (error) {
-      logProxyCall('Login failed', { error: (error as Error).message });
+      this.logDetailedError('Login', error);
       throw error;
     }
   }
@@ -103,7 +103,7 @@ export class IotApiService {
       logProxyCall('Auth code registered successfully', { userId });
       return response.data;
     } catch (error) {
-      logProxyCall('Auth code registration failed', { error: (error as Error).message });
+      this.logDetailedError('Register auth code', error);
       throw error;
     }
   }
@@ -133,7 +133,7 @@ export class IotApiService {
       logProxyCall('Auth code exchange successful');
       return response.data;
     } catch (error) {
-      logProxyCall('Auth code exchange failed', { error: (error as Error).message });
+      this.logDetailedError('Exchange auth code', error);
       throw error;
     }
   }
@@ -163,7 +163,7 @@ export class IotApiService {
       logProxyCall('Token refresh successful');
       return response.data;
     } catch (error) {
-      logProxyCall('Token refresh failed', { error: (error as Error).message });
+      this.logDetailedError('Refresh token', error);
       throw error;
     }
   }
@@ -191,7 +191,7 @@ export class IotApiService {
       logProxyCall('User data fetched successfully', { userId });
       return response.data;
     } catch (error) {
-      logProxyCall('User data fetch failed', { error: (error as Error).message });
+      this.logDetailedError('Fetch user data', error);
       throw error;
     }
   }
@@ -221,7 +221,7 @@ export class IotApiService {
       logProxyCall('Devices listed successfully', { count: response.data?.length || 0 });
       return response.data;
     } catch (error) {
-      logProxyCall('List devices failed', { error: (error as Error).message });
+      this.logDetailedError('List devices', error);
       throw error;
     }
   }
@@ -248,7 +248,7 @@ export class IotApiService {
       logProxyCall('Locations listed successfully', { count: response.data?.length || 0 });
       return response.data;
     } catch (error) {
-      logProxyCall('List locations failed', { error: (error as Error).message });
+      this.logDetailedError('List locations', error);
       throw error;
     }
   }
@@ -278,7 +278,7 @@ export class IotApiService {
       logProxyCall('Groups listed successfully', { count: response.data?.length || 0 });
       return response.data;
     } catch (error) {
-      logProxyCall('List groups failed', { error: (error as Error).message });
+      this.logDetailedError('List groups', error);
       throw error;
     }
   }
@@ -306,7 +306,7 @@ export class IotApiService {
       logProxyCall('Device fetched successfully', { uuid });
       return response.data;
     } catch (error) {
-      logProxyCall('Get device failed', { error: (error as Error).message });
+      this.logDetailedError('Get device', error);
       throw error;
     }
   }
@@ -334,7 +334,7 @@ export class IotApiService {
       logProxyCall('Location fetched successfully', { uuid });
       return response.data;
     } catch (error) {
-      logProxyCall('Get location failed', { error: (error as Error).message });
+      this.logDetailedError('Get location', error);
       throw error;
     }
   }
@@ -362,7 +362,7 @@ export class IotApiService {
       logProxyCall('Group fetched successfully', { uuid });
       return response.data;
     } catch (error) {
-      logProxyCall('Get group failed', { error: (error as Error).message });
+      this.logDetailedError('Get group', error);
       throw error;
     }
   }
@@ -403,7 +403,7 @@ export class IotApiService {
       logProxyCall('Device updated successfully', { uuid });
       return response.data;
     } catch (error) {
-      logProxyCall('Update device failed', { error: (error as Error).message });
+      this.logDetailedError('Update device', error);
       throw error;
     }
   }
@@ -434,7 +434,7 @@ export class IotApiService {
       logProxyCall('Device deleted successfully', { uuid });
       return response.data;
     } catch (error) {
-      logProxyCall('Delete device failed', { error: (error as Error).message });
+      this.logDetailedError('Delete device', error);
       throw error;
     }
   }
@@ -459,7 +459,7 @@ export class IotApiService {
       logProxyCall('Device state fetched successfully', { deviceUuid });
       return response.data;
     } catch (error) {
-      logProxyCall('Get device state failed', { error: (error as Error).message });
+      this.logDetailedError('Get device state', error);
       throw error;
     }
   }
@@ -484,7 +484,7 @@ export class IotApiService {
       logProxyCall('Location state fetched successfully', { locationUuid });
       return response.data;
     } catch (error) {
-      logProxyCall('Get location state failed', { error: (error as Error).message });
+      this.logDetailedError('Get location state', error);
       throw error;
     }
   }
@@ -514,7 +514,7 @@ export class IotApiService {
       logProxyCall('Device state by MAC fetched successfully', { macAddress });
       return response.data;
     } catch (error) {
-      logProxyCall('Get device state by MAC failed', { error: (error as Error).message });
+      this.logDetailedError('Get device state by MAC', error);
       throw error;
     }
   }
@@ -550,8 +550,18 @@ export class IotApiService {
       logProxyCall('Device control command sent successfully', { eid: controlPayload.eid });
       return response.data;
     } catch (error) {
-      logProxyCall('Control device failed', { error: (error as Error).message });
+      this.logDetailedError('Control device', error);
       throw error;
     }
+  }
+
+  private logDetailedError(context: string, error: any) {
+    const errorDetails = {
+      message: error?.message || 'Unknown error',
+      status: error?.response?.status || 'N/A',
+      data: error?.response?.data || 'No response data',
+      stack: error?.stack || 'No stack trace',
+    };
+    logProxyCall(`${context} failed`, errorDetails);
   }
 }

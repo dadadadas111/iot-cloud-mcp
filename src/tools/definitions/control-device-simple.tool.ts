@@ -38,7 +38,7 @@ export type ControlDeviceSimpleParams = z.infer<typeof ControlDeviceSimpleParams
 export const CONTROL_DEVICE_SIMPLE_TOOL = {
   name: 'control_device_simple',
   description:
-    'Control device using simplified actions. THIS IS A DESTRUCTIVE OPERATION that changes device state. Actions: turn_on, turn_off, set_brightness (0-1000), set_kelvin (0-65000), set_temperature (15-30°C for AC), set_mode (0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN for AC). Wait 2-3 seconds before checking state as commands are asynchronous (MQTT).',
+    'Control device using simplified actions. THIS IS A DESTRUCTIVE OPERATION that changes device state. DEVICE ELEMENTS are physical components - if elementId is omitted, controls ALL elements. Available actions: turn_on, turn_off | set_brightness (0-1000) | set_kelvin (0-65000) | set_temperature (15-30°C for AC) | set_mode (0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN for AC). Commands are asynchronous via MQTT - wait 2-3 seconds before checking state with get_device_state to verify changes.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -74,7 +74,7 @@ export const CONTROL_DEVICE_SIMPLE_TOOL = {
   metadata: {
     name: 'control_device_simple',
     description:
-      'Control device using simplified actions. THIS IS A DESTRUCTIVE OPERATION that changes device state. Actions: turn_on, turn_off, set_brightness (0-1000), set_kelvin (0-65000), set_temperature (15-30°C for AC), set_mode (0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN for AC). Wait 2-3 seconds before checking state as commands are asynchronous (MQTT).',
+      'Control device using simplified actions. THIS IS A DESTRUCTIVE OPERATION that changes device state. DEVICE ELEMENTS are physical components - if elementId is omitted, controls ALL elements. Available actions: turn_on, turn_off | set_brightness (0-1000) | set_kelvin (0-65000) | set_temperature (15-30°C for AC) | set_mode (0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN for AC). Commands are asynchronous via MQTT - wait 2-3 seconds before checking state with get_device_state to verify changes.',
     readOnlyHint: false,
     destructiveHint: true,
     securitySchemes: {

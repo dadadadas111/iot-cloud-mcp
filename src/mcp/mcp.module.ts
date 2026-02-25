@@ -4,6 +4,7 @@ import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
 import { McpProtocolHandlerService } from './services/mcp-protocol-handler.service';
 import { ToolsModule } from '../tools/tools.module';
+import { ResourcesModule } from '../resources/resources.module';
 import { AuthModule } from '../auth/auth.module';
 import { CommonModule } from '../common/common.module';
 
@@ -17,10 +18,12 @@ import { CommonModule } from '../common/common.module';
  * - In-memory session management (PoC)
  * - JWT-based authentication
  * - Tool registry integration
+ * - Resource registry for documentation
  */
 @Module({
   imports: [
     ToolsModule, // For tool registration
+    ResourcesModule, // For resource registration
     AuthModule, // For JWT validation
     CommonModule, // For shared utilities and decorators
   ],

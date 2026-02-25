@@ -9,7 +9,7 @@ import { z } from 'zod';
  * get_device_state tool parameters
  */
 const GetDeviceStateParamsSchema = z.object({
-  deviceUuid: z.string().describe('Device UUID'),
+  uuid: z.string().describe('Device UUID'),
 });
 
 /** Type for get_device_state parameters */
@@ -23,21 +23,21 @@ export type GetDeviceStateParams = z.infer<typeof GetDeviceStateParamsSchema>;
 export const GET_DEVICE_STATE_TOOL = {
   name: 'get_device_state',
   description:
-    'Get the current state of a specific device by UUID. Returns device state with attributes like power, brightness, temperature, etc.',
+    'Get the current state of a specific device by UUID. Returns device state with attributes like power, brightness, temperature, etc. State structure: state[deviceId][elementId][attributeId] = [attributeId, ...values]. See device-attr-and-control.csv for attribute reference.',
   inputSchema: {
     type: 'object' as const,
     properties: {
-      deviceUuid: {
+      uuid: {
         type: 'string',
         description: 'Device UUID',
       },
     },
-    required: ['deviceUuid'],
+    required: ['uuid'],
   },
   metadata: {
     name: 'get_device_state',
     description:
-      'Get the current state of a specific device by UUID. Returns device state with attributes like power, brightness, temperature, etc.',
+      'Get the current state of a specific device by UUID. Returns device state with attributes like power, brightness, temperature, etc. State structure: state[deviceId][elementId][attributeId] = [attributeId, ...values]. See device-attr-and-control.csv for attribute reference.',
     readOnlyHint: true,
     securitySchemes: {
       oauth2: {

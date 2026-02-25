@@ -124,6 +124,9 @@ export class McpProtocolHandlerService {
         tools: {
           listChanged: false,
         },
+        resources: {
+          listChanged: false,
+        },
       },
       serverInfo: {
         name: 'iot-cloud-mcp-gateway',

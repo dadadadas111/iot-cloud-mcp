@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ToolRegistryService } from '../../tools/services/tool-registry.service';
+import { ResourceRegistryService } from '../../resources/services/resource-registry.service';
 
 /**
  * McpServerFactory
@@ -14,6 +15,7 @@ export class McpServerFactory {
 
   constructor(
     private readonly toolRegistry: ToolRegistryService,
+    private readonly resourceRegistry: ResourceRegistryService,
     private readonly configService: ConfigService,
   ) {}
 
@@ -34,12 +36,16 @@ export class McpServerFactory {
       {
         capabilities: {
           tools: {},
+          resources: {},
         },
       },
     );
 
     // Register all available tools on this server instance
     this.toolRegistry.registerTools(server, projectApiKey);
+
+    // Register all available resources
+    this.resourceRegistry.registerResources(server);
 
 
     this.logger.log(`MCP server created and tools registered for project: ${projectApiKey}`);
