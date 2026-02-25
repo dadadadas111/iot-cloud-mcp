@@ -9,7 +9,6 @@ import {
   Res,
   HttpStatus,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Response } from 'express';
 import { SessionManagerService } from './services/session-manager.service';
@@ -28,7 +27,6 @@ export class McpController {
   private readonly logger = new Logger(McpController.name);
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly sessionManager: SessionManagerService,
     private readonly serverFactory: McpServerFactory,
     private readonly protocolHandler: McpProtocolHandlerService,
@@ -67,21 +65,17 @@ export class McpController {
       `MCP request received - Project: ${projectApiKey}, Method: ${body?.method || 'unknown'}`,
     );
 
-    // Handle unauthenticated requests with MCP-compliant 401 response
+    // Validate Bearer token
     if (!authorization || !authorization.startsWith('Bearer ')) {
       this.logger.warn(`Missing or invalid Authorization header for project: ${projectApiKey}`);
-      
-      // Return 401 with OAuth discovery URLs to trigger VS Code OAuth flow
-      const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
-      const authorizationUrl = `${baseUrl}/auth/${projectApiKey}/authorize`;
-      const tokenUrl = `${baseUrl}/auth/${projectApiKey}/token`;
-      
-      res.setHeader('WWW-Authenticate', `Bearer realm="MCP Gateway", authorization_uri="${authorizationUrl}", token_uri="${tokenUrl}"`);
+      res.setHeader('WWW-Authenticate', 'Bearer realm="MCP Gateway"');
       res.status(HttpStatus.UNAUTHORIZED).json({
-        error: 'unauthorized',
-        error_description: 'Bearer token required. Please authenticate via OAuth 2.1 flow.',
-        authorization_url: authorizationUrl,
-        token_url: tokenUrl,
+        jsonrpc: '2.0',
+        error: {
+          code: -32001,
+          message: 'Unauthorized: Bearer token required',
+        },
+        id: body?.id || null,
       });
       return;
     }
