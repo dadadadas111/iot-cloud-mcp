@@ -29,7 +29,7 @@ export class IotApiService {
     private httpService: HttpService,
     private configService: ConfigService,
   ) {
-    this.baseUrl = this.configService.get<string>('IOT_API_BASE_URL') || 'https://api.example.com';
+    this.baseUrl = this.configService.get<string>('IOT_API_BASE_URL') || 'https://staging.openapi.rogo.com.vn/api/v2.0';
   }
 
   /**

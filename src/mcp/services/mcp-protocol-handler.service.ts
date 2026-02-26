@@ -74,6 +74,13 @@ export class McpProtocolHandlerService {
           result = await this.handleToolsCall(params, context);
           break;
 
+        case 'resources/list':
+          result = await this.handleResourcesList(context.mcpServer);
+          break;
+
+        case 'resources/read':
+          result = await this.handleResourcesRead(params, context.mcpServer);
+          break;
         case 'ping':
           result = {}; // Simple ping response
           break;
@@ -203,5 +210,80 @@ export class McpProtocolHandlerService {
     });
 
     return result;
+  }
+
+  /**
+   * Handle resources/list method
+   * Returns list of available resources from the McpServer instance
+   *
+   * @param mcpServer - McpServer instance with registered resources
+   * @returns List of resources with metadata
+   */
+  private async handleResourcesList(mcpServer?: any): Promise<any> {
+    this.logger.log('📋 Resources list requested');
+
+    // If mcpServer is provided, extract registered resources from it
+    if (mcpServer && mcpServer._registeredResources) {
+      const resources = Object.values(mcpServer._registeredResources)
+        .filter((resource: any) => resource.enabled !== false)
+        .map((resource: any) => ({
+          uri: resource.uri,
+          name: resource.name,
+          description: resource.description || '',
+          mimeType: resource.mimeType,
+        }));
+
+      this.logger.log(`Returning ${resources.length} registered resources`);
+
+      return {
+        resources,
+      };
+    }
+
+    // No resources available
+    this.logger.warn('McpServer not provided or no resources registered');
+    return {
+      resources: [],
+    };
+  }
+
+  /**
+   * Handle resources/read method
+   * Reads content of a specific resource
+   *
+   * @param params - Resource read parameters { uri }
+   * @param mcpServer - McpServer instance with registered resources
+   * @returns Resource content
+   */
+  private async handleResourcesRead(params: any, mcpServer?: any): Promise<any> {
+    const { uri } = params;
+
+    this.logger.log(`📖 Resource read requested: ${uri}`);
+
+    if (!uri) {
+      throw new Error('Resource URI is required');
+    }
+
+    // Find the resource handler
+    if (mcpServer && mcpServer._registeredResources) {
+      const resource = mcpServer._registeredResources[uri];
+
+      if (!resource) {
+        throw new Error(`Resource not found: ${uri}`);
+      }
+
+      this.logger.log(`Reading resource: ${resource.name}`);
+
+      // Execute the resource read callback
+      if (typeof resource.handler === 'function') {
+        const result = await resource.handler();
+        this.logger.log(`✅ Resource read successful: ${uri} (${result.contents?.[0]?.text?.length || 0} chars)`);
+        return result;
+      }
+
+      throw new Error(`Resource handler not callable: ${uri}`);
+    }
+
+    throw new Error('McpServer not provided or no resources available');
   }
 }
