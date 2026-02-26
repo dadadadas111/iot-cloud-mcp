@@ -34,7 +34,8 @@ function readDocumentation(topic: string): string {
 
   try {
     const fileName = fileMap[topic];
-    const filePath = path.join(__dirname, '../../../docs/ai-resources', fileName);
+    // Use process.cwd() instead of __dirname for consistent path resolution
+    const filePath = path.join(process.cwd(), 'docs', 'ai-resources', fileName);
     return fs.readFileSync(filePath, 'utf-8');
   } catch (error) {
     return `Error loading documentation: ${error.message}`;
@@ -54,7 +55,7 @@ function readDocumentation(topic: string): string {
 export const GET_DEVICE_DOCUMENTATION_TOOL = {
   name: 'get_device_documentation',
   description:
-    'Get comprehensive documentation about IoT device control. Call this when you need details about device concepts, available commands, control workflows, or state structure. Returns full markdown documentation.',
+    'Get device control documentation. Available topics: "overview" (core concepts/fields), "device_attributes" (commands/device types), "control_guide" (how to control devices), "state_guide" (reading device state). Returns markdown documentation.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -70,7 +71,7 @@ export const GET_DEVICE_DOCUMENTATION_TOOL = {
   metadata: {
     name: 'get_device_documentation',
     description:
-      'Get comprehensive documentation about IoT device control. Call this when you need details about device concepts, available commands, control workflows, or state structure. Returns full markdown documentation.',
+      'Get device control documentation. Available topics: "overview" (core concepts/fields), "device_attributes" (commands/device types), "control_guide" (how to control devices), "state_guide" (reading device state). Returns markdown documentation.',
     readOnlyHint: true,
     securitySchemes: {
       oauth2: {

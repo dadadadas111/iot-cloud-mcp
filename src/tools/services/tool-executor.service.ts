@@ -130,6 +130,15 @@ export class ToolExecutorService {
           return 'controlDeviceSimple tool requires an "action" parameter of type string.';
         }
         break;
+      case 'get_device_documentation':
+        if (!params.topic || typeof params.topic !== 'string') {
+          return 'get_device_documentation tool requires a "topic" parameter of type string.';
+        }
+        const validTopics = ['overview', 'device_attributes', 'control_guide', 'state_guide'];
+        if (!validTopics.includes(params.topic as string)) {
+          return `get_device_documentation tool requires topic to be one of: ${validTopics.join(', ')}`;
+        }
+        break;
       default:
         return `Unknown tool: ${toolName}`;
     }
@@ -221,6 +230,11 @@ export class ToolExecutorService {
     if (toolName === CONTROL_DEVICE_SIMPLE_TOOL.name) {
       return this.executeControlDeviceSimple(params as ControlDeviceSimpleParams, context);
     }
+
+    if (toolName === 'get_device_documentation') {
+      return this.executeGetDeviceDocumentation(params as { topic: string });
+    }
+
 
     throw new BadRequestException(`Unknown tool: ${toolName}`);
   }
@@ -1280,6 +1294,44 @@ export class ToolExecutorService {
               _meta: {
                 'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
               },
+            }),
+          },
+        ],
+      };
+    }
+  }
+
+  /**
+   * Execute get_device_documentation tool
+   * Returns documentation markdown content
+   *  
+   * @param params - Tool parameters including topic
+   * @returns MCP-formatted documentation content
+   */
+  private executeGetDeviceDocumentation(
+    params: { topic: string },
+  ): CallToolResult {
+    const GET_DEVICE_DOCUMENTATION_TOOL = require('../definitions/get-device-documentation.tool').GET_DEVICE_DOCUMENTATION_TOOL;
+    
+    try {
+      const content = GET_DEVICE_DOCUMENTATION_TOOL.execute(params.topic);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: content,
+          },
+        ],
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({
+              isError: true,
+              error: errorMessage,
             }),
           },
         ],
