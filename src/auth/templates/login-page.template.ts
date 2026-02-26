@@ -12,8 +12,8 @@ export function generateLoginPage(
     client_id: string;
     redirect_uri: string;
     state: string;
-    code_challenge: string;
-    code_challenge_method: string;
+    code_challenge?: string | undefined;
+    code_challenge_method?: string | undefined;
     scope?: string;
     response_type?: string;
     resource?: string;

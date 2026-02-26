@@ -27,20 +27,22 @@ export class AuthorizeQueryDto {
   @IsString()
   state: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'PKCE code challenge (base64url-encoded)',
     example: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
   })
   @IsString()
-  code_challenge: string;
+  @IsOptional()
+  code_challenge?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'PKCE code challenge method',
     example: 'S256',
     enum: ['S256', 'plain'],
   })
   @IsIn(['S256', 'plain'])
-  code_challenge_method: string;
+  @IsOptional()
+  code_challenge_method?: string;
 
   @ApiPropertyOptional({
     description: 'OAuth scope (space-separated)',
