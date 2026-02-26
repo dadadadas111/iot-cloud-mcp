@@ -16,7 +16,7 @@ export const OVERVIEW_RESOURCE = {
   uri: 'rogo://docs/overview',
   name: 'IoT MCP Overview',
   description:
-    'Introduction to the IoT Cloud MCP Bridge: system architecture, core concepts (device/element/attribute/state), field definitions (uuid/eid/rootUuid), and quick reference. Read this first.',
+    '[Manual Reference] Introduction to the IoT Cloud MCP Bridge: system architecture, core concepts (device/element/attribute/state), field definitions (uuid/eid/rootUuid), and quick reference. For AI-accessible docs, use get_device_documentation tool instead.',
   mimeType: 'text/markdown',
 
   /**

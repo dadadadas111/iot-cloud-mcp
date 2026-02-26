@@ -21,6 +21,7 @@ import { GET_LOCATION_STATE_TOOL } from '../definitions/get-location-state.tool'
 import { GET_DEVICE_STATE_BY_MAC_TOOL } from '../definitions/get-device-state-by-mac.tool';
 import { CONTROL_DEVICE_TOOL } from '../definitions/control-device.tool';
 import { CONTROL_DEVICE_SIMPLE_TOOL } from '../definitions/control-device-simple.tool';
+import { GET_DEVICE_DOCUMENTATION_TOOL } from '../definitions/get-device-documentation.tool';
 
 /**
  * Service responsible for registering MCP tools with the MCP server
@@ -259,6 +260,28 @@ export class ToolRegistryService {
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
+      },
+    );
+
+    // Register get_device_documentation tool (read-only)
+    mcpServer.registerTool(
+      GET_DEVICE_DOCUMENTATION_TOOL.name,
+      {
+        description: GET_DEVICE_DOCUMENTATION_TOOL.metadata.description,
+        inputSchema: GET_DEVICE_DOCUMENTATION_TOOL.schema,
+      },
+      async (params: Record<string, unknown>) => {
+        // Documentation tool doesn't need auth - it's read-only
+        const { topic } = params as { topic: string };
+        const content = GET_DEVICE_DOCUMENTATION_TOOL.execute(topic);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: content,
+            },
+          ],
+        };
       },
     );
   }

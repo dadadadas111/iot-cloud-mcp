@@ -45,7 +45,7 @@ export type ControlDeviceParams = z.infer<typeof ControlDeviceParamsSchema>;
 export const CONTROL_DEVICE_TOOL = {
   name: 'control_device',
   description:
-    'Control IoT devices by specifying device UUID, element IDs, and commands. DEVICE ELEMENTS are physical components (e.g., a 4-button switch has 4 elements). COMMAND FORMAT: [attributeId, value, ...] where common attributes include: ON_OFF (1): 0=off, 1=on | BRIGHTNESS (28): 0-1000 | KELVIN (29): 0-65000 | TEMP_SET (20): 15-30°C for AC | MODE (17): 0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN. Use get_device first to see available elements. Control fields (endpoint, partnerId, rootUuid, protocolCtl) are fetched automatically from device data.',
+    'Control IoT devices by UUID, element IDs, and commands. Elements are physical parts (e.g., 4-button switch has 4 elements). Command format: [attrId, value]. Common attrs: 1=ON_OFF (0/1), 28=BRIGHTNESS (0-1000), 29=KELVIN, 20=TEMP_SET (15-30°C), 17=MODE. Call get_device_documentation for full reference.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -69,7 +69,7 @@ export const CONTROL_DEVICE_TOOL = {
   metadata: {
     name: 'control_device',
     description:
-      'Control IoT devices by specifying device UUID, element IDs, and commands. DEVICE ELEMENTS are physical components (e.g., a 4-button switch has 4 elements). COMMAND FORMAT: [attributeId, value, ...] where common attributes include: ON_OFF (1): 0=off, 1=on | BRIGHTNESS (28): 0-1000 | KELVIN (29): 0-65000 | TEMP_SET (20): 15-30°C for AC | MODE (17): 0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN. Use get_device first to see available elements. Control fields (endpoint, partnerId, rootUuid, protocolCtl) are fetched automatically from device data.',
+    'Control IoT devices by UUID, element IDs, and commands. Elements are physical parts (e.g., 4-button switch has 4 elements). Command format: [attrId, value]. Common attrs: 1=ON_OFF (0/1), 28=BRIGHTNESS (0-1000), 29=KELVIN, 20=TEMP_SET (15-30°C), 17=MODE. Call get_device_documentation for full reference.',
     examples: [
       {
         input: {

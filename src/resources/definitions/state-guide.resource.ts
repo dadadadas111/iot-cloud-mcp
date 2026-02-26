@@ -13,7 +13,7 @@ export const STATE_GUIDE_RESOURCE = {
   uri: 'rogo://docs/state-guide',
   name: 'Device State Guide',
   description:
-    'Complete guide for reading device state: structure explanation, real examples, and how to use state for verification and capability discovery.',
+    '[Manual Reference] Complete guide for reading device state: structure explanation, real examples, and how to use state for verification and capability discovery. For AI-accessible docs, use get_device_documentation tool instead.',
   mimeType: 'text/markdown',
 
   async read(): Promise<string> {

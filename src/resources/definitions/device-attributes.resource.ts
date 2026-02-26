@@ -15,7 +15,7 @@ export const DEVICE_ATTRIBUTES_RESOURCE = {
   uri: 'rogo://docs/device-attributes',
   name: 'Device Attributes Reference',
   description:
-    'Complete reference of device types, attributes, commands, and value ranges. Essential for understanding what controls are available for each device type.',
+    '[Manual Reference] Complete reference of device types, attributes, commands, and value ranges. For AI-accessible docs, use get_device_documentation tool instead.',
   mimeType: 'text/markdown',
 
   /**

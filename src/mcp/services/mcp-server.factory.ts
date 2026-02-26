@@ -38,6 +38,21 @@ export class McpServerFactory {
           tools: {},
           resources: {},
         },
+        instructions: `IoT Device Control MCP Server
+
+Key Concepts:
+- Device: IoT hardware (light, switch, AC, lock, gate) identified by UUID
+- Element: Physical control point (e.g., 4-button switch has 4 elements)
+- Attribute: Controllable property (brightness, color, temperature, etc.)
+- UUID format: MongoDB _id (24 hex characters, no dashes)
+
+Getting Started:
+1. Call get_device_documentation tool for detailed reference guides
+2. Use get_device_state to discover device capabilities and current values
+3. For common actions: control_device_simple (turn_on, set_brightness, etc.)
+4. For precise control: control_device with specific attribute elementIds
+
+All device control operations require only: uuid, elementIds (or action), and command/value.`,
       },
     );
 
