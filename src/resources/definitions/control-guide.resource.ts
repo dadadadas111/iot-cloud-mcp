@@ -18,7 +18,7 @@ export const CONTROL_GUIDE_RESOURCE = {
 
   async read(): Promise<string> {
     try {
-      const guidePath = path.join(__dirname, '../../../docs/ai-resources/control-guide.md');
+      const guidePath = path.join(process.cwd(), 'docs', 'ai-resources', 'control-guide.md');
       return fs.readFileSync(guidePath, 'utf-8');
     } catch (error) {
       return `# Error Loading Control Guide\n\n${error.message}`;

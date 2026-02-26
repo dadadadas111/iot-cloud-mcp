@@ -23,7 +23,7 @@ export const DEVICE_ATTRIBUTES_RESOURCE = {
    */
   async read(): Promise<string> {
     try {
-      const mdPath = path.join(__dirname, '../../../docs/ai-resources/device-attributes.md');
+      const mdPath = path.join(process.cwd(), 'docs', 'ai-resources', 'device-attributes.md');
       const content = fs.readFileSync(mdPath, 'utf-8');
       return content;
     } catch (error) {

@@ -24,7 +24,7 @@ export const OVERVIEW_RESOURCE = {
    */
   async read(): Promise<string> {
     try {
-      const mdPath = path.join(__dirname, '../../../docs/ai-resources/overview.md');
+      const mdPath = path.join(process.cwd(), 'docs', 'ai-resources', 'overview.md');
       const content = fs.readFileSync(mdPath, 'utf-8');
       return content;
     } catch (error) {
