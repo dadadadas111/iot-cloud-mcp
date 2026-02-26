@@ -17,7 +17,8 @@ export function generateLoginPage(
     scope?: string;
     response_type?: string;
     resource?: string;
-  },
+    },
+    error?: string,
 ): string {
   return `
 <!DOCTYPE html>
@@ -115,6 +116,7 @@ export function generateLoginPage(
             <p style="color: #666; margin-top: 8px;">Sign in to continue</p>
         </div>
         
+        ${error ? `<div style="background:#ffe6e6;border:1px solid #ffb3b3;color:#8a1f1f;padding:12px;border-radius:6px;margin-bottom:16px;">${error}</div>` : ''}
         <form method="POST" action="/auth/${projectApiKey}/login">
             <div class="form-group">
                 <label for="email">Email</label>

@@ -88,27 +88,45 @@ export class AuthController {
   ): Promise<void> {
     this.logger.log(`Login attempt for ${body.email} in project ${projectApiKey}`);
     this.logger.log(`  Redirect URI from form: ${body.redirect_uri}`);
+    try {
+      // Authenticate user and generate authorization code
+      const authCode = await this.oauthService.handleLogin(
+        projectApiKey,
+        body.email,
+        body.password,
+        body.code_challenge,
+        body.code_challenge_method,
+        body.redirect_uri,
+        body.state,
+        body.scope,
+        body.resource,
+      );
 
-    // Authenticate user and generate authorization code
-    const authCode = await this.oauthService.handleLogin(
-      projectApiKey,
-      body.email,
-      body.password,
-      body.code_challenge,
-      body.code_challenge_method,
-      body.redirect_uri,
-      body.state,
-      body.scope,
-      body.resource,
-    );
+      // Build redirect URL with authorization code
+      const redirectUrl = new URL(body.redirect_uri);
+      redirectUrl.searchParams.set('code', authCode);
+      redirectUrl.searchParams.set('state', body.state);
 
-    // Build redirect URL with authorization code
-    const redirectUrl = new URL(body.redirect_uri);
-    redirectUrl.searchParams.set('code', authCode);
-    redirectUrl.searchParams.set('state', body.state);
+      this.logger.log(`Login successful, redirecting to ${redirectUrl.toString()}`);
+      res.redirect(HttpStatus.FOUND, redirectUrl.toString());
+    } catch (err) {
+      this.logger.warn(`Login failed for ${body.email}: ${err.message}`);
 
-    this.logger.log(`Login successful, redirecting to ${redirectUrl.toString()}`);
-    res.redirect(HttpStatus.FOUND, redirectUrl.toString());
+      // Re-render login page with error message instead of returning JSON
+      const oauthParams = {
+        client_id: body.client_id,
+        redirect_uri: body.redirect_uri,
+        state: body.state,
+        code_challenge: body.code_challenge,
+        code_challenge_method: body.code_challenge_method,
+        scope: body.scope,
+        response_type: 'code',
+        resource: body.resource,
+      };
+
+      const html = generateLoginPage(projectApiKey, oauthParams, err.message || 'Login failed');
+      res.status(HttpStatus.UNAUTHORIZED).contentType('text/html').send(html);
+    }
   }
 
   /**
@@ -169,12 +187,14 @@ export class AuthController {
 
     // Handle authorization_code grant
     if (body.grant_type === 'authorization_code') {
-      if (!body.code || !body.code_verifier || !body.redirect_uri) {
-        throw new BadRequestException(
-          'code, code_verifier, and redirect_uri are required for authorization_code grant',
-        );
+      if (!body.code) {
+        throw new BadRequestException('code is required for authorization_code grant');
       }
 
+      // PKCE `code_verifier` and `redirect_uri` are optional for this implementation
+      // because the underlying IoT API performs the actual token exchange and
+      // does not require those parameters. Accept requests from clients that
+      // don't implement PKCE (e.g., some OAuth clients) to improve compatibility.
       return this.oauthService.exchangeCode(
         projectApiKey,
         body.code,

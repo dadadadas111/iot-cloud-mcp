@@ -82,8 +82,8 @@ export class OAuthService {
   async exchangeCode(
     projectApiKey: string,
     code: string,
-    codeVerifier: string,
-    redirectUri: string,
+    codeVerifier?: string | undefined,
+    redirectUri?: string | undefined,
     resource?: string,
   ): Promise<TokenResponseDto> {
     this.logger.log(`Exchanging code for project ${projectApiKey}`);
