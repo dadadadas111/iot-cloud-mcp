@@ -1250,7 +1250,7 @@ export class ToolExecutorService {
         command,
         endpoint: device.endpoint,
         partnerId: device.partnerId,
-        rootUuid: device.rootUuid,
+        rootUuid: device.rootUuid ? device.rootUuid : device.uuid,
         protocolCtl: device.protocolCtl,
       };
 
