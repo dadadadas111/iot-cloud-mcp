@@ -25,11 +25,22 @@ services:
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-60000}
 
+      # Redis Configuration
+      REDIS_HOST: ${REDIS_HOST:-redis-staging}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-debug}
 
       BASE_URL: ${BASE_URL:-https://mcp-stag.dash.id.vn}
 
+      # MCP Session
+      MCP_SESSION_TTL: ${MCP_SESSION_TTL:-3600}
+
+    depends_on:
+      - redis-staging
     networks:
       - iot-network-staging
 
@@ -39,6 +50,18 @@ services:
         max-size: '10m'
         max-file: '3'
 
+  redis-staging:
+    image: redis:7-alpine
+    container_name: iot-cloud-redis-staging
+    restart: unless-stopped
+    volumes:
+      - redis-data-staging:/data
+    networks:
+      - iot-network-staging
+
 networks:
   iot-network-staging:
     driver: bridge
+
+volumes:
+  redis-data-staging:
