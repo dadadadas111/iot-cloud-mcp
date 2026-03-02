@@ -111,13 +111,13 @@ export class McpController {
 
     // Get or create session
     let sessionId = body?.params?.sessionId;
-    let session = sessionId ? this.sessionManager.getSession(projectApiKey, sessionId) : null;
+    let session = sessionId ? await this.sessionManager.getSession(projectApiKey, sessionId) : null;
 
     if (!session) {
       // Create new session with server instance
       const server = this.serverFactory.createServer(projectApiKey);
-      sessionId = this.sessionManager.createSession(projectApiKey, userId, server);
-      session = this.sessionManager.getSession(projectApiKey, sessionId)!;
+      sessionId = await this.sessionManager.createSession(projectApiKey, userId, server);
+      session = (await this.sessionManager.getSession(projectApiKey, sessionId))!;
 
       this.logger.log(`New session created - SessionId: ${sessionId}, UserId: ${userId}`);
     } else {

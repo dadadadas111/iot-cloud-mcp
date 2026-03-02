@@ -3,6 +3,7 @@ import { McpController } from './mcp.controller';
 import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
 import { McpProtocolHandlerService } from './services/mcp-protocol-handler.service';
+import { RedisSessionRepository } from './services/redis-session.repository';
 import { ToolsModule } from '../tools/tools.module';
 import { ResourcesModule } from '../resources/resources.module';
 import { AuthModule } from '../auth/auth.module';
@@ -15,7 +16,7 @@ import { CommonModule } from '../common/common.module';
  *
  * Features:
  * - Per-tenant MCP server instances for isolation
- * - In-memory session management (PoC)
+ * - Redis-backed session management with local McpServer cache
  * - JWT-based authentication
  * - Tool registry integration
  * - Resource registry for documentation
@@ -28,7 +29,7 @@ import { CommonModule } from '../common/common.module';
     CommonModule, // For shared utilities and decorators
   ],
   controllers: [McpController],
-  providers: [SessionManagerService, McpServerFactory, McpProtocolHandlerService],
-  exports: [SessionManagerService, McpServerFactory, McpProtocolHandlerService],
+  providers: [SessionManagerService, McpServerFactory, McpProtocolHandlerService, RedisSessionRepository],
+  exports: [SessionManagerService, McpServerFactory, McpProtocolHandlerService, RedisSessionRepository],
 })
 export class McpModule {}

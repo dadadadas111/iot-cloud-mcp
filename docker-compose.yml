@@ -16,7 +16,7 @@ services:
       IOT_API_TIMEOUT: ${IOT_API_TIMEOUT:-30000}
 
       # Redis Configuration
-      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_HOST: ${REDIS_HOST:-redis}
       REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       REDIS_DB: ${REDIS_DB:-0}
@@ -35,6 +35,11 @@ services:
 
       BASE_URL: ${BASE_URL:-https://mcp.dash.id.vn}
 
+      # MCP Session
+      MCP_SESSION_TTL: ${MCP_SESSION_TTL:-3600}
+
+    depends_on:
+      - redis
     networks:
       - iot-network
 
@@ -44,6 +49,20 @@ services:
         max-size: '10m'
         max-file: '3'
 
+  redis:
+    image: redis:7-alpine
+    container_name: iot-cloud-redis
+    restart: unless-stopped
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    networks:
+      - iot-network
+
 networks:
   iot-network:
     driver: bridge
+
+volumes:
+  redis-data:

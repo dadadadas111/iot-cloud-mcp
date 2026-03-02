@@ -35,3 +35,15 @@ export interface McpSession {
    */
   lastActivity: Date;
 }
+
+/**
+ * Redis-serializable session metadata.
+ * Stored in Redis — excludes non-serializable McpServer instance.
+ */
+export interface RedisSessionData {
+  sessionId: string;
+  projectApiKey: string;
+  userId: string;
+  createdAt: string; // ISO 8601
+  lastActivity: string; // ISO 8601
+}
