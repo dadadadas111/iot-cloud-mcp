@@ -9,6 +9,7 @@ import { DiscoveryModule } from './discovery/discovery.module';
 import { AuthModule } from './auth/auth.module';
 import { ToolsModule } from './tools/tools.module';
 import { McpModule } from './mcp/mcp.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
@@ -34,6 +35,9 @@ import { McpModule } from './mcp/mcp.module';
 
     // Shared utilities
     CommonModule,
+
+    // Redis (global)
+    RedisModule,
 
     // Proxy to Old API
     ProxyModule,

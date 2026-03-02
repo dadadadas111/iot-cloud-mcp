@@ -1,51 +1,65 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import { McpSession } from '../dto/mcp-session.dto';
+import { ConfigService } from '@nestjs/config';
+import { McpSession, RedisSessionData } from '../dto/mcp-session.dto';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { RedisSessionRepository } from './redis-session.repository';
+import { McpServerFactory } from './mcp-server.factory';
 
 /**
  * SessionManagerService
- * Manages MCP sessions per tenant with in-memory storage.
- * Uses a two-level Map structure: projectApiKey -> sessionId -> McpSession
+ * Manages MCP sessions per tenant with Redis-backed metadata storage
+ * and a local in-memory cache for non-serializable McpServer instances.
  */
 @Injectable()
 export class SessionManagerService {
   private readonly logger = new Logger(SessionManagerService.name);
 
-  /**
-   * Two-level map: projectApiKey -> sessionId -> McpSession
-   * Enables per-tenant session isolation
-   */
-  private readonly sessions: Map<string, Map<string, McpSession>> = new Map();
+  /** Local cache for non-serializable McpServer instances */
+  private readonly serverCache: Map<string, McpServer> = new Map();
+
+  /** Session TTL in seconds (from MCP_SESSION_TTL env var, default 3600) */
+  private readonly ttlSeconds: number;
+
+  constructor(
+    private readonly redisRepo: RedisSessionRepository,
+    private readonly serverFactory: McpServerFactory,
+    private readonly configService: ConfigService,
+  ) {
+    this.ttlSeconds = this.configService.get<number>('MCP_SESSION_TTL', 3600);
+  }
 
   /**
-   * Creates a new MCP session for a project/user combination
+   * Builds the server cache key from project and session identifiers
+   */
+  private cacheKey(projectApiKey: string, sessionId: string): string {
+    return `${projectApiKey}:${sessionId}`;
+  }
+
+  /**
+   * Creates a new MCP session for a project/user combination.
+   * Stores metadata in Redis and caches the McpServer instance locally.
    * @param projectApiKey - Project API key
    * @param userId - User ID from JWT token
    * @param server - MCP Server instance
    * @returns Newly created session ID (UUID)
    */
-  createSession(projectApiKey: string, userId: string, server: McpServer): string {
+  async createSession(projectApiKey: string, userId: string, server: McpServer): Promise<string> {
     const sessionId = uuidv4();
-    const now = new Date();
+    const now = new Date().toISOString();
 
-    const session: McpSession = {
+    const sessionData: RedisSessionData = {
       sessionId,
       projectApiKey,
-      server,
       userId,
       createdAt: now,
       lastActivity: now,
     };
 
-    // Get or create project-level map
-    if (!this.sessions.has(projectApiKey)) {
-      this.sessions.set(projectApiKey, new Map());
-      this.logger.log(`Created session map for project: ${projectApiKey}`);
-    }
+    await this.redisRepo.save(sessionData, this.ttlSeconds);
 
-    const projectSessions = this.sessions.get(projectApiKey)!;
-    projectSessions.set(sessionId, session);
+    // Cache McpServer locally (non-serializable)
+    this.serverCache.set(this.cacheKey(projectApiKey, sessionId), server);
 
     this.logger.log(
       `Session created - Project: ${projectApiKey}, SessionId: ${sessionId}, UserId: ${userId}`,
@@ -55,48 +69,54 @@ export class SessionManagerService {
   }
 
   /**
-   * Retrieves an existing MCP session
+   * Retrieves an existing MCP session.
+   * Fetches metadata from Redis, gets/recreates McpServer from local cache.
    * @param projectApiKey - Project API key
    * @param sessionId - Session ID
    * @returns McpSession or null if not found
    */
-  getSession(projectApiKey: string, sessionId: string): McpSession | null {
-    const projectSessions = this.sessions.get(projectApiKey);
-    if (!projectSessions) {
-      this.logger.debug(`No sessions found for project: ${projectApiKey}`);
+  async getSession(projectApiKey: string, sessionId: string): Promise<McpSession | null> {
+    const sessionData = await this.redisRepo.get(projectApiKey, sessionId);
+
+    if (!sessionData) {
+      this.logger.debug(`Session not found in Redis - Project: ${projectApiKey}, SessionId: ${sessionId}`);
       return null;
     }
 
-    const session = projectSessions.get(sessionId);
-    if (!session) {
-      this.logger.debug(`Session not found - Project: ${projectApiKey}, SessionId: ${sessionId}`);
-      return null;
+    // Update last activity in Redis (async, resets TTL)
+    await this.redisRepo.updateLastActivity(projectApiKey, sessionId, this.ttlSeconds);
+
+    // Get or recreate McpServer from local cache
+    const key = this.cacheKey(projectApiKey, sessionId);
+    let server = this.serverCache.get(key);
+
+    if (!server) {
+      this.logger.log(`Recreating McpServer for session ${sessionId} (not in local cache)`);
+      server = this.serverFactory.createServer(projectApiKey);
+      this.serverCache.set(key, server);
     }
 
-    // Update last activity
-    session.lastActivity = new Date();
-    return session;
+    return {
+      sessionId: sessionData.sessionId,
+      projectApiKey: sessionData.projectApiKey,
+      server,
+      userId: sessionData.userId,
+      createdAt: new Date(sessionData.createdAt),
+      lastActivity: new Date(sessionData.lastActivity),
+    };
   }
 
   /**
-   * Deletes an MCP session
+   * Deletes an MCP session from Redis and local cache.
    * @param projectApiKey - Project API key
    * @param sessionId - Session ID
    * @returns true if deleted, false if not found
    */
-  deleteSession(projectApiKey: string, sessionId: string): boolean {
-    const projectSessions = this.sessions.get(projectApiKey);
-    if (!projectSessions) {
-      return false;
-    }
+  async deleteSession(projectApiKey: string, sessionId: string): Promise<boolean> {
+    const deleted = await this.redisRepo.delete(projectApiKey, sessionId);
 
-    const deleted = projectSessions.delete(sessionId);
-
-    // Clean up empty project map
-    if (projectSessions.size === 0) {
-      this.sessions.delete(projectApiKey);
-      this.logger.log(`Removed empty session map for project: ${projectApiKey}`);
-    }
+    // Always remove from local cache
+    this.serverCache.delete(this.cacheKey(projectApiKey, sessionId));
 
     if (deleted) {
       this.logger.log(`Session deleted - Project: ${projectApiKey}, SessionId: ${sessionId}`);
@@ -106,57 +126,22 @@ export class SessionManagerService {
   }
 
   /**
-   * Cleans up stale sessions based on last activity time
-   * @param maxAgeMs - Maximum age in milliseconds (default: 1 hour)
-   * @returns Number of sessions cleaned up
+   * No-op: Redis TTL handles session expiration automatically.
+   * Kept for API compatibility.
+   * @param _maxAgeMs - Ignored (Redis TTL governs expiration)
+   * @returns Always 0 (Redis handles cleanup via TTL)
    */
-  cleanupStale(maxAgeMs: number = 60 * 60 * 1000): number {
-    const now = Date.now();
-    let cleanedCount = 0;
-
-    for (const [projectApiKey, projectSessions] of this.sessions.entries()) {
-      const sessionsToDelete: string[] = [];
-
-      for (const [sessionId, session] of projectSessions.entries()) {
-        const age = now - session.lastActivity.getTime();
-        if (age > maxAgeMs) {
-          sessionsToDelete.push(sessionId);
-        }
-      }
-
-      // Delete stale sessions
-      for (const sessionId of sessionsToDelete) {
-        projectSessions.delete(sessionId);
-        cleanedCount++;
-      }
-
-      // Clean up empty project map
-      if (projectSessions.size === 0) {
-        this.sessions.delete(projectApiKey);
-      }
-    }
-
-    if (cleanedCount > 0) {
-      this.logger.log(`Cleaned up ${cleanedCount} stale sessions`);
-    }
-
-    return cleanedCount;
+  async cleanupStale(_maxAgeMs?: number): Promise<number> {
+    // Redis TTL handles expiration automatically — no manual cleanup needed.
+    this.logger.debug('cleanupStale called — Redis TTL handles expiration');
+    return 0;
   }
 
   /**
-   * Gets session statistics
+   * Gets session statistics from Redis.
    * @returns Object with total sessions and per-project counts
    */
-  getStats(): { totalSessions: number; projectCounts: Record<string, number> } {
-    let totalSessions = 0;
-    const projectCounts: Record<string, number> = {};
-
-    for (const [projectApiKey, projectSessions] of this.sessions.entries()) {
-      const count = projectSessions.size;
-      projectCounts[projectApiKey] = count;
-      totalSessions += count;
-    }
-
-    return { totalSessions, projectCounts };
+  async getStats(): Promise<{ totalSessions: number; projectCounts: Record<string, number> }> {
+    return this.redisRepo.getStats();
   }
 }
