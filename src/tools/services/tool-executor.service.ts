@@ -533,7 +533,7 @@ export class ToolExecutorService {
       const devices = await this.iotApiService.listDevices(
         context.projectApiKey || 'unknown',
         userId,
-        params.locationId,
+        params.locationId ?? undefined,
       );
 
       return {
@@ -668,7 +668,7 @@ export class ToolExecutorService {
       const groups = await this.iotApiService.listGroups(
         context.projectApiKey || 'unknown',
         userId,
-        params.locationId,
+        params.locationId ?? undefined,
       );
 
       return {
@@ -801,7 +801,11 @@ export class ToolExecutorService {
       const decoded = decodeJwt(token);
       const userId = getUserIdFromToken(decoded);
 
-      const { uuid, ...updates } = params;
+      const { uuid, ...rawUpdates } = params;
+      // Coerce null → undefined so downstream proxy types are satisfied
+      const updates = Object.fromEntries(
+        Object.entries(rawUpdates).filter(([, v]) => v !== null),
+      );
 
       const result = await this.iotApiService.updateDevice(
         context.projectApiKey || 'unknown',
@@ -1225,25 +1229,25 @@ export class ToolExecutorService {
           command = [1, 0];
           break;
         case 'set_brightness':
-          if (params.value === undefined) {
+          if (params.value == null) {
             throw new Error('value is required for set_brightness action');
           }
           command = [28, params.value];
           break;
         case 'set_kelvin':
-          if (params.value === undefined) {
+          if (params.value == null) {
             throw new Error('value is required for set_kelvin action');
           }
           command = [29, params.value];
           break;
         case 'set_temperature':
-          if (params.value === undefined) {
+          if (params.value == null) {
             throw new Error('value is required for set_temperature action');
           }
           command = [20, params.value];
           break;
         case 'set_mode':
-          if (params.value === undefined) {
+          if (params.value == null) {
             throw new Error('value is required for set_mode action');
           }
           command = [17, params.value];
@@ -1253,7 +1257,7 @@ export class ToolExecutorService {
       }
 
       // Use specified elementId or all device elementIds
-      const elementIds = params.elementId
+      const elementIds = params.elementId != null
         ? [params.elementId]
         : device.elementIds;
 

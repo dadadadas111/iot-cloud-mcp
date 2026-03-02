@@ -17,13 +17,13 @@ const ControlDeviceSimpleParamsSchema = z.object({
     ),
   value: z
     .number()
-    .optional()
+    .nullish()
     .describe(
       'Value for set_* actions. Required for set_brightness, set_kelvin, set_temperature, set_mode. Not used for turn_on/turn_off',
     ),
   elementId: z
     .number()
-    .optional()
+    .nullish()
     .describe('Optional specific element ID to control. If omitted, controls all elements'),
 });
 
@@ -60,12 +60,12 @@ export const CONTROL_DEVICE_SIMPLE_TOOL = {
           'Action to perform. Options: turn_on, turn_off, set_brightness (0-1000), set_kelvin (0-65000), set_temperature (15-30°C), set_mode (0=AUTO, 1=COOLING, 2=DRY, 3=HEATING, 4=FAN)',
       },
       value: {
-        type: 'number',
+        type: ['number', 'null'],
         description:
           'Value for set_* actions. Required for set_brightness, set_kelvin, set_temperature, set_mode. Not used for turn_on/turn_off',
       },
       elementId: {
-        type: 'number',
+        type: ['number', 'null'],
         description: 'Optional specific element ID to control. If omitted, controls all elements',
       },
     },

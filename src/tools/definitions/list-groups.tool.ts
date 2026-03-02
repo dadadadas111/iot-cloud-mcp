@@ -9,7 +9,7 @@ import { z } from 'zod';
  * list_groups tool parameters
  */
 const ListGroupsParamsSchema = z.object({
-  locationId: z.string().optional().describe('Optional location ID to filter groups by location'),
+  locationId: z.string().nullish().describe('Optional location ID to filter groups by location'),
 });
 
 /** Type for list_groups parameters */
@@ -27,7 +27,7 @@ export const LIST_GROUPS_TOOL = {
     type: 'object' as const,
     properties: {
       locationId: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'Optional location ID to filter groups by location',
       },
     },

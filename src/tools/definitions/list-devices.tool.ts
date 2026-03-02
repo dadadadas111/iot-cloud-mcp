@@ -9,7 +9,7 @@ import { z } from 'zod';
  * list_devices tool parameters
  */
 const ListDevicesParamsSchema = z.object({
-  locationId: z.string().optional().describe('Optional location ID to filter devices by location'),
+  locationId: z.string().nullish().describe('Optional location ID to filter devices by location'),
 });
 
 /** Type for list_devices parameters */
@@ -27,7 +27,7 @@ export const LIST_DEVICES_TOOL = {
     type: 'object' as const,
     properties: {
       locationId: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'Optional location ID to filter devices by location',
       },
     },

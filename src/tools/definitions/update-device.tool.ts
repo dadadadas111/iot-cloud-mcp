@@ -10,10 +10,10 @@ import { z } from 'zod';
  */
 const UpdateDeviceParamsSchema = z.object({
   uuid: z.string().describe('Device UUID'),
-  label: z.string().optional().describe('Optional new label for the device'),
-  desc: z.string().optional().describe('Optional new description for the device'),
-  locationId: z.string().optional().describe('Optional new location UUID to move the device'),
-  groupId: z.string().optional().describe('Optional new group UUID to assign the device'),
+  label: z.string().nullish().describe('Optional new label for the device'),
+  desc: z.string().nullish().describe('Optional new description for the device'),
+  locationId: z.string().nullish().describe('Optional new location UUID to move the device'),
+  groupId: z.string().nullish().describe('Optional new group UUID to assign the device'),
 });
 
 /** Type for update_device parameters */
@@ -36,19 +36,19 @@ export const UPDATE_DEVICE_TOOL = {
         description: 'Device UUID',
       },
       label: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'Optional new label for the device',
       },
       desc: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'Optional new description for the device',
       },
       locationId: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'Optional new location UUID to move the device',
       },
       groupId: {
-        type: 'string',
+        type: ['string', 'null'],
         description: 'Optional new group UUID to assign the device',
       },
     },
