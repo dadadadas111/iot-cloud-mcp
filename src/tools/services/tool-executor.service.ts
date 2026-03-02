@@ -8,6 +8,7 @@ import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
 import { decodeJwt, extractBearerToken, getUserIdFromToken } from '../../common/utils/jwt.utils';
+import { decodeProductId } from '../../common/utils/product.utils';
 import { FETCH_USER_TOOL, FetchUserParams } from '../definitions/fetch-user.tool';
 import { SEARCH_TOOL, SearchParams } from '../definitions/search.tool';
 import { FETCH_TOOL, FetchParams } from '../definitions/fetch.tool';
@@ -352,15 +353,45 @@ export class ToolExecutorService {
 
       // Filter results by query keyword (case-insensitive)
       const query = params.query.toLowerCase();
+
+      // Slim matched devices
       const matchedDevices = devices.filter((d: any) =>
-        d.label?.toLowerCase().includes(query) || d.desc?.toLowerCase().includes(query)
-      );
+          d.label?.toLowerCase().includes(query) || d.desc?.toLowerCase().includes(query)
+        )
+        .map((d: any) => {
+          const decoded = d.productId ? decodeProductId(d.productId as string) : null;
+          return {
+            uuid: d.uuid,
+            label: d.label,
+            desc: d.desc,
+            mac: d.mac,
+            locationId: d.locationId,
+            groupId: d.groupId,
+            features: d.features,
+            ...(decoded && { deviceType: decoded.deviceType, deviceTypeId: decoded.deviceTypeId }),
+          };
+        });
+
+      // Slim matched locations
       const matchedLocations = locations.filter((l: any) =>
-        l.label?.toLowerCase().includes(query) || l.desc?.toLowerCase().includes(query)
-      );
+          l.label?.toLowerCase().includes(query) || l.desc?.toLowerCase().includes(query)
+        )
+        .map((l: any) => ({
+          uuid: l.uuid,
+          label: l.label,
+          desc: l.desc,
+        }));
+
+      // Slim matched groups
       const matchedGroups = groups.filter((g: any) =>
-        g.label?.toLowerCase().includes(query) || g.desc?.toLowerCase().includes(query)
-      );
+          g.label?.toLowerCase().includes(query) || g.desc?.toLowerCase().includes(query)
+        )
+        .map((g: any) => ({
+          uuid: g.uuid,
+          label: g.label,
+          desc: g.desc,
+          locationId: g.locationId,
+        }));
 
       const result = {
         total: matchedDevices.length + matchedLocations.length + matchedGroups.length,
@@ -536,11 +567,28 @@ export class ToolExecutorService {
         params.locationId ?? undefined,
       );
 
+      // Enrich each device with decoded product type, then slim for token efficiency
+      const slimDevices = devices.map((device: Record<string, unknown>) => {
+        const decoded = device.productId
+          ? decodeProductId(device.productId as string)
+          : null;
+        return {
+          uuid: device.uuid,
+          label: device.label,
+          desc: device.desc,
+          mac: device.mac,
+          locationId: device.locationId,
+          groupId: device.groupId,
+          features: device.features,
+          ...(decoded && { deviceType: decoded.deviceType, deviceTypeId: decoded.deviceTypeId }),
+        };
+      });
+
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify({ total: devices.length, devices }),
+            text: JSON.stringify({ total: slimDevices.length, devices: slimDevices }),
           },
         ],
       };
@@ -602,12 +650,18 @@ export class ToolExecutorService {
         context.projectApiKey || 'unknown',
         userId,
       );
+      // Slim locations for token efficiency — drop extraInfo, userId, timestamps
+      const slimLocations = locations.map((loc: Record<string, unknown>) => ({
+        uuid: loc.uuid,
+        label: loc.label,
+        desc: loc.desc,
+      }));
 
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify({ total: locations.length, locations }),
+            text: JSON.stringify({ total: slimLocations.length, locations: slimLocations }),
           },
         ],
       };
@@ -670,12 +724,19 @@ export class ToolExecutorService {
         userId,
         params.locationId ?? undefined,
       );
+      // Slim groups for token efficiency — drop elementId, extraInfo, userId, type, timestamps
+      const slimGroups = groups.map((group: Record<string, unknown>) => ({
+        uuid: group.uuid,
+        label: group.label,
+        desc: group.desc,
+        locationId: group.locationId,
+      }));
 
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify({ total: groups.length, groups }),
+            text: JSON.stringify({ total: slimGroups.length, groups: slimGroups }),
           },
         ],
       };
@@ -739,11 +800,20 @@ export class ToolExecutorService {
         params.uuid,
       );
 
+      // Enrich with decoded product type info (keep full payload for detail view)
+      const productInfo = device.productId
+        ? decodeProductId(device.productId as string)
+        : null;
+      const enrichedDevice = {
+        ...device,
+        ...(productInfo && { deviceType: productInfo.deviceType, deviceTypeId: productInfo.deviceTypeId }),
+      };
+
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify(device),
+            text: JSON.stringify(enrichedDevice),
           },
         ],
       };
@@ -1007,12 +1077,21 @@ export class ToolExecutorService {
         context.projectApiKey || 'unknown',
         params.locationUuid,
       );
+      // Slim location state — drop redundant loc/from/uuid, keep useful fields
+      const slimState = Array.isArray(state)
+        ? state.map((entry: any) => ({
+            mac: entry.mac,
+            devId: entry.devId,
+            state: entry.state,
+            updatedAt: entry.updatedAt,
+          }))
+        : state;
 
       return {
         content: [
           {
             type: 'text' as const,
-            text: JSON.stringify(state),
+            text: JSON.stringify(slimState),
           },
         ],
       };
