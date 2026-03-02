@@ -1,166 +1,308 @@
 import {
   Controller,
   Post,
+  Get,
+  Delete,
   Param,
   Headers,
-  Body,
-  UnauthorizedException,
-  Logger,
+  Req,
   Res,
+  Logger,
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { Response } from 'express';
+import { Request, Response } from 'express';
+import { IncomingMessage, ServerResponse } from 'http';
+import { randomUUID } from 'crypto';
 import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
-import { McpProtocolHandlerService } from './services/mcp-protocol-handler.service';
 import { decodeJwt } from '../common/utils/jwt.utils';
 import { ConfigService } from '@nestjs/config';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 
 /**
  * McpController
  * Handles MCP protocol requests with per-tenant server instances.
- * Supports streamable HTTP transport for MCP JSON-RPC 2.0 protocol.
+ * Uses the official SDK StreamableHTTPServerTransport for MCP Streamable HTTP protocol.
+ *
+ * Endpoints:
+ *   POST /mcp/:projectApiKey  — JSON-RPC requests (init + subsequent)
+ *   GET  /mcp/:projectApiKey  — SSE stream for server-initiated messages
+ *   DELETE /mcp/:projectApiKey — Session termination
  */
 @ApiTags('MCP')
 @Controller('mcp')
 export class McpController {
   private readonly logger = new Logger(McpController.name);
 
+  /** Active transports keyed by SDK session ID */
+  private readonly transports: Map<string, StreamableHTTPServerTransport> = new Map();
+
+  /** Maps SDK session ID → projectApiKey for routing context */
+  private readonly sessionProjectMap: Map<string, string> = new Map();
+
   constructor(
     private readonly sessionManager: SessionManagerService,
     private readonly serverFactory: McpServerFactory,
-    private readonly protocolHandler: McpProtocolHandlerService,
     private readonly configService: ConfigService,
   ) {}
 
   /**
-   * Handles MCP protocol requests for a specific project
-   * POST /mcp/:projectApiKey
-   *
-   * @param projectApiKey - Project API key from URL path
-   * @param authorization - Bearer token from Authorization header
-   * @param body - MCP JSON-RPC 2.0 request payload
-   * @param res - Express response object for streaming
+   * Validates Bearer token and returns AuthInfo + userId.
+   * Sends 401 response and returns null on failure.
    */
-  @Post(':projectApiKey')
-
-  @ApiOperation({
-    summary: 'Handle MCP protocol request',
-    description: 'Processes MCP JSON-RPC 2.0 requests with per-tenant server isolation',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'MCP response (may be streamed)',
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized - missing or invalid Bearer token',
-  })
-  async handleMcpRequest(
-    @Param('projectApiKey') projectApiKey: string,
-    @Headers('authorization') authorization: string | undefined,
-    @Body() body: any,
-    @Res() res: Response,
-  ): Promise<void> {
-    this.logger.log(
-      `MCP request received - Project: ${projectApiKey}, Method: ${body?.method || 'unknown'}`,
-    );
-
-    // Validate Bearer token
+  private validateAuth(
+    authorization: string | undefined,
+    projectApiKey: string,
+    body: unknown,
+    res: Response,
+  ): { authInfo: AuthInfo; userId: string } | null {
     if (!authorization || !authorization.startsWith('Bearer ')) {
       this.logger.warn(`Missing or invalid Authorization header for project: ${projectApiKey}`);
       const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
-      res.setHeader('WWW-Authenticate', `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${projectApiKey}"`);
+      res.setHeader(
+        'WWW-Authenticate',
+        `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${projectApiKey}"`,
+      );
       res.status(HttpStatus.UNAUTHORIZED).json({
         jsonrpc: '2.0',
         error: {
           code: -32001,
           message: 'Unauthorized: Bearer token required',
         },
-        id: body?.id || null,
+        id: (body as Record<string, unknown>)?.id || null,
       });
-      return;
+      return null;
     }
 
-    // Extract and decode JWT token
     const token = authorization.substring(7);
-    let userId: string;
-
     try {
       const decoded = decodeJwt(token);
       if (!decoded || !(decoded.sub as string)) {
         throw new Error('Invalid token payload');
       }
-      userId = decoded.sub as string;
+      const userId = decoded.sub as string;
       this.logger.debug(`Token decoded - UserId: ${userId}`);
+
+      const authInfo: AuthInfo = {
+        token,
+        clientId: userId,
+        scopes: [],
+      };
+      return { authInfo, userId };
     } catch (error) {
       this.logger.error(`JWT decode failed for project ${projectApiKey}: ${error.message}`);
       const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
-      res.setHeader('WWW-Authenticate', `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${projectApiKey}"`);
+      res.setHeader(
+        'WWW-Authenticate',
+        `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${projectApiKey}"`,
+      );
       res.status(HttpStatus.UNAUTHORIZED).json({
         jsonrpc: '2.0',
         error: {
           code: -32001,
           message: 'Unauthorized: Invalid token',
         },
-        id: body?.id || null,
+        id: (body as Record<string, unknown>)?.id || null,
+      });
+      return null;
+    }
+  }
+
+  /**
+   * POST /mcp/:projectApiKey
+   * Handles MCP JSON-RPC 2.0 requests via StreamableHTTPServerTransport.
+   * Creates a new transport + server on initialize requests, reuses existing for subsequent.
+   */
+  @Post(':projectApiKey')
+  @ApiOperation({
+    summary: 'Handle MCP protocol request',
+    description: 'Processes MCP JSON-RPC 2.0 requests via Streamable HTTP transport',
+  })
+  @ApiResponse({ status: 200, description: 'MCP response (streamed via SSE or JSON)' })
+  @ApiResponse({ status: 401, description: 'Unauthorized - missing or invalid Bearer token' })
+  async handleMcpPost(
+    @Param('projectApiKey') projectApiKey: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('mcp-session-id') mcpSessionId: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    this.logger.log(
+      `MCP POST received - Project: ${projectApiKey}, Method: ${req.body?.method || 'unknown'}, SessionId: ${mcpSessionId || 'none'}`,
+    );
+
+    // Validate auth
+    const authResult = this.validateAuth(authorization, projectApiKey, req.body, res);
+    if (!authResult) return;
+    const { authInfo, userId } = authResult;
+
+    // Existing session — reuse transport
+    if (mcpSessionId && this.transports.has(mcpSessionId)) {
+      const transport = this.transports.get(mcpSessionId)!;
+      this.logger.debug(`Reusing transport for session: ${mcpSessionId}`);
+
+      // Set auth on raw request for SDK to pick up
+      (req as unknown as IncomingMessage & { auth?: AuthInfo }).auth = authInfo;
+      await transport.handleRequest(
+        req as unknown as IncomingMessage & { auth?: AuthInfo },
+        res as unknown as ServerResponse,
+        req.body,
+      );
+      return;
+    }
+
+    // New session — must be an initialize request
+    if (!mcpSessionId && isInitializeRequest(req.body)) {
+      this.logger.log(`Initialize request from userId: ${userId}, project: ${projectApiKey}`);
+
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: async (sessionId: string) => {
+          // Store transport and project mapping
+          this.transports.set(sessionId, transport);
+          this.sessionProjectMap.set(sessionId, projectApiKey);
+
+          // Persist session to Redis
+          const server = this.serverFactory.createServer(projectApiKey);
+          await this.sessionManager.createSession(projectApiKey, userId, server, sessionId);
+          this.logger.log(`Session initialized - SessionId: ${sessionId}, UserId: ${userId}`);
+        },
+      });
+
+      // Connect McpServer to the transport
+      const server = this.serverFactory.createServer(projectApiKey);
+      await server.connect(transport);
+
+      // Handle transport close — cleanup maps
+      transport.onclose = () => {
+        const sid = transport.sessionId;
+        if (sid) {
+          this.transports.delete(sid);
+          this.sessionProjectMap.delete(sid);
+          this.logger.log(`Transport closed, session removed: ${sid}`);
+        }
+      };
+
+      // Set auth on raw request
+      (req as unknown as IncomingMessage & { auth?: AuthInfo }).auth = authInfo;
+      await transport.handleRequest(
+        req as unknown as IncomingMessage & { auth?: AuthInfo },
+        res as unknown as ServerResponse,
+        req.body,
+      );
+      return;
+    }
+
+    // Bad request — not initialize and no valid session
+    this.logger.warn(
+      `Bad request - no valid session and not an initialize request. SessionId: ${mcpSessionId || 'none'}`,
+    );
+    res.status(HttpStatus.BAD_REQUEST).json({
+      jsonrpc: '2.0',
+      error: {
+        code: -32000,
+        message: 'Bad Request: No valid session. Send an initialize request first.',
+      },
+      id: (req.body as Record<string, unknown>)?.id || null,
+    });
+  }
+
+  /**
+   * GET /mcp/:projectApiKey
+   * SSE stream for server-initiated messages (notifications, etc.)
+   */
+  @Get(':projectApiKey')
+  @ApiOperation({
+    summary: 'MCP SSE stream',
+    description: 'Server-Sent Events stream for server-initiated MCP messages',
+  })
+  @ApiResponse({ status: 200, description: 'SSE stream established' })
+  async handleMcpGet(
+    @Param('projectApiKey') projectApiKey: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('mcp-session-id') mcpSessionId: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    this.logger.log(
+      `MCP GET received - Project: ${projectApiKey}, SessionId: ${mcpSessionId || 'none'}`,
+    );
+
+    // Validate auth
+    const authResult = this.validateAuth(authorization, projectApiKey, undefined, res);
+    if (!authResult) return;
+    const { authInfo } = authResult;
+
+    if (!mcpSessionId || !this.transports.has(mcpSessionId)) {
+      res.status(HttpStatus.BAD_REQUEST).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: Invalid or missing session ID.',
+        },
+        id: null,
       });
       return;
     }
 
-    // Get or create session
-    let sessionId = body?.params?.sessionId;
-    let session = sessionId ? await this.sessionManager.getSession(projectApiKey, sessionId) : null;
-
-    if (!session) {
-      // Create new session with server instance
-      const server = this.serverFactory.createServer(projectApiKey);
-      sessionId = await this.sessionManager.createSession(projectApiKey, userId, server);
-      session = (await this.sessionManager.getSession(projectApiKey, sessionId))!;
-
-      this.logger.log(`New session created - SessionId: ${sessionId}, UserId: ${userId}`);
-    } else {
-      this.logger.debug(`Existing session found - SessionId: ${sessionId}, UserId: ${userId}`);
-    }
-
-    // Set SSE-compatible headers for streaming responses
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-MCP-Session-Id', sessionId);
-
-    try {
-      // Process MCP request through protocol handler
-      const mcpResponse = await this.protocolHandler.handleRequest(body, {
-        authorization,
-        projectApiKey,
-        mcpServer: session.server, // Pass McpServer instance for tool listing
-      });
-      // Add session ID to response for client tracking
-      if (mcpResponse && typeof mcpResponse === 'object') {
-        (mcpResponse as any)._sessionId = sessionId;
-      }
-
-      this.logger.log(`MCP request processed - SessionId: ${sessionId}, Method: ${body?.method}`);
-
-      res.status(HttpStatus.OK).json(mcpResponse);
-    } catch (error) {
-      this.logger.error(
-        `MCP request processing failed - SessionId: ${sessionId}: ${error.message}`,
-        error.stack,
-      );
-
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: 'Internal error',
-          data: error.message,
-        },
-        id: body?.id || null,
-      });
-    }
+    const transport = this.transports.get(mcpSessionId)!;
+    (req as unknown as IncomingMessage & { auth?: AuthInfo }).auth = authInfo;
+    await transport.handleRequest(
+      req as unknown as IncomingMessage & { auth?: AuthInfo },
+      res as unknown as ServerResponse,
+    );
   }
 
+  /**
+   * DELETE /mcp/:projectApiKey
+   * Terminates an MCP session.
+   */
+  @Delete(':projectApiKey')
+  @ApiOperation({
+    summary: 'Terminate MCP session',
+    description: 'Closes an active MCP session and cleans up resources',
+  })
+  @ApiResponse({ status: 200, description: 'Session terminated' })
+  async handleMcpDelete(
+    @Param('projectApiKey') projectApiKey: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('mcp-session-id') mcpSessionId: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ): Promise<void> {
+    this.logger.log(
+      `MCP DELETE received - Project: ${projectApiKey}, SessionId: ${mcpSessionId || 'none'}`,
+    );
+
+    // Validate auth
+    const authResult = this.validateAuth(authorization, projectApiKey, undefined, res);
+    if (!authResult) return;
+
+    if (!mcpSessionId || !this.transports.has(mcpSessionId)) {
+      res.status(HttpStatus.BAD_REQUEST).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32000,
+          message: 'Bad Request: Invalid or missing session ID.',
+        },
+        id: null,
+      });
+      return;
+    }
+
+    const transport = this.transports.get(mcpSessionId)!;
+    await transport.handleRequest(
+      req as unknown as IncomingMessage,
+      res as unknown as ServerResponse,
+    );
+
+    // Cleanup
+    await this.sessionManager.deleteSession(projectApiKey, mcpSessionId);
+    this.transports.delete(mcpSessionId);
+    this.sessionProjectMap.delete(mcpSessionId);
+    this.logger.log(`Session terminated: ${mcpSessionId}`);
+  }
 }
