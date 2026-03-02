@@ -42,10 +42,11 @@ export class SessionManagerService {
    * @param projectApiKey - Project API key
    * @param userId - User ID from JWT token
    * @param server - MCP Server instance
-   * @returns Newly created session ID (UUID)
+   * @param existingSessionId - Optional pre-generated session ID (e.g. from SDK transport)
+   * @returns Session ID (provided or newly generated UUID)
    */
-  async createSession(projectApiKey: string, userId: string, server: McpServer): Promise<string> {
-    const sessionId = uuidv4();
+  async createSession(projectApiKey: string, userId: string, server: McpServer, existingSessionId?: string): Promise<string> {
+    const sessionId = existingSessionId || uuidv4();
     const now = new Date().toISOString();
 
     const sessionData: RedisSessionData = {

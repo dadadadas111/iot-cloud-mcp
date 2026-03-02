@@ -48,7 +48,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(FETCH_USER_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -64,7 +64,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(SEARCH_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -80,7 +80,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(FETCH_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -96,7 +96,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(LIST_DEVICES_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -112,7 +112,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(LIST_LOCATIONS_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -128,7 +128,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(LIST_GROUPS_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -144,7 +144,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(GET_DEVICE_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -160,7 +160,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(UPDATE_DEVICE_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -176,7 +176,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(DELETE_DEVICE_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -192,7 +192,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(GET_DEVICE_STATE_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -208,7 +208,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(GET_LOCATION_STATE_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -224,7 +224,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(GET_DEVICE_STATE_BY_MAC_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -240,7 +240,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(CONTROL_DEVICE_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });
@@ -256,7 +256,7 @@ export class ToolRegistryService {
       },
       async (params: Record<string, unknown>, extra) => {
         return this.toolExecutor.executeTool(CONTROL_DEVICE_SIMPLE_TOOL.name, params, {
-          authorization: extra.sessionId || '',
+          authorization: extra.authInfo?.token ? `Bearer ${extra.authInfo.token}` : '',
           projectApiKey,
           meta: extra as Record<string, unknown>,
         });

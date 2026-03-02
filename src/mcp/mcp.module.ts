@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { McpController } from './mcp.controller';
 import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
-import { McpProtocolHandlerService } from './services/mcp-protocol-handler.service';
 import { RedisSessionRepository } from './services/redis-session.repository';
 import { ToolsModule } from '../tools/tools.module';
 import { ResourcesModule } from '../resources/resources.module';
@@ -29,7 +28,7 @@ import { CommonModule } from '../common/common.module';
     CommonModule, // For shared utilities and decorators
   ],
   controllers: [McpController],
-  providers: [SessionManagerService, McpServerFactory, McpProtocolHandlerService, RedisSessionRepository],
-  exports: [SessionManagerService, McpServerFactory, McpProtocolHandlerService, RedisSessionRepository],
+  providers: [SessionManagerService, McpServerFactory, RedisSessionRepository],
+  exports: [SessionManagerService, McpServerFactory, RedisSessionRepository],
 })
 export class McpModule {}
