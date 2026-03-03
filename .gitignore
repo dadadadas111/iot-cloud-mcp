@@ -41,3 +41,10 @@ lerna-debug.log*
 
 # Firebase
 firebase-service-account.json
+
+# Debug artifacts
+auth_metadata.json
+resource_metadata.json
+
+# Agent state
+.sisyphus/
