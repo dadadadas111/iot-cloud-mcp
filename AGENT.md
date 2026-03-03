@@ -1,7 +1,7 @@
 # AGENT.md — iot-cloud-mcp Codebase Knowledge
 
 > **Purpose**: Comprehensive codebase guide for AI agents and developers.
-> **Last updated**: 2026-03-02 (Redis session store implementation complete)
+> **Last updated**: 2026-03-03 (response slimming, device type resolution, docs cleanup)
 
 ## What This Project Is
 
@@ -44,10 +44,10 @@ AppModule
 ├── ThrottlerModule       (rate limiting: 100 req/min default)
 ├── HttpModule            (@nestjs/axios, 30s timeout)
 ├── CommonModule          (shared utils, decorators, constants)
-│   ├── constants/        (app-wide constants)
+│   ├── constants/        (app-wide constants, product.constants.ts)
 │   ├── decorators/       (custom decorators)
 │   ├── interfaces/       (shared interfaces)
-│   └── utils/            (jwt.utils.ts — decodeJwt)
+│   └── utils/            (jwt.utils.ts, product.utils.ts)
 ├── RedisModule           (@Global, ioredis client provider)
 │   ├── redis.constants.ts  (REDIS_CLIENT token, key prefixes)
 │   └── redis.module.ts     (provider factory, retry, cleanup)
@@ -134,6 +134,30 @@ All in `src/tools/definitions/`. Each file exports: `{ name, description, schema
 | `control_device_simple`    | Send control command (simplified) |
 | `get_device_documentation` | Get device documentation          |
 
+## Device Type Resolution
+
+Devices from the IoT API carry a `productId` (aka modelId) and a `productInfos` array.
+
+### How deviceType is resolved
+
+1. **Primary source**: `productInfos[1]` — always present in the API response regardless of productId format. This is the `deviceTypeId` used by `resolveDeviceType()`.
+2. **Fallback/enrichment**: `decodeProductId(productId)` — only works for 16-hex-char new-format IDs. Old-format IDs (variable length, contain non-hex) return `null`. Used in `get_device` to add `brand` and `ownership` when decodable.
+
+### Key files
+
+- `src/common/constants/product.constants.ts` — `DEVICE_TYPE`, `BRAND`, `OWNERSHIP` maps (plain objects, designed to be swappable for cloud-fetched values later)
+- `src/common/utils/product.utils.ts` — `resolveDeviceType()`, `decodeProductId()`, `getDeviceType()`
+
+### Response shaping
+
+List endpoints (`list_devices`, `list_locations`, `list_groups`, `search`) return **slim responses** to reduce token consumption for AI clients. Only essential fields are included:
+
+- **Devices**: `uuid`, `label`, `desc`, `mac`, `locationId`, `groupId`, `features`, `deviceType?`, `deviceTypeId?`
+- **Locations**: `uuid`, `label`, `desc`
+- **Groups**: `uuid`, `label`, `desc`, `locationId`
+- **Location state**: `mac`, `devId`, `state`, `updatedAt`
+
+`get_device` returns the **full payload** plus enriched fields (`deviceType`, `deviceTypeId`, `brand?`, `ownership?`) for detailed inspection.
 ## Key Patterns & Conventions
 
 ### Configuration
@@ -189,8 +213,8 @@ export const toolDefinition = {
 ├── docs/
 │   ├── DEPLOYMENT.md               # Ops runbook (VPS, CI/CD, Redis, troubleshooting)
 │   ├── EXTERNAL-API.md             # IoT Cloud REST API reference
-│   ├── feature-plan/               # Feature planning docs
-│   └── ai-resources/               # AI-related resources
+│   ├── ai-resources/               # AI docs served via get_device_documentation tool
+│   └── new-tools/                  # Tool reference, state & control guides
 ├── src/
 │   ├── main.ts                     # Bootstrap: CORS, logging middleware, validation pipe
 │   ├── app.module.ts               # Root module imports
@@ -202,10 +226,11 @@ export const toolDefinition = {
 │   ├── auth/                       # OAuth 2.1 flow
 │   ├── discovery/                  # .well-known endpoints
 │   ├── proxy/                      # IoT API proxy
-│   └── common/                     # Shared utilities
+│   └── common/                     # Shared utilities, constants, product decoder
+│       ├── constants/product.constants.ts  # DEVICE_TYPE, BRAND, OWNERSHIP maps
+│       └── utils/product.utils.ts          # resolveDeviceType, decodeProductId
 └── config/
     └── firebase-service-account.example.json
-```
 
 ## Environment Variables
 
@@ -301,3 +326,16 @@ npm run format
 - Deploy to VPS: `./scripts/deploy.sh prod|staging [restart]`
 - CI/CD: `.github/workflows/docker-build.yml` (prod), `docker-build-staging.yml` (staging)
 - See `docs/DEPLOYMENT.md` for full ops runbook
+
+## Quick Context for New Sessions
+
+If you're an AI agent starting a new session on this codebase, here's what you need to know:
+
+1. **Transport**: Uses `StreamableHTTPServerTransport` from `@modelcontextprotocol/sdk` (NOT the older SSE transport).
+2. **Auth flow**: OAuth 2.1 → JWT Bearer token in every `/mcp/:projectApiKey` request. `userId` extracted from JWT.
+3. **Response design**: List endpoints return slim payloads (no `userId`, `extraInfo`, `createdAt`, etc.) to save AI client tokens. `get_device` is the only verbose endpoint.
+4. **Device type**: Always use `resolveDeviceType()` (reads `productInfos[1]`). Do NOT rely on `decodeProductId()` alone — it fails on old-format productIds.
+5. **Constants**: `DEVICE_TYPE`, `BRAND`, `OWNERSHIP` in `src/common/constants/product.constants.ts` are plain objects designed to be swapped for cloud-fetched values later.
+6. **Docker**: Production on port 3001 (`mcp.dash.id.vn`), staging on port 3002 (`mcp-stag.dash.id.vn`). VPS at `160.187.247.2`.
+7. **Do NOT touch n8n** (port 5678 on the same VPS — separate stack, not part of this project).
+8. **Naming**: The API field is `productId` (not `modelId`). Constants file uses this term consistently.

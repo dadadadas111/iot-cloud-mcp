@@ -2,7 +2,17 @@
 
 Complete list of available tools in the IoT Cloud MCP Server.
 
-## Tool Count: 13
+## Tool Count: 15
+
+---
+
+### 1. fetch_user
+
+Get the current authenticated user's profile.
+
+**Input:** _(no parameters)_
+
+**Output:** User profile object from IoT API.
 
 ---
 
@@ -25,15 +35,32 @@ Search across devices, locations, and groups by keyword. Returns ChatGPT-compati
 ```json
 {
   "total": 5,
+  "devices": [
+    {
+      "uuid": "abc-123",
+      "label": "Living Room Light",
+      "desc": "Main light",
+      "mac": "AA:BB:CC:DD:EE:FF",
+      "locationId": "loc-uuid",
+      "groupId": "grp-uuid",
+      "features": [1, 2],
+      "deviceType": "LIGHT",
+      "deviceTypeId": 2
+    }
+  ],
   "locations": [
     {
-      "uuid": "6694e3a0093cf477c3122bfd",
+      "uuid": "loc-uuid",
       "label": "Living Room",
-      "desc": "Main living area",
-      "userId": "user-id",
-      "extraInfo": {...},
-      "createdAt": "2024-07-15T08:53:52.285Z",
-      "updatedAt": "2024-07-15T09:55:05.965Z"
+      "desc": "Main living area"
+    }
+  ],
+  "groups": [
+    {
+      "uuid": "grp-uuid",
+      "label": "Smart Lights",
+      "desc": "Office",
+      "locationId": "loc-uuid"
     }
   ]
 }
@@ -85,8 +112,13 @@ Get ALL devices without filtering.
     {
       "uuid": "abc-123",
       "label": "Living Room Light",
+      "desc": "Main light",
       "mac": "AA:BB:CC:DD:EE:FF",
-      ...
+      "locationId": "loc-uuid",
+      "groupId": "grp-uuid",
+      "features": [1, 2],
+      "deviceType": "LIGHT",
+      "deviceTypeId": 2
     }
   ]
 }
@@ -109,9 +141,9 @@ Get ALL locations.
   "total": 5,
   "locations": [
     {
-      "_id": "loc-123",
+      "uuid": "loc-123",
       "label": "Living Room",
-      ...
+      "desc": "Main living area"
     }
   ]
 }
@@ -134,16 +166,10 @@ Get ALL groups.
   "total": 3,
   "groups": [
     {
-      "uuid": "6694e3a0093cf477c3122c03",
+      "uuid": "grp-uuid",
       "label": "Smart Lights",
       "desc": "Office",
-      "userId": "user-id",
-      "locationId": "location-uuid",
-      "type": 0,
-      "elementId": 49500,
-      "extraInfo": {},
-      "createdAt": "2024-07-15T08:53:52.710Z",
-      "updatedAt": "2024-07-15T08:53:52.710Z"
+      "locationId": "loc-uuid"
     }
   ]
 }
@@ -155,7 +181,7 @@ Get ALL groups.
 
 ### 7. get_device
 
-Get detailed information about a specific device by UUID.
+Get detailed information about a specific device by UUID. Returns the **full payload** (unlike list endpoints) plus enriched `deviceType`, `deviceTypeId`, `brand`, and `ownership` fields.
 
 **Input:**
 
@@ -178,7 +204,14 @@ Get detailed information about a specific device by UUID.
   "partnerId": "rogo",
   "rootUuid": "root-uuid",
   "protocolCtl": 1,
-  ...
+  "productId": "0002F800100400CF",
+  "productInfos": [2, 2, 8],
+  "locationId": "loc-uuid",
+  "features": [1, 2],
+  "deviceType": "LIGHT",
+  "deviceTypeId": 2,
+  "brand": "Rạng Đông",
+  "ownership": "ODM"
 }
 ```
 
@@ -287,21 +320,21 @@ Get states of all devices in a specific location.
 }
 ```
 
-**Output:** Array of device state objects (same structure as `get_device_state`).
+**Output:** Array of slim device state objects (no `uuid`, `loc`, `from` — only useful fields).
 
 ```json
 [
   {
-    "uuid": "abc-123",
     "mac": "AA:BB:CC:DD:EE:FF",
-    "loc": "location-id",
-    "state": {...}
+    "devId": "device-id-1",
+    "state": {"1": {"1": [1, 1]}},
+    "updatedAt": "2026-02-12T10:00:00Z"
   },
   {
-    "uuid": "def-456",
     "mac": "11:22:33:44:55:66",
-    "loc": "location-id",
-    "state": {...}
+    "devId": "device-id-2",
+    "state": {"1": {"1": [1, 0]}},
+    "updatedAt": "2026-02-12T10:00:00Z"
   }
 ]
 ```
@@ -420,6 +453,21 @@ Simplified control for common operations. Easier than `control_device`.
 
 ---
 
+### 15. get_device_documentation
+
+Get AI-optimized documentation for IoT devices.
+
+**Input:**
+
+```json
+{
+  "topic": "overview" // one of: overview, device_attributes, control_guide, state_guide
+}
+```
+
+**Output:** Markdown documentation content for the requested topic.
+
+---
 ## Attribute Reference
 
 Common device attributes (from `device-attr-and-control.csv`):
@@ -472,28 +520,26 @@ Common device attributes (from `device-attr-and-control.csv`):
 
 ## Usage Examples
 
-### Example 1: Login and List Devices
+### Example 1: List and Inspect Devices
 
 ```json
-// Step 1: Login
-{"tool": "login", "email": "user@example.com", "password": "pass123"}
-
-// Step 2: List all devices
+// Step 1: List all devices (slim response)
 {"tool": "list_devices"}
+
+// Step 2: Get full details for a specific device
+{"tool": "get_device", "uuid": "abc-123"}
 ```
 
 ### Example 2: Control a Light
 
 ```json
-// Step 1: Login (already done)
-
-// Step 2: Turn on light
+// Step 1: Turn on light
 {"tool": "control_device_simple", "uuid": "abc-123", "action": "turn_on"}
 
-// Step 3: Set brightness
+// Step 2: Set brightness
 {"tool": "control_device_simple", "uuid": "abc-123", "action": "set_brightness", "value": 700}
 
-// Step 4: Check state (wait 2-3 seconds)
+// Step 3: Check state (wait 2-3 seconds)
 {"tool": "get_device_state", "uuid": "abc-123"}
 ```
 
@@ -544,7 +590,7 @@ All tools return error information in this format:
 
 Common errors:
 
-- **"Authentication required"** - Must call `login` tool first
+- **"Missing authorization header"** - Bearer token not provided (OAuth flow required)
 - **"Device not found"** - Invalid UUID or device doesn't exist
 - **"Missing required control fields"** - Device lacks eid/endpoint/partnerId/protocolCtl
 - **"Value must be between X and Y"** - Invalid parameter value for control command
@@ -553,11 +599,9 @@ Common errors:
 
 ## Best Practices
 
-### 1. Always Login First
+### 1. Auth is Handled via OAuth
 
-```json
-{"tool": "login", ...}
-```
+Authentication uses OAuth 2.1 Bearer tokens, not a login tool. The MCP client handles the OAuth flow automatically.
 
 ### 2. Get Device Details Before Control
 
