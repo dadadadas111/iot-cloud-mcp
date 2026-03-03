@@ -8,7 +8,7 @@ import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
 import { decodeJwt, extractBearerToken, getUserIdFromToken } from '../../common/utils/jwt.utils';
-import { decodeProductId } from '../../common/utils/product.utils';
+import { decodeProductId, resolveDeviceType } from '../../common/utils/product.utils';
 import { FETCH_USER_TOOL, FetchUserParams } from '../definitions/fetch-user.tool';
 import { SEARCH_TOOL, SearchParams } from '../definitions/search.tool';
 import { FETCH_TOOL, FetchParams } from '../definitions/fetch.tool';
@@ -359,7 +359,7 @@ export class ToolExecutorService {
           d.label?.toLowerCase().includes(query) || d.desc?.toLowerCase().includes(query)
         )
         .map((d: any) => {
-          const decoded = d.productId ? decodeProductId(d.productId as string) : null;
+          const typeInfo = resolveDeviceType(d);
           return {
             uuid: d.uuid,
             label: d.label,
@@ -368,7 +368,7 @@ export class ToolExecutorService {
             locationId: d.locationId,
             groupId: d.groupId,
             features: d.features,
-            ...(decoded && { deviceType: decoded.deviceType, deviceTypeId: decoded.deviceTypeId }),
+            ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
           };
         });
 
@@ -567,11 +567,9 @@ export class ToolExecutorService {
         params.locationId ?? undefined,
       );
 
-      // Enrich each device with decoded product type, then slim for token efficiency
+      // Enrich each device with device type from productInfos, then slim for token efficiency
       const slimDevices = devices.map((device: Record<string, unknown>) => {
-        const decoded = device.productId
-          ? decodeProductId(device.productId as string)
-          : null;
+        const typeInfo = resolveDeviceType(device);
         return {
           uuid: device.uuid,
           label: device.label,
@@ -580,7 +578,7 @@ export class ToolExecutorService {
           locationId: device.locationId,
           groupId: device.groupId,
           features: device.features,
-          ...(decoded && { deviceType: decoded.deviceType, deviceTypeId: decoded.deviceTypeId }),
+          ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
         };
       });
 
@@ -800,13 +798,15 @@ export class ToolExecutorService {
         params.uuid,
       );
 
-      // Enrich with decoded product type info (keep full payload for detail view)
-      const productInfo = device.productId
+      // Enrich with device type from productInfos (primary) + full decode for brand/ownership
+      const typeInfo = resolveDeviceType(device as Record<string, unknown>);
+      const productDecoded = device.productId
         ? decodeProductId(device.productId as string)
         : null;
       const enrichedDevice = {
         ...device,
-        ...(productInfo && { deviceType: productInfo.deviceType, deviceTypeId: productInfo.deviceTypeId }),
+        ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
+        ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
       };
 
       return {

@@ -126,3 +126,28 @@ export function getDeviceType(modelId: string): string | null {
   const decoded = decodeProductId(modelId);
   return decoded?.deviceType ?? null;
 }
+
+/**
+ * Resolve device type from raw API device data.
+ * Uses productInfos[1] as the primary deviceTypeId source (always available from API),
+ * which is more reliable than decoding the productId string (variable formats).
+ *
+ * @param device - Raw device object from IoT API
+ * @returns { deviceType, deviceTypeId } or null if not resolvable
+ */
+export function resolveDeviceType(
+  device: Record<string, unknown>,
+): { deviceType: string; deviceTypeId: number } | null {
+  const productInfos = device.productInfos as number[] | undefined;
+  if (!Array.isArray(productInfos) || productInfos.length < 2) {
+    return null;
+  }
+
+  const deviceTypeId = productInfos[1];
+  if (deviceTypeId == null || deviceTypeId < 0) {
+    return null;
+  }
+
+  const deviceType = DEVICE_TYPE[deviceTypeId] ?? 'UNKNOWN';
+  return { deviceType, deviceTypeId };
+}
