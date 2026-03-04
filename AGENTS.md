@@ -1,190 +1,105 @@
 # AGENTS.md — Hierarchical Agent Knowledge
 
-> **Project**: iot-cloud-mcp (NestJS MCP Gateway for Rogo IoT Cloud)
-> **Updated**: 2026-03-02
+> **Generated**: 2026-03-04 | **Commit**: 1cf4e51 | **Branch**: master
 
-## Quick Orientation (ALL agents read this)
+## Overview
 
-This is a **NestJS MCP server** that proxies AI tool calls to a Rogo IoT Cloud REST API. Multi-tenant via URL-embedded API keys.
+NestJS MCP gateway that proxies AI tool calls to a Rogo IoT Cloud REST API. Multi-tenant via URL-embedded API keys (`/mcp/:projectApiKey`).
 
 **Stack**: NestJS 10 + TypeScript (ES2021/CJS) + Redis (ioredis) + Zod v4 + Jest
 
-**Entry point**: `src/main.ts` → `AppModule` → `McpController` (POST `/mcp/:projectApiKey`)
+**See `AGENT.md`** for full architecture, data flow, session internals, and environment variables.
 
-**Key directories**:
+## Structure
 
-- `src/mcp/` — MCP protocol handling, sessions, server factory
-- `src/tools/` — 15 MCP tool definitions + executor
-- `src/redis/` — Redis client module (global)
-- `src/auth/` — OAuth 2.1 flow
-- `src/proxy/` — IoT API proxy layer
-- `src/common/` — Shared utils, decorators
-
-**Config pattern**: `ConfigService.get<T>('KEY', default)` — never raw `process.env`
-
-**See `AGENT.md`** for full architecture, module map, and data flow.
-
----
-
-## Layer: Protocol (src/mcp/)
-
-### Ownership
-
-MCP protocol handling — JSON-RPC routing, session management, server lifecycle.
-
-### Key Files
-
-| File                                       | Purpose                                                                |
-| ------------------------------------------ | ---------------------------------------------------------------------- |
-| `mcp.controller.ts`                        | HTTP entry point. JWT decode, session get/create, delegates to handler |
-| `services/mcp-protocol-handler.service.ts` | Routes JSON-RPC methods to tools/resources                             |
-| `services/session-manager.service.ts`      | Session CRUD. Redis metadata + local McpServer cache                   |
-| `services/redis-session.repository.ts`     | Redis data access layer. CRUD, TTL, stale pruning                      |
-| `services/mcp-server.factory.ts`           | Creates `McpServer` per tenant with tools/resources registered         |
-| `dto/mcp-session.dto.ts`                   | `McpSession` interface, `RedisSessionData` interface                   |
-
-### Architecture Notes
-
-- **Dual storage**: Redis stores serializable `RedisSessionData` (JSON). Local `Map<string, McpServer>` caches non-serializable server instances. Cache miss → factory recreates.
-- **Redis keys**: `mcp:session:{projectApiKey}:{sessionId}` (string), `mcp:project-sessions:{projectApiKey}` (SET)
-- **TTL**: `MCP_SESSION_TTL` env var (seconds, default 3600)
-- **Stale pruning**: `getProjectSessionIds()` verifies SET members via pipeline EXISTS, removes stale entries
-
-### Tests
-
-- `redis-session.repository.spec.ts` — Mock ioredis, tests CRUD + stale pruning
-- `session-manager.service.spec.ts` — Mock repository + factory, tests session lifecycle
-
----
-
-## Layer: Tools (src/tools/)
-
-### Ownership
-
-MCP tool definitions, registration, and execution.
-
-### Key Files
-
-| File                                | Purpose                                |
-| ----------------------------------- | -------------------------------------- |
-| `tools.module.ts`                   | NestJS module wiring                   |
-| `services/tool-registry.service.ts` | Registers all 15 tools with McpServer  |
-| `services/tool-executor.service.ts` | Executes tool calls via IotApiService  |
-| `definitions/*.tool.ts`             | Individual tool definitions (15 files) |
-
-### Tool Definition Pattern
-
-```typescript
-export const toolDefinition = {
-  name: 'tool_name',
-  description: 'Human-readable description',
-  schema: z.object({ param: z.string().describe('...') }),
-  metadata: {
-    /* ... */
-  },
-};
+```
+src/
+├── main.ts                 # Bootstrap: CORS, logging middleware, validation pipe
+├── app.module.ts           # Root module (Config, Throttler, Http, all feature modules)
+├── health.controller.ts    # GET /health
+├── mcp/                    # MCP protocol — controller, sessions, server factory [→ AGENTS.md]
+├── tools/                  # 15 MCP tool definitions + executor [→ AGENTS.md]
+├── resources/              # 4 MCP resource definitions (overview, state-guide, control-guide, device-attributes)
+├── auth/                   # OAuth 2.1 flow (/authorize, /token, /register)
+├── discovery/              # .well-known OAuth discovery endpoints
+├── proxy/                  # IoT API proxy (IotApiService — all HTTP calls to Rogo Cloud)
+├── redis/                  # @Global Redis client module (ioredis, retry, cleanup)
+└── common/                 # Shared utils, constants, decorators
+    ├── constants/          # product.constants.ts (DEVICE_TYPE, BRAND, OWNERSHIP maps)
+    ├── utils/              # jwt.utils.ts, product.utils.ts (resolveDeviceType, decodeProductId)
+    ├── interfaces/         # Shared interfaces
+    └── decorators/         # api-key.decorator.ts
 ```
 
-### Adding a New Tool
+## Where to Look
 
-1. Create `src/tools/definitions/{name}.tool.ts`
-2. Register in `tool-registry.service.ts`
-3. Add proxy method in `src/proxy/services/iot-api.service.ts` if needed
-4. Tool is auto-available via `tools/list` and `tools/call`
+| Task                    | Location                                                        | Notes                                                           |
+| ----------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
+| Add MCP tool            | `src/tools/definitions/` → `tool-registry` → `iot-api.service`  | See `src/tools/AGENTS.md`                                       |
+| Add MCP resource        | `src/resources/definitions/` → `resource-registry.service.ts`   | Same pattern as tools                                           |
+| Modify session behavior | `src/mcp/services/` (session-manager, redis-session.repository) | See `src/mcp/AGENTS.md`                                         |
+| Change auth flow        | `src/auth/auth.controller.ts` + `services/oauth.service.ts`     | OAuth 2.1, proxies to IoT Cloud `/login`                        |
+| Change API proxy        | `src/proxy/services/iot-api.service.ts`                         | Single file, all HTTP calls                                     |
+| Device type resolution  | `src/common/utils/product.utils.ts`                             | Always use `resolveDeviceType()`, NOT `decodeProductId()` alone |
+| Redis config/keys       | `src/redis/redis.module.ts` + `redis.constants.ts`              | `REDIS_CLIENT` injection token, key prefixes                    |
+| Docker/deploy           | `docker-compose*.yml`, `Dockerfile`, `.github/workflows/`       | See `docs/DEPLOYMENT.md`                                        |
+| Environment vars        | `.env.example`                                                  | All vars documented there; use `ConfigService.get<T>()` in code |
 
----
+## Conventions
 
-## Layer: Auth (src/auth/)
+- **Config**: `ConfigService.get<T>('KEY', default)` — never raw `process.env`
+- **DI**: NestJS standard. `REDIS_CLIENT` token for ioredis. `RedisModule` is `@Global()`
+- **Schemas**: Zod v4 for tool parameter validation
+- **Tests**: Colocated `*.spec.ts` next to source. Jest + ts-jest. NestJS `Test.createTestingModule` pattern
+- **TS**: `strictNullChecks: true`, `noImplicitAny: false`. Path alias `@/*` → `src/*`
+- **Formatting**: Prettier (singleQuote, trailingComma: all, semi, tabWidth: 2, printWidth: 100)
+- **Lint**: ESLint + @typescript-eslint + prettier plugin. Relaxed: no explicit return types, no-explicit-any off
+- **Build**: `nest build` uses webpack (`nest-cli.json`). Dockerfile: node:18-alpine, non-root user
+- **Response shaping**: List endpoints return slim payloads (save AI tokens). Only `get_device` returns full payload
 
-### Ownership
+## Anti-Patterns (This Project)
 
-OAuth 2.1 flow for MCP client authentication.
+- **Never** use `process.env` directly — use `ConfigService`
+- **Never** `as any` or `@ts-ignore` or `@ts-expect-error`
+- **Never** import from `dist/` — only `src/`
+- **Never** expose Redis keys in HTTP responses (except `X-MCP-Session-Id` header)
+- **Never** touch n8n services on VPS (port 5678, separate stack)
+- **Never** manually instantiate services — use NestJS DI
+- **Never** rely on `decodeProductId()` alone — use `resolveDeviceType()` (reads `productInfos[1]`)
+- **Never** include `userId`, `extraInfo`, `createdAt` in list endpoint responses
 
-### Key Files
+## Unique Styles
 
-| File                 | Purpose                                       |
-| -------------------- | --------------------------------------------- |
-| `auth.controller.ts` | `/authorize`, `/token`, `/register` endpoints |
-| `services/`          | Auth logic, token exchange                    |
-| `dto/`               | Auth request/response DTOs                    |
-| `templates/`         | HTML login page template                      |
+- **Dual session storage**: Redis (serializable metadata + TTL) + local `Map<string, McpServer>` (non-serializable instances). Cache miss → factory recreates server with tools/resources re-registered
+- **Tool definition pattern**: Each tool is a standalone `.tool.ts` file exporting `{ name, description, schema (zod), metadata }`
+- **Multi-tenant via URL**: `projectApiKey` in path param, forwarded as `x-header-apikey` to IoT API
+- **Transport**: `StreamableHTTPServerTransport` from `@modelcontextprotocol/sdk` (NOT SSE)
+- **Naming**: API field is `productId` (not `modelId`). Constants use this term consistently
 
-### Flow
+## Commands
 
-1. MCP client discovers auth via `.well-known` (DiscoveryModule)
-2. Client redirects user to `/authorize` → HTML login form
-3. User submits credentials → forwarded to IoT Cloud API `/login`
-4. Success → authorization code returned
-5. Client exchanges code at `/token` → JWT tokens returned
-6. Bearer token used for all subsequent `/mcp/:projectApiKey` requests
+```bash
+npm run start:dev        # Dev server (hot reload)
+npm run build            # Production build (webpack via nest-cli)
+npm run start:prod       # node dist/main
+npm test                 # Jest unit tests
+npx tsc --noEmit         # Type check
+npm run lint             # ESLint
+npm run format           # Prettier
+```
 
----
+## Notes
 
-## Layer: Proxy (src/proxy/)
+- **CI/CD**: Push to master → build Docker + deploy prod (`mcp.dash.id.vn:3001`). PR → staging (`mcp-stag.dash.id.vn:3002`). VPS: `160.187.247.2`
+- **e2e tests**: `test:e2e` script exists in package.json but `test/jest-e2e.json` config is missing — e2e not operational
+- **ThrottlerModule**: Uses array syntax `forRoot([{ttl: 60000, limit: 100}])` — ttl appears to be ms (non-standard, typical is seconds)
+- **Rate limiting**: Configurable via `ENABLE_RATE_LIMIT`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW` env vars
+- **Deploy script** (`scripts/deploy.sh`): Does NOT sync `.env` files — manage secrets on VPS separately
 
-### Ownership
+## Hierarchy
 
-HTTP proxy to Rogo IoT Cloud REST API.
-
-### Key Files
-
-| File                          | Purpose                       |
-| ----------------------------- | ----------------------------- |
-| `proxy.module.ts`             | Module wiring                 |
-| `services/iot-api.service.ts` | All HTTP calls to the Old API |
-| `dto/`                        | Request/response types        |
-
-### Notes
-
-- Uses `@nestjs/axios` (`HttpService`)
-- Base URL: `IOT_API_BASE_URL` env var
-- Timeout: `IOT_API_TIMEOUT` env var (default 30000ms)
-- All requests include project API key + userId extracted from JWT
-
----
-
-## Layer: Infrastructure
-
-### Redis (src/redis/)
-
-- `redis.module.ts` — `@Global()` NestJS module providing ioredis client
-- `redis.constants.ts` — `REDIS_CLIENT` injection token, key prefixes
-- Retry strategy: exponential backoff, max 10 retries
-- `OnModuleDestroy`: graceful disconnect
-
-### Docker
-
-- `Dockerfile` — node:18-alpine, multi-stage-ish (build → prune → run as non-root)
-- `docker-compose.yml` — Production (app + redis)
-- `docker-compose.staging.yml` — Staging (app + redis-staging)
-
-### CI/CD
-
-- `.github/workflows/docker-build.yml` — Push to main → build + deploy prod
-- `.github/workflows/docker-build-staging.yml` — PR to main → build + deploy staging
-- Deploy via SSH (appleboy/ssh-action) → docker pull + compose up
-
-### Deployment
-
-- `scripts/deploy.sh` — Manual deploy with backup/rollback
-- See `docs/DEPLOYMENT.md` for full runbook
-
----
-
-## Conventions & Anti-patterns
-
-### DO
-
-- Use `ConfigService.get<T>()` for all config
-- Follow existing tool definition pattern exactly
-- Use Zod v4 for schema definitions
-- Keep test files colocated (`*.spec.ts` next to source)
-- Use NestJS DI — never manually instantiate services
-
-### DON'T
-
-- Never use `process.env` directly
-- Never `as any` or `@ts-ignore`
-- Never import from `dist/` — only `src/`
-- Never expose Redis keys or session IDs in HTTP responses (except `X-MCP-Session-Id` header)
-- Never modify n8n services on VPS (port 5678, separate stack)
+```
+./AGENTS.md              ← you are here
+├── src/mcp/AGENTS.md    ← protocol, sessions, transport
+└── src/tools/AGENTS.md  ← tool definitions, registry, executor
+```
