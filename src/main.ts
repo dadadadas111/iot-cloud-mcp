@@ -9,12 +9,23 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   // Enable CORS (always enable for MCP compatibility)
+  // TODO(security/P0): Harden CORS — replace wildcard '*' with explicit allowed origins.
+  //   Currently defaults to '*' with credentials:true which is insecure.
+  //   When ready: set CORS_ORIGINS env var to comma-separated list of allowed origins.
   const origins = configService.get<string>('CORS_ORIGINS')?.split(',') || ['*'];
 
   app.enableCors({
     origin: origins.length > 0 && origins[0] !== '*' ? origins : '*',
     methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'x-admin-api-key', 'x-project-api-key', 'mcp-protocol-version', 'mcp-session-id'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'x-admin-api-key',
+      'x-project-api-key',
+      'mcp-protocol-version',
+      'mcp-session-id',
+    ],
     exposedHeaders: ['Mcp-Session-Id'],
     credentials: true,
   });
@@ -22,15 +33,20 @@ async function bootstrap() {
   // Global request logging middleware
   app.use((req, res, next) => {
     const start = Date.now();
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - Origin: ${req.headers.origin || 'none'} - Content-Type: ${req.headers['content-type'] || 'none'}`);
-    
+    console.log(
+      `[${new Date().toISOString()}] ${req.method} ${req.url} - Origin: ${req.headers.origin || 'none'} - Content-Type: ${req.headers['content-type'] || 'none'}`,
+    );
+
     // Log response
     const originalSend = res.send;
-    res.send = function(data) {
+    res.send = function (data) {
       const duration = Date.now() - start;
-      console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode} - ${duration}ms`);
+      console.log(
+        `[${new Date().toISOString()}] ${req.method} ${req.url} - ${res.statusCode} - ${duration}ms`,
+      );
+      // Only log error status code, not the body (may contain sensitive data)
       if (res.statusCode >= 400) {
-        console.log(`  Error body: ${typeof data === 'string' ? data.substring(0, 200) : JSON.stringify(data).substring(0, 200)}`);
+        console.log(`  Error: HTTP ${res.statusCode}`);
       }
       return originalSend.call(this, data);
     };

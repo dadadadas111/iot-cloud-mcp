@@ -4,7 +4,7 @@
  * Handles authentication via JWT tokens and formats responses for MCP
  */
 
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
 import { decodeJwt, extractBearerToken, getUserIdFromToken } from '../../common/utils/jwt.utils';
@@ -19,10 +19,21 @@ import { GET_DEVICE_TOOL, GetDeviceParams } from '../definitions/get-device.tool
 import { UPDATE_DEVICE_TOOL, UpdateDeviceParams } from '../definitions/update-device.tool';
 import { DELETE_DEVICE_TOOL, DeleteDeviceParams } from '../definitions/delete-device.tool';
 import { GET_DEVICE_STATE_TOOL, GetDeviceStateParams } from '../definitions/get-device-state.tool';
-import { GET_LOCATION_STATE_TOOL, GetLocationStateParams } from '../definitions/get-location-state.tool';
-import { GET_DEVICE_STATE_BY_MAC_TOOL, GetDeviceStateByMacParams } from '../definitions/get-device-state-by-mac.tool';
+import {
+  GET_LOCATION_STATE_TOOL,
+  GetLocationStateParams,
+} from '../definitions/get-location-state.tool';
+import {
+  GET_DEVICE_STATE_BY_MAC_TOOL,
+  GetDeviceStateByMacParams,
+} from '../definitions/get-device-state-by-mac.tool';
 import { CONTROL_DEVICE_TOOL, ControlDeviceParams } from '../definitions/control-device.tool';
-import { CONTROL_DEVICE_SIMPLE_TOOL, ControlDeviceSimpleParams } from '../definitions/control-device-simple.tool';
+import {
+  CONTROL_DEVICE_SIMPLE_TOOL,
+  ControlDeviceSimpleParams,
+} from '../definitions/control-device-simple.tool';
+import { GET_DEVICE_DOCUMENTATION_TOOL } from '../definitions/get-device-documentation.tool';
+import { sanitizeErrorForClient } from '../../common/utils/error.utils';
 
 /** Context for tool execution containing request metadata */
 interface ToolContext {
@@ -37,7 +48,7 @@ interface ToolContext {
  */
 @Injectable()
 export class ToolExecutorService {
-  constructor(private iotApiService: IotApiService) { }
+  constructor(private iotApiService: IotApiService) {}
 
   /**
    * Validate parameters for a tool
@@ -236,7 +247,6 @@ export class ToolExecutorService {
       return this.executeGetDeviceDocumentation(params as { topic: string });
     }
 
-
     throw new BadRequestException(`Unknown tool: ${toolName}`);
   }
 
@@ -290,7 +300,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -317,10 +327,7 @@ export class ToolExecutorService {
    * @param context - Request context with authorization header and projectApiKey
    * @returns MCP-formatted search results
    */
-  private async executeSearch(
-    params: SearchParams,
-    context: ToolContext,
-  ): Promise<CallToolResult> {
+  private async executeSearch(params: SearchParams, context: ToolContext): Promise<CallToolResult> {
     if (!context.authorization) {
       return {
         content: [
@@ -355,8 +362,10 @@ export class ToolExecutorService {
       const query = params.query.toLowerCase();
 
       // Slim matched devices
-      const matchedDevices = devices.filter((d: any) =>
-          d.label?.toLowerCase().includes(query) || d.desc?.toLowerCase().includes(query)
+      const matchedDevices = devices
+        .filter(
+          (d: any) =>
+            d.label?.toLowerCase().includes(query) || d.desc?.toLowerCase().includes(query),
         )
         .map((d: any) => {
           const typeInfo = resolveDeviceType(d);
@@ -368,13 +377,18 @@ export class ToolExecutorService {
             locationId: d.locationId,
             groupId: d.groupId,
             features: d.features,
-            ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
+            ...(typeInfo && {
+              deviceType: typeInfo.deviceType,
+              deviceTypeId: typeInfo.deviceTypeId,
+            }),
           };
         });
 
       // Slim matched locations
-      const matchedLocations = locations.filter((l: any) =>
-          l.label?.toLowerCase().includes(query) || l.desc?.toLowerCase().includes(query)
+      const matchedLocations = locations
+        .filter(
+          (l: any) =>
+            l.label?.toLowerCase().includes(query) || l.desc?.toLowerCase().includes(query),
         )
         .map((l: any) => ({
           uuid: l.uuid,
@@ -383,8 +397,10 @@ export class ToolExecutorService {
         }));
 
       // Slim matched groups
-      const matchedGroups = groups.filter((g: any) =>
-          g.label?.toLowerCase().includes(query) || g.desc?.toLowerCase().includes(query)
+      const matchedGroups = groups
+        .filter(
+          (g: any) =>
+            g.label?.toLowerCase().includes(query) || g.desc?.toLowerCase().includes(query),
         )
         .map((g: any) => ({
           uuid: g.uuid,
@@ -409,7 +425,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -436,10 +452,7 @@ export class ToolExecutorService {
    * @param context - Request context with authorization header and projectApiKey
    * @returns MCP-formatted resource data
    */
-  private async executeFetch(
-    params: FetchParams,
-    context: ToolContext,
-  ): Promise<CallToolResult> {
+  private async executeFetch(params: FetchParams, context: ToolContext): Promise<CallToolResult> {
     if (!context.authorization) {
       return {
         content: [
@@ -496,7 +509,9 @@ export class ToolExecutorService {
           );
           break;
         default:
-          throw new Error(`Unknown resource type: ${type}. Supported types: device, location, group`);
+          throw new Error(
+            `Unknown resource type: ${type}. Supported types: device, location, group`,
+          );
       }
 
       return {
@@ -508,7 +523,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -591,7 +606,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -664,7 +679,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -739,7 +754,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -800,9 +815,7 @@ export class ToolExecutorService {
 
       // Enrich with device type from productInfos (primary) + full decode for brand/ownership
       const typeInfo = resolveDeviceType(device as Record<string, unknown>);
-      const productDecoded = device.productId
-        ? decodeProductId(device.productId as string)
-        : null;
+      const productDecoded = device.productId ? decodeProductId(device.productId as string) : null;
       const enrichedDevice = {
         ...device,
         ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
@@ -818,7 +831,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -873,9 +886,7 @@ export class ToolExecutorService {
 
       const { uuid, ...rawUpdates } = params;
       // Coerce null → undefined so downstream proxy types are satisfied
-      const updates = Object.fromEntries(
-        Object.entries(rawUpdates).filter(([, v]) => v !== null),
-      );
+      const updates = Object.fromEntries(Object.entries(rawUpdates).filter(([, v]) => v !== null));
 
       const result = await this.iotApiService.updateDevice(
         context.projectApiKey || 'unknown',
@@ -893,7 +904,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -961,7 +972,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -1024,7 +1035,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -1096,7 +1107,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -1160,7 +1171,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
 
       return {
         content: [
@@ -1178,7 +1189,6 @@ export class ToolExecutorService {
       };
     }
   }
-
 
   /**
    * Execute control_device tool
@@ -1242,8 +1252,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
       return {
         content: [
           {
@@ -1336,9 +1345,7 @@ export class ToolExecutorService {
       }
 
       // Use specified elementId or all device elementIds
-      const elementIds = params.elementId != null
-        ? [params.elementId]
-        : device.elementIds;
+      const elementIds = params.elementId != null ? [params.elementId] : device.elementIds;
 
       // Build control payload with required fields from device
       const controlPayload = {
@@ -1365,8 +1372,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
       return {
         content: [
           {
@@ -1387,15 +1393,11 @@ export class ToolExecutorService {
   /**
    * Execute get_device_documentation tool
    * Returns documentation markdown content
-   *  
+   *
    * @param params - Tool parameters including topic
    * @returns MCP-formatted documentation content
    */
-  private executeGetDeviceDocumentation(
-    params: { topic: string },
-  ): CallToolResult {
-    const GET_DEVICE_DOCUMENTATION_TOOL = require('../definitions/get-device-documentation.tool').GET_DEVICE_DOCUMENTATION_TOOL;
-    
+  private executeGetDeviceDocumentation(params: { topic: string }): CallToolResult {
     try {
       const content = GET_DEVICE_DOCUMENTATION_TOOL.execute(params.topic);
       return {
@@ -1407,7 +1409,7 @@ export class ToolExecutorService {
         ],
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage = sanitizeErrorForClient(error);
       return {
         content: [
           {

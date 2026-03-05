@@ -29,7 +29,9 @@ export class IotApiService {
     private httpService: HttpService,
     private configService: ConfigService,
   ) {
-    this.baseUrl = this.configService.get<string>('IOT_API_BASE_URL') || 'https://staging.openapi.rogo.com.vn/api/v2.0';
+    this.baseUrl =
+      this.configService.get<string>('IOT_API_BASE_URL') ||
+      'https://staging.openapi.rogo.com.vn/api/v2.0';
   }
 
   /**
@@ -414,11 +416,7 @@ export class IotApiService {
    * @param userId - User ID
    * @param uuid - Device UUID to delete
    */
-  async deleteDevice(
-    projectApiKey: string,
-    userId: string,
-    uuid: string,
-  ): Promise<any> {
+  async deleteDevice(projectApiKey: string, userId: string, uuid: string): Promise<any> {
     try {
       logProxyCall('Deleting device', { userId, uuid });
 
@@ -537,7 +535,10 @@ export class IotApiService {
     },
   ): Promise<any> {
     try {
-      logProxyCall('Controlling device', { eid: controlPayload.eid, command: controlPayload.command });
+      logProxyCall('Controlling device', {
+        eid: controlPayload.eid,
+        command: controlPayload.command,
+      });
 
       const endpoint = `${this.baseUrl}/iot-core/control/device`;
 
@@ -556,12 +557,16 @@ export class IotApiService {
   }
 
   private logDetailedError(context: string, error: any) {
-    const errorDetails = {
+    // Log safe details at error level (no response body or stack traces)
+    const safeDetails = {
       message: error?.message || 'Unknown error',
       status: error?.response?.status || 'N/A',
-      data: error?.response?.data || 'No response data',
-      stack: error?.stack || 'No stack trace',
     };
-    logProxyCall(`${context} failed`, errorDetails);
+    logProxyCall(`${context} failed`, safeDetails);
+
+    // Full debug details only at debug level to aid local troubleshooting
+    if (error?.response?.data) {
+      logProxyCall(`${context} response data (debug)`, { data: error.response.data });
+    }
   }
 }

@@ -50,11 +50,8 @@ export class AuthController {
     @Res() res: Response,
   ): Promise<void> {
     this.logger.log(`Authorization request for project ${projectApiKey}`);
-    this.logger.log(`  redirect_uri: ${query.redirect_uri}`);
-    this.logger.log(`  response_type: ${query.response_type}`);
-    this.logger.log(`  state: ${query.state}`);
-    this.logger.log(`  code_challenge: ${query.code_challenge?.substring(0, 20)}...`);
-    this.logger.log(`  code_challenge_method: ${query.code_challenge_method}`);
+    this.logger.debug(`  redirect_uri: ${query.redirect_uri}`);
+    this.logger.debug(`  response_type: ${query.response_type}`);
 
     // Generate and return login page
     const html = generateLoginPage(projectApiKey, query);
@@ -86,8 +83,8 @@ export class AuthController {
     },
     @Res() res: Response,
   ): Promise<void> {
-    this.logger.log(`Login attempt for ${body.email} in project ${projectApiKey}`);
-    this.logger.log(`  Redirect URI from form: ${body.redirect_uri}`);
+    this.logger.log(`Login attempt for project ${projectApiKey}`);
+    this.logger.debug(`  Redirect URI from form: ${body.redirect_uri}`);
     try {
       // Authenticate user and generate authorization code
       const authCode = await this.oauthService.handleLogin(
@@ -140,7 +137,10 @@ export class AuthController {
     this.logger.log('CORS preflight request received for token endpoint');
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, x-admin-api-key, x-project-api-key, mcp-protocol-version');
+    res.header(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, Accept, x-admin-api-key, x-project-api-key, mcp-protocol-version',
+    );
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Max-Age', '86400');
     res.status(HttpStatus.NO_CONTENT).send();
@@ -161,16 +161,21 @@ export class AuthController {
     @Headers() headers: Record<string, string>,
   ): Promise<TokenResponseDto> {
     this.logger.log(`Token request for project ${projectApiKey}, grant_type: ${body.grant_type}`);
-    this.logger.log(`Token request headers: ${JSON.stringify({
-      authorization: headers.authorization || headers.Authorization || 'MISSING',
-      'content-type': headers['content-type'],
-      origin: headers.origin,
-    })}`);
-    this.logger.log(`Token request body: ${JSON.stringify(body)}`);
+    this.logger.debug(
+      `Token request headers: ${JSON.stringify({
+        authorization: headers.authorization || headers.Authorization ? '[PRESENT]' : 'MISSING',
+        'content-type': headers['content-type'],
+        origin: headers.origin,
+      })}`,
+    );
+    // Note: body may contain code, refresh_token, code_verifier — never log at info level
+    this.logger.debug(
+      `Token request grant_type=${body.grant_type}, client_id=${body.client_id || 'none'}`,
+    );
 
     // Parse Basic Auth header if present (ChatGPT MCP client pattern)
     let clientId: string | undefined;
-    let clientSecret: string | undefined;
+    let _clientSecret: string | undefined;
     const authHeader = headers.authorization || headers.Authorization;
     if (authHeader && authHeader.startsWith('Basic ')) {
       try {
@@ -178,8 +183,8 @@ export class AuthController {
         const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
         const [id, secret] = credentials.split(':');
         clientId = id;
-        clientSecret = secret;
-        this.logger.log(`Basic Auth parsed: client_id=${clientId}`);
+        _clientSecret = secret;
+        this.logger.debug(`Basic Auth parsed: client_id=${clientId}`);
       } catch (error) {
         this.logger.warn(`Failed to parse Basic Auth header: ${error.message}`);
       }
