@@ -17,8 +17,8 @@ export function generateLoginPage(
     scope?: string;
     response_type?: string;
     resource?: string;
-    },
-    error?: string,
+  },
+  error?: string,
 ): string {
   return `
 <!DOCTYPE html>

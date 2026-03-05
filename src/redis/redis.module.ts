@@ -23,15 +23,11 @@ const logger = new Logger('RedisModule');
           db: configService.get<number>('REDIS_DB', 0),
           retryStrategy: (times: number) => {
             if (times > 3) {
-              logger.error(
-                `Redis connection failed after ${times} attempts. Giving up.`,
-              );
+              logger.error(`Redis connection failed after ${times} attempts. Giving up.`);
               return null; // Stop retrying
             }
             const delay = Math.min(times * 500, 3000);
-            logger.warn(
-              `Redis connection attempt ${times} failed. Retrying in ${delay}ms...`,
-            );
+            logger.warn(`Redis connection attempt ${times} failed. Retrying in ${delay}ms...`);
             return delay;
           },
           lazyConnect: false,

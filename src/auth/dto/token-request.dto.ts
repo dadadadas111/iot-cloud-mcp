@@ -53,7 +53,6 @@ export class TokenRequestDto {
   @IsOptional()
   client_id?: string;
 
-
   @IsString()
   @IsOptional()
   resource?: string;

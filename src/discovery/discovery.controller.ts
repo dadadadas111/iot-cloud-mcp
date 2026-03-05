@@ -5,7 +5,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 /**
  * RFC 8414 OAuth Discovery Controller
  * Implements path-aware discovery for multi-tenant OAuth endpoints
- * 
+ *
  * Supports both:
  * - Root discovery: /.well-known/oauth-authorization-server
  * - Path-aware discovery: /.well-known/oauth-authorization-server/auth/:projectApiKey
@@ -49,7 +49,7 @@ export class DiscoveryController {
   /**
    * RFC 8414 Path-Aware Discovery for Multi-Tenant OAuth
    * This is the PRIMARY discovery endpoint MCP clients should use
-   * 
+   *
    * Path format: /.well-known/oauth-authorization-server/auth/:projectApiKey
    */
   @Get('oauth-authorization-server/auth/:projectApiKey')
@@ -63,7 +63,9 @@ export class DiscoveryController {
     const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
     const issuer = `${baseUrl}/auth/${projectApiKey}`;
 
-    this.logger.log(`Path-aware authorization server metadata requested for project: ${projectApiKey}`);
+    this.logger.log(
+      `Path-aware authorization server metadata requested for project: ${projectApiKey}`,
+    );
 
     return {
       issuer,
@@ -103,7 +105,7 @@ export class DiscoveryController {
 
   /**
    * RFC 8414 Path-Aware Discovery for Protected Resources
-   * 
+   *
    * Path format: /.well-known/oauth-protected-resource/mcp/:projectApiKey
    */
   @Get('oauth-protected-resource/mcp/:projectApiKey')
@@ -116,7 +118,9 @@ export class DiscoveryController {
   getPathAwareProtectedResourceMetadata(@Param('projectApiKey') projectApiKey: string) {
     const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
 
-    this.logger.log(`Path-aware protected resource metadata requested for project: ${projectApiKey}`);
+    this.logger.log(
+      `Path-aware protected resource metadata requested for project: ${projectApiKey}`,
+    );
 
     return {
       resource: `${baseUrl}/mcp/${projectApiKey}`,

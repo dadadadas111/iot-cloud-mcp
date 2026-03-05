@@ -1,6 +1,10 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
-import { REDIS_CLIENT, MCP_SESSION_PREFIX, MCP_PROJECT_SESSIONS_PREFIX } from '../../redis/redis.constants';
+import {
+  REDIS_CLIENT,
+  MCP_SESSION_PREFIX,
+  MCP_PROJECT_SESSIONS_PREFIX,
+} from '../../redis/redis.constants';
 import { RedisSessionData } from '../dto/mcp-session.dto';
 
 /**
@@ -12,9 +16,7 @@ import { RedisSessionData } from '../dto/mcp-session.dto';
 export class RedisSessionRepository {
   private readonly logger = new Logger(RedisSessionRepository.name);
 
-  constructor(
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) {}
+  constructor(@Inject(REDIS_CLIENT) private readonly redis: Redis) {}
 
   /**
    * Builds the Redis key for a session
@@ -44,9 +46,7 @@ export class RedisSessionRepository {
     pipeline.sadd(setKey, data.sessionId);
     await pipeline.exec();
 
-    this.logger.debug(
-      `Session saved to Redis - Key: ${key}, TTL: ${ttlSeconds}s`,
-    );
+    this.logger.debug(`Session saved to Redis - Key: ${key}, TTL: ${ttlSeconds}s`);
   }
 
   /**
@@ -113,9 +113,7 @@ export class RedisSessionRepository {
       data.lastActivity = new Date().toISOString();
       await this.redis.set(key, JSON.stringify(data), 'EX', ttlSeconds);
     } catch (err) {
-      this.logger.error(
-        `Failed to update lastActivity for key ${key}: ${(err as Error).message}`,
-      );
+      this.logger.error(`Failed to update lastActivity for key ${key}: ${(err as Error).message}`);
     }
   }
 
@@ -158,9 +156,7 @@ export class RedisSessionRepository {
         cleanupPipeline.srem(setKey, sid);
       }
       await cleanupPipeline.exec();
-      this.logger.debug(
-        `Pruned ${staleIds.length} stale session(s) from project set ${setKey}`,
-      );
+      this.logger.debug(`Pruned ${staleIds.length} stale session(s) from project set ${setKey}`);
     }
 
     return activeIds;

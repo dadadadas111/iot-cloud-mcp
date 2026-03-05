@@ -22,7 +22,8 @@ export type FetchUserParams = z.infer<typeof FetchUserParamsSchema>;
  */
 export const FETCH_USER_TOOL = {
   name: 'fetchUser',
-  description: 'Fetch the authenticated user\'s data from the IoT API Server (userId extracted from token)',
+  description:
+    "Fetch the authenticated user's data from the IoT API Server (userId extracted from token)",
   inputSchema: {
     type: 'object' as const,
     properties: {},
@@ -30,7 +31,8 @@ export const FETCH_USER_TOOL = {
   },
   metadata: {
     name: 'fetchUser',
-    description: 'Fetch the authenticated user\'s data from the IoT API Server (userId extracted from token)',
+    description:
+      "Fetch the authenticated user's data from the IoT API Server (userId extracted from token)",
     securitySchemes: {
       oauth2: {
         type: 'oauth2',

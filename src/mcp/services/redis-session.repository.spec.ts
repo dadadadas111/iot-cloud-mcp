@@ -34,7 +34,10 @@ describe('RedisSessionRepository', () => {
       sadd: jest.fn().mockReturnThis(),
       del: jest.fn().mockReturnThis(),
       srem: jest.fn().mockReturnThis(),
-      exec: jest.fn().mockResolvedValue([[null, 'OK'], [null, 1]]),
+      exec: jest.fn().mockResolvedValue([
+        [null, 'OK'],
+        [null, 1],
+      ]),
       exists: jest.fn().mockReturnThis(),
     };
     mockRedis.pipeline.mockReturnValue(mockPipeline);
@@ -76,9 +79,7 @@ describe('RedisSessionRepository', () => {
 
       const result = await repository.get('test-project-key', 'test-session-id');
 
-      expect(mockRedis.get).toHaveBeenCalledWith(
-        'mcp:session:test-project-key:test-session-id',
-      );
+      expect(mockRedis.get).toHaveBeenCalledWith('mcp:session:test-project-key:test-session-id');
       expect(result).toEqual(mockSessionData);
     });
 
@@ -102,7 +103,10 @@ describe('RedisSessionRepository', () => {
   describe('delete', () => {
     it('should return true when session existed and was deleted', async () => {
       const pipeline = mockRedis.pipeline();
-      pipeline.exec.mockResolvedValue([[null, 1], [null, 1]]);
+      pipeline.exec.mockResolvedValue([
+        [null, 1],
+        [null, 1],
+      ]);
 
       const result = await repository.delete('test-project-key', 'test-session-id');
 
@@ -111,7 +115,10 @@ describe('RedisSessionRepository', () => {
 
     it('should return false when session did not exist', async () => {
       const pipeline = mockRedis.pipeline();
-      pipeline.exec.mockResolvedValue([[null, 0], [null, 0]]);
+      pipeline.exec.mockResolvedValue([
+        [null, 0],
+        [null, 0],
+      ]);
 
       const result = await repository.delete('test-project-key', 'nonexistent');
 
@@ -126,9 +133,7 @@ describe('RedisSessionRepository', () => {
 
       await repository.updateLastActivity('test-project-key', 'test-session-id', 3600);
 
-      expect(mockRedis.get).toHaveBeenCalledWith(
-        'mcp:session:test-project-key:test-session-id',
-      );
+      expect(mockRedis.get).toHaveBeenCalledWith('mcp:session:test-project-key:test-session-id');
       expect(mockRedis.set).toHaveBeenCalledWith(
         'mcp:session:test-project-key:test-session-id',
         expect.stringContaining('"lastActivity"'),
@@ -154,17 +159,20 @@ describe('RedisSessionRepository', () => {
       const mockExistsPipeline = {
         exists: jest.fn().mockReturnThis(),
         srem: jest.fn().mockReturnThis(),
-        exec: jest.fn()
-          .mockResolvedValueOnce([[null, 1], [null, 1], [null, 0]]) // exists results
-          .mockResolvedValueOnce([[null, 1]]),                      // srem for stale cleanup
+        exec: jest
+          .fn()
+          .mockResolvedValueOnce([
+            [null, 1],
+            [null, 1],
+            [null, 0],
+          ]) // exists results
+          .mockResolvedValueOnce([[null, 1]]), // srem for stale cleanup
       };
       mockRedis.pipeline.mockReturnValue(mockExistsPipeline);
 
       const result = await repository.getProjectSessionIds('test-project-key');
 
-      expect(mockRedis.smembers).toHaveBeenCalledWith(
-        'mcp:project-sessions:test-project-key',
-      );
+      expect(mockRedis.smembers).toHaveBeenCalledWith('mcp:project-sessions:test-project-key');
       expect(result).toEqual(['session-1', 'session-2']);
     });
 
@@ -179,8 +187,10 @@ describe('RedisSessionRepository', () => {
 
   describe('getStats', () => {
     it('should aggregate stats across all projects (filtering expired sessions)', async () => {
-      mockRedis.scan
-        .mockResolvedValueOnce(['0', ['mcp:project-sessions:proj-a', 'mcp:project-sessions:proj-b']]);
+      mockRedis.scan.mockResolvedValueOnce([
+        '0',
+        ['mcp:project-sessions:proj-a', 'mcp:project-sessions:proj-b'],
+      ]);
 
       // getProjectSessionIds for proj-a: 3 members, all exist
       mockRedis.smembers
@@ -192,9 +202,17 @@ describe('RedisSessionRepository', () => {
       const mockExistsPipeline = {
         exists: jest.fn().mockReturnThis(),
         srem: jest.fn().mockReturnThis(),
-        exec: jest.fn()
-          .mockResolvedValueOnce([[null, 1], [null, 1], [null, 1]]) // proj-a: all 3 exist
-          .mockResolvedValueOnce([[null, 1], [null, 1]]),           // proj-b: all 2 exist
+        exec: jest
+          .fn()
+          .mockResolvedValueOnce([
+            [null, 1],
+            [null, 1],
+            [null, 1],
+          ]) // proj-a: all 3 exist
+          .mockResolvedValueOnce([
+            [null, 1],
+            [null, 1],
+          ]), // proj-b: all 2 exist
       };
       mockRedis.pipeline.mockReturnValue(mockExistsPipeline);
 

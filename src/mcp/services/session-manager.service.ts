@@ -45,7 +45,12 @@ export class SessionManagerService {
    * @param existingSessionId - Optional pre-generated session ID (e.g. from SDK transport)
    * @returns Session ID (provided or newly generated UUID)
    */
-  async createSession(projectApiKey: string, userId: string, server: McpServer, existingSessionId?: string): Promise<string> {
+  async createSession(
+    projectApiKey: string,
+    userId: string,
+    server: McpServer,
+    existingSessionId?: string,
+  ): Promise<string> {
     const sessionId = existingSessionId || uuidv4();
     const now = new Date().toISOString();
 
@@ -80,7 +85,9 @@ export class SessionManagerService {
     const sessionData = await this.redisRepo.get(projectApiKey, sessionId);
 
     if (!sessionData) {
-      this.logger.debug(`Session not found in Redis - Project: ${projectApiKey}, SessionId: ${sessionId}`);
+      this.logger.debug(
+        `Session not found in Redis - Project: ${projectApiKey}, SessionId: ${sessionId}`,
+      );
       return null;
     }
 

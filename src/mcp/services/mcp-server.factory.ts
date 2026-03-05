@@ -62,7 +62,6 @@ All device control operations require only: uuid, elementIds (or action), and co
     // Register all available resources
     this.resourceRegistry.registerResources(server);
 
-
     this.logger.log(`MCP server created and tools registered for project: ${projectApiKey}`);
 
     return server;

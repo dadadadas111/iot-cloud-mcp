@@ -118,11 +118,7 @@ describe('SessionManagerService', () => {
 
       await service.getSession('proj-key', 'session-1');
 
-      expect(mockRedisRepo.updateLastActivity).toHaveBeenCalledWith(
-        'proj-key',
-        'session-1',
-        3600,
-      );
+      expect(mockRedisRepo.updateLastActivity).toHaveBeenCalledWith('proj-key', 'session-1', 3600);
     });
 
     it('should recreate McpServer via factory when not in local cache', async () => {

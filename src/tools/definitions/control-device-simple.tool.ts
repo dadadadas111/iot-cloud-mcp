@@ -74,7 +74,7 @@ export const CONTROL_DEVICE_SIMPLE_TOOL = {
   metadata: {
     name: 'control_device_simple',
     description:
-    'Simplified device control with action names. DESTRUCTIVE. Actions: turn_on/off, set_brightness (0-1000), set_kelvin (0-65000), set_temperature (15-30°C), set_mode (0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN). If elementId omitted, controls all elements. Async via MQTT: wait 2-3s before checking state.',
+      'Simplified device control with action names. DESTRUCTIVE. Actions: turn_on/off, set_brightness (0-1000), set_kelvin (0-65000), set_temperature (15-30°C), set_mode (0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN). If elementId omitted, controls all elements. Async via MQTT: wait 2-3s before checking state.',
     readOnlyHint: false,
     destructiveHint: true,
     securitySchemes: {

@@ -38,7 +38,9 @@ export class ResourceRegistryService {
       async () => {
         this.logger.log('🔍 [RESOURCE ACCESS] device-attributes resource read requested');
         const content = await DEVICE_ATTRIBUTES_RESOURCE.read();
-        this.logger.log(`✅ [RESOURCE ACCESS] device-attributes resource read successful (${content.length} chars)`);
+        this.logger.log(
+          `✅ [RESOURCE ACCESS] device-attributes resource read successful (${content.length} chars)`,
+        );
         return {
           contents: [
             {
@@ -62,7 +64,9 @@ export class ResourceRegistryService {
       async () => {
         this.logger.log('🔍 [RESOURCE ACCESS] control-guide resource read requested');
         const content = await CONTROL_GUIDE_RESOURCE.read();
-        this.logger.log(`✅ [RESOURCE ACCESS] control-guide resource read successful (${content.length} chars)`);
+        this.logger.log(
+          `✅ [RESOURCE ACCESS] control-guide resource read successful (${content.length} chars)`,
+        );
         return {
           contents: [
             {
@@ -86,7 +90,9 @@ export class ResourceRegistryService {
       async () => {
         this.logger.log('🔍 [RESOURCE ACCESS] state-guide resource read requested');
         const content = await STATE_GUIDE_RESOURCE.read();
-        this.logger.log(`✅ [RESOURCE ACCESS] state-guide resource read successful (${content.length} chars)`);
+        this.logger.log(
+          `✅ [RESOURCE ACCESS] state-guide resource read successful (${content.length} chars)`,
+        );
         return {
           contents: [
             {
@@ -110,7 +116,9 @@ export class ResourceRegistryService {
       async () => {
         this.logger.log('🔍 [RESOURCE ACCESS] overview resource read requested');
         const content = await OVERVIEW_RESOURCE.read();
-        this.logger.log(`✅ [RESOURCE ACCESS] overview resource read successful (${content.length} chars)`);
+        this.logger.log(
+          `✅ [RESOURCE ACCESS] overview resource read successful (${content.length} chars)`,
+        );
         return {
           contents: [
             {
