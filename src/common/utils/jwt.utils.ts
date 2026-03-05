@@ -1,6 +1,14 @@
 /**
  * JWT utility functions for Firebase token handling
- * TODO: Add Firebase Admin SDK verification when service account available
+ *
+ * TODO(security/P0): Replace decodeJwt() with Firebase Admin SDK verifyIdToken().
+ * Currently tokens are only base64-decoded, NOT cryptographically verified.
+ * Blocked: waiting for Firebase service account key from company.
+ * When unblocked:
+ *   1. npm install firebase-admin
+ *   2. Initialize admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
+ *   3. Replace decodeJwt() body with admin.auth().verifyIdToken(token)
+ *   4. Remove the manual base64 decode fallback
  */
 
 import { BadRequestException } from '@nestjs/common';

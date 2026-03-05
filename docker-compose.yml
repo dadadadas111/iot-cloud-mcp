@@ -49,6 +49,11 @@ services:
         max-size: '10m'
         max-file: '3'
 
+  # TODO(ops/production): Replace local Redis with external managed Redis service.
+  #   Current setup is co-located with MCP container — acceptable for dev/staging
+  #   since Redis only persists session metadata (non-critical, TTL-based).
+  #   For production: use managed Redis (e.g., Redis Cloud, AWS ElastiCache),
+  #   configure REDIS_PASSWORD, enable TLS, remove this local service block.
   redis:
     image: redis:7-alpine
     container_name: iot-cloud-redis
