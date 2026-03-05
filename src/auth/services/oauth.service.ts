@@ -36,23 +36,23 @@ export class OAuthService {
     projectApiKey: string,
     email: string,
     password: string,
-    codeChallenge: string,
-    codeChallengeMethod: string,
-    redirectUri: string,
-    state: string,
-    scope?: string,
-    resource?: string,
+    _codeChallenge: string,
+    _codeChallengeMethod: string,
+    _redirectUri: string,
+    _state: string,
+    _scope?: string,
+    _resource?: string,
   ): Promise<string> {
     this.logger.log(`Processing login for ${email} in project ${projectApiKey}`);
 
     try {
       // Step 1: Login to get JWT token
       const loginResult = await this.iotApiService.login(projectApiKey, email, password);
-      
+
       // Step 2: Decode JWT to get userId (Firebase uses 'user_id' in their custom tokens)
       const decoded = decodeJwt(loginResult.access_token);
       const userId = String(decoded.user_id || decoded.sub || '');
-      
+
       if (!userId) {
         throw new Error('JWT token does not contain user_id or sub claim');
       }
@@ -82,9 +82,9 @@ export class OAuthService {
   async exchangeCode(
     projectApiKey: string,
     code: string,
-    codeVerifier?: string | undefined,
-    redirectUri?: string | undefined,
-    resource?: string,
+    _codeVerifier?: string | undefined,
+    _redirectUri?: string | undefined,
+    _resource?: string,
   ): Promise<TokenResponseDto> {
     this.logger.log(`Exchanging code for project ${projectApiKey}`);
 
@@ -95,14 +95,11 @@ export class OAuthService {
       this.logger.log('Code exchange successful, returning tokens');
 
       // Convert expires_in to number if it's a string
-      const expiresIn = typeof result.expires_in === 'string' ? parseInt(result.expires_in, 10) : result.expires_in;
+      const expiresIn =
+        typeof result.expires_in === 'string' ? parseInt(result.expires_in, 10) : result.expires_in;
 
       // Wrap JWT in OAuth token response
-      return TokenResponseDto.fromJwt(
-        result.access_token,
-        expiresIn || 3600,
-        result.refresh_token,
-      );
+      return TokenResponseDto.fromJwt(result.access_token, expiresIn || 3600, result.refresh_token);
     } catch (error) {
       this.logger.error(`Code exchange failed: ${error.message}`);
       throw new UnauthorizedException('Invalid authorization code');
@@ -121,7 +118,7 @@ export class OAuthService {
   async refreshToken(
     projectApiKey: string,
     refreshToken: string,
-    resource?: string,
+    _resource?: string,
   ): Promise<TokenResponseDto> {
     this.logger.log(`Refreshing token for project ${projectApiKey}`);
 
@@ -132,14 +129,11 @@ export class OAuthService {
       this.logger.log('Token refresh successful');
 
       // Convert expires_in to number if it's a string
-      const expiresIn = typeof result.expires_in === 'string' ? parseInt(result.expires_in, 10) : result.expires_in;
+      const expiresIn =
+        typeof result.expires_in === 'string' ? parseInt(result.expires_in, 10) : result.expires_in;
 
       // Wrap new JWT in OAuth token response
-      return TokenResponseDto.fromJwt(
-        result.access_token,
-        expiresIn || 3600,
-        result.refresh_token,
-      );
+      return TokenResponseDto.fromJwt(result.access_token, expiresIn || 3600, result.refresh_token);
     } catch (error) {
       this.logger.error(`Token refresh failed: ${error.message}`);
       throw new UnauthorizedException('Invalid refresh token');

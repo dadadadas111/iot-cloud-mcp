@@ -122,7 +122,7 @@ export class McpProtocolHandlerService {
    * @param params - Initialize parameters from client
    * @returns Initialize result with server info
    */
-  private async handleInitialize(params: any): Promise<any> {
+  private async handleInitialize(_params: any): Promise<any> {
     this.logger.log('Client initialize request received');
 
     return {
@@ -277,7 +277,9 @@ export class McpProtocolHandlerService {
       // Execute the resource read callback
       if (typeof resource.handler === 'function') {
         const result = await resource.handler();
-        this.logger.log(`✅ Resource read successful: ${uri} (${result.contents?.[0]?.text?.length || 0} chars)`);
+        this.logger.log(
+          `✅ Resource read successful: ${uri} (${result.contents?.[0]?.text?.length || 0} chars)`,
+        );
         return result;
       }
 
