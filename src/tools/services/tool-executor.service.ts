@@ -4,6 +4,7 @@
  * Handles authentication via JWT tokens and formats responses for MCP
  */
 
+import { IotDevice, IotLocation, IotGroup } from '../../proxy/dto/iot-api-response.dto';
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
@@ -42,6 +43,13 @@ interface ToolContext {
   meta?: Record<string, unknown>;
 }
 
+/** Thrown when authorization header is missing */
+class AuthRequiredError extends Error {
+  constructor() {
+    super('Missing authorization header');
+  }
+}
+
 /**
  * Service responsible for executing registered MCP tools
  * Extracts user context from JWT tokens and delegates to service layer
@@ -50,324 +58,125 @@ interface ToolContext {
 export class ToolExecutorService {
   constructor(private iotApiService: IotApiService) {}
 
-  /**
-   * Validate parameters for a tool
-   * @param toolName - Name of the tool
-   * @param params - Parameters to validate
-   * @returns Error message if validation fails, otherwise null
-   */
-  private validateParams(toolName: string, params: Record<string, unknown>): string | null {
-    switch (toolName) {
-      case FETCH_USER_TOOL.name:
-        // No parameters required for fetchUser
-        if (Object.keys(params).length > 0) {
-          return 'fetchUser tool does not accept any parameters.';
-        }
-        break;
-      case SEARCH_TOOL.name:
-        if (!params.query || typeof params.query !== 'string') {
-          return 'search tool requires a "query" parameter of type string.';
-        }
-        break;
-      case FETCH_TOOL.name:
-        if (!params.id || typeof params.id !== 'string') {
-          return 'fetch tool requires an "id" parameter of type string.';
-        }
-        break;
-      case LIST_DEVICES_TOOL.name:
-        if (params.locationId && typeof params.locationId !== 'string') {
-          return 'listDevices tool accepts an optional "locationId" parameter of type string.';
-        }
-        break;
-      case LIST_LOCATIONS_TOOL.name:
-        // No parameters required for listLocations
-        if (Object.keys(params).length > 0) {
-          return 'listLocations tool does not accept any parameters.';
-        }
-        break;
-      case LIST_GROUPS_TOOL.name:
-        if (params.locationId && typeof params.locationId !== 'string') {
-          return 'listGroups tool accepts an optional "locationId" parameter of type string.';
-        }
-        break;
-      case GET_DEVICE_TOOL.name:
-        if (!params.uuid || typeof params.uuid !== 'string') {
-          return 'getDevice tool requires a "uuid" parameter of type string.';
-        }
-        break;
-      case UPDATE_DEVICE_TOOL.name:
-        if (!params.uuid || typeof params.uuid !== 'string') {
-          return 'updateDevice tool requires a "uuid" parameter of type string.';
-        }
-        if (Object.keys(params).length <= 1) {
-          return 'updateDevice tool requires at least one field to update.';
-        }
-        break;
-      case DELETE_DEVICE_TOOL.name:
-        if (!params.uuid || typeof params.uuid !== 'string') {
-          return 'deleteDevice tool requires a "uuid" parameter of type string.';
-        }
-        break;
-      case GET_DEVICE_STATE_TOOL.name:
-        if (!params.uuid || typeof params.uuid !== 'string') {
-          return 'getDeviceState tool requires a "uuid" parameter of type string.';
-        }
-        break;
-      case GET_LOCATION_STATE_TOOL.name:
-        if (!params.locationUuid || typeof params.locationUuid !== 'string') {
-          return 'getLocationState tool requires a "locationUuid" parameter of type string.';
-        }
-        break;
-      case GET_DEVICE_STATE_BY_MAC_TOOL.name:
-        if (!params.locationUuid || typeof params.locationUuid !== 'string') {
-          return 'getDeviceStateByMac tool requires a "locationUuid" parameter of type string.';
-        }
-        if (!params.macAddress || typeof params.macAddress !== 'string') {
-          return 'getDeviceStateByMac tool requires a "macAddress" parameter of type string.';
-        }
-        break;
-      case CONTROL_DEVICE_TOOL.name:
-        if (!params.uuid || typeof params.uuid !== 'string') {
-          return 'controlDevice tool requires a "uuid" parameter of type string.';
-        }
-        if (!params.command || !Array.isArray(params.command)) {
-          return 'controlDevice tool requires a "command" parameter of type array.';
-        }
-        break;
-      case CONTROL_DEVICE_SIMPLE_TOOL.name:
-        if (!params.uuid || typeof params.uuid !== 'string') {
-          return 'controlDeviceSimple tool requires a "uuid" parameter of type string.';
-        }
-        if (!params.action || typeof params.action !== 'string') {
-          return 'controlDeviceSimple tool requires an "action" parameter of type string.';
-        }
-        break;
-      case 'get_device_documentation':
-        if (!params.topic || typeof params.topic !== 'string') {
-          return 'get_device_documentation tool requires a "topic" parameter of type string.';
-        }
-        const validTopics = ['overview', 'device_attributes', 'control_guide', 'state_guide'];
-        if (!validTopics.includes(params.topic as string)) {
-          return `get_device_documentation tool requires topic to be one of: ${validTopics.join(', ')}`;
-        }
-        break;
-      default:
-        return `Unknown tool: ${toolName}`;
+  /** Tool name → handler map for O(1) dispatch */
+  private readonly toolHandlers: Record<
+    string,
+    (params: Record<string, unknown>, context: ToolContext) => Promise<CallToolResult>
+  > = {
+    [FETCH_USER_TOOL.name]: (p, c) => this.executeFetchUser(p as FetchUserParams, c),
+    [SEARCH_TOOL.name]: (p, c) => this.executeSearch(p as SearchParams, c),
+    [FETCH_TOOL.name]: (p, c) => this.executeFetch(p as FetchParams, c),
+    [LIST_DEVICES_TOOL.name]: (p, c) => this.executeListDevices(p as ListDevicesParams, c),
+    [LIST_LOCATIONS_TOOL.name]: (p, c) => this.executeListLocations(p as ListLocationsParams, c),
+    [LIST_GROUPS_TOOL.name]: (p, c) => this.executeListGroups(p as ListGroupsParams, c),
+    [GET_DEVICE_TOOL.name]: (p, c) => this.executeGetDevice(p as GetDeviceParams, c),
+    [UPDATE_DEVICE_TOOL.name]: (p, c) => this.executeUpdateDevice(p as UpdateDeviceParams, c),
+    [DELETE_DEVICE_TOOL.name]: (p, c) => this.executeDeleteDevice(p as DeleteDeviceParams, c),
+    [GET_DEVICE_STATE_TOOL.name]: (p, c) =>
+      this.executeGetDeviceState(p as GetDeviceStateParams, c),
+    [GET_LOCATION_STATE_TOOL.name]: (p, c) =>
+      this.executeGetLocationState(p as GetLocationStateParams, c),
+    [GET_DEVICE_STATE_BY_MAC_TOOL.name]: (p, c) =>
+      this.executeGetDeviceStateByMac(p as GetDeviceStateByMacParams, c),
+    [CONTROL_DEVICE_TOOL.name]: (p, c) => this.executeControlDevice(p as ControlDeviceParams, c),
+    [CONTROL_DEVICE_SIMPLE_TOOL.name]: (p, c) =>
+      this.executeControlDeviceSimple(p as ControlDeviceSimpleParams, c),
+    [GET_DEVICE_DOCUMENTATION_TOOL.name]: (p, _c) =>
+      Promise.resolve(this.executeGetDeviceDocumentation(p as { topic: string })),
+  };
+
+  // ─── Helpers ────────────────────────────────────────────────────────────────
+
+  /** Extract userId from JWT in authorization header. Throws AuthRequiredError if missing. */
+  private extractUserContext(context: ToolContext): { userId: string; projectApiKey: string } {
+    if (!context.authorization) {
+      throw new AuthRequiredError();
     }
-    return null;
+    const token = extractBearerToken(context.authorization);
+    const decoded = decodeJwt(token);
+    const userId = getUserIdFromToken(decoded);
+    return { userId, projectApiKey: context.projectApiKey || 'unknown' };
   }
+
+  /** Validate authorization header exists, return projectApiKey. No userId extraction. */
+  private requireAuthHeader(context: ToolContext): string {
+    if (!context.authorization) {
+      throw new AuthRequiredError();
+    }
+    return context.projectApiKey || 'unknown';
+  }
+
+  /** Wrap data as successful MCP CallToolResult */
+  private successResult(data: unknown): CallToolResult {
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(data) }],
+    };
+  }
+
+  /** Wrap error as MCP CallToolResult with sanitized message */
+  private errorResult(error: unknown, includeAuthHint = true): CallToolResult {
+    const errorMessage = sanitizeErrorForClient(error);
+    const payload: Record<string, unknown> = { isError: true, error: errorMessage };
+    if (includeAuthHint) {
+      payload._meta = { 'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"' };
+    }
+    return {
+      content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
+    };
+  }
+
+  // ─── Public API ─────────────────────────────────────────────────────────────
 
   /**
    * Execute a tool with given parameters and context
-   * Handles authentication, service delegation, and response formatting
-   *
-   * @param toolName - Name of the tool to execute
-   * @param params - Tool parameters
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted response
+   * Routes to the appropriate handler via handler map
    */
   async executeTool(
     toolName: string,
     params: Record<string, unknown>,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    // Validate parameters before executing the tool
-    const validationError = this.validateParams(toolName, params);
-    if (validationError) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: validationError,
-            }),
-          },
-        ],
-      };
+    const handler = this.toolHandlers[toolName];
+    if (!handler) {
+      throw new BadRequestException(`Unknown tool: ${toolName}`);
     }
-
-    if (toolName === FETCH_USER_TOOL.name) {
-      return this.executeFetchUser(params as FetchUserParams, context);
-    }
-
-    if (toolName === SEARCH_TOOL.name) {
-      return this.executeSearch(params as SearchParams, context);
-    }
-
-    if (toolName === FETCH_TOOL.name) {
-      return this.executeFetch(params as FetchParams, context);
-    }
-
-    if (toolName === LIST_DEVICES_TOOL.name) {
-      return this.executeListDevices(params as ListDevicesParams, context);
-    }
-
-    if (toolName === LIST_LOCATIONS_TOOL.name) {
-      return this.executeListLocations(params as ListLocationsParams, context);
-    }
-
-    if (toolName === LIST_GROUPS_TOOL.name) {
-      return this.executeListGroups(params as ListGroupsParams, context);
-    }
-
-    if (toolName === GET_DEVICE_TOOL.name) {
-      return this.executeGetDevice(params as GetDeviceParams, context);
-    }
-
-    if (toolName === UPDATE_DEVICE_TOOL.name) {
-      return this.executeUpdateDevice(params as UpdateDeviceParams, context);
-    }
-
-    if (toolName === DELETE_DEVICE_TOOL.name) {
-      return this.executeDeleteDevice(params as DeleteDeviceParams, context);
-    }
-
-    if (toolName === GET_DEVICE_STATE_TOOL.name) {
-      return this.executeGetDeviceState(params as GetDeviceStateParams, context);
-    }
-
-    if (toolName === GET_LOCATION_STATE_TOOL.name) {
-      return this.executeGetLocationState(params as GetLocationStateParams, context);
-    }
-
-    if (toolName === GET_DEVICE_STATE_BY_MAC_TOOL.name) {
-      return this.executeGetDeviceStateByMac(params as GetDeviceStateByMacParams, context);
-    }
-
-    if (toolName === CONTROL_DEVICE_TOOL.name) {
-      return this.executeControlDevice(params as ControlDeviceParams, context);
-    }
-
-    if (toolName === CONTROL_DEVICE_SIMPLE_TOOL.name) {
-      return this.executeControlDeviceSimple(params as ControlDeviceSimpleParams, context);
-    }
-
-    if (toolName === 'get_device_documentation') {
-      return this.executeGetDeviceDocumentation(params as { topic: string });
-    }
-
-    throw new BadRequestException(`Unknown tool: ${toolName}`);
+    return handler(params, context);
   }
 
-  /**
-   * Execute fetchUser tool
-   * Extracts userId from Bearer token and fetches user data from IoT API
-   *
-   * @param params - Empty object (tool requires no parameters)
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted user data response
-   */
+  // ─── Tool Handlers ──────────────────────────────────────────────────────────
+
+  /** Fetch authenticated user profile */
   private async executeFetchUser(
-    params: FetchUserParams,
+    _params: FetchUserParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      // Extract and decode JWT token to get userId
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
-
-      // Fetch user data from IoT API using userId
-      const userData = await this.iotApiService.fetchUser(
-        context.projectApiKey || 'unknown',
-        userId,
-      );
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(userData),
-          },
-        ],
-      };
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const userData = await this.iotApiService.fetchUser(projectApiKey, userId);
+      return this.successResult(userData);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute search tool
-   * Searches across devices, locations, and groups by keyword
-   *
-   * @param params - Search parameters with query keyword
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted search results
-   */
+  /** Search across devices, locations, and groups by keyword */
   private async executeSearch(params: SearchParams, context: ToolContext): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      // Extract userId from Bearer token
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
+      const { userId, projectApiKey } = this.extractUserContext(context);
 
-      // Fetch all resources in parallel
       const [devices, locations, groups] = await Promise.all([
-        this.iotApiService.listDevices(context.projectApiKey || 'unknown', userId),
-        this.iotApiService.listLocations(context.projectApiKey || 'unknown', userId),
-        this.iotApiService.listGroups(context.projectApiKey || 'unknown', userId),
+        this.iotApiService.listDevices(projectApiKey, userId),
+        this.iotApiService.listLocations(projectApiKey, userId),
+        this.iotApiService.listGroups(projectApiKey, userId),
       ]);
 
-      // Filter results by query keyword (case-insensitive)
       const query = params.query.toLowerCase();
 
-      // Slim matched devices
       const matchedDevices = devices
         .filter(
-          (d: any) =>
-            d.label?.toLowerCase().includes(query) || d.desc?.toLowerCase().includes(query),
+          (d) => d.label?.toLowerCase().includes(query) || d.desc?.toLowerCase().includes(query),
         )
-        .map((d: any) => {
+        .map((d) => {
           const typeInfo = resolveDeviceType(d);
           return {
             uuid: d.uuid,
@@ -384,129 +193,60 @@ export class ToolExecutorService {
           };
         });
 
-      // Slim matched locations
       const matchedLocations = locations
         .filter(
-          (l: any) =>
-            l.label?.toLowerCase().includes(query) || l.desc?.toLowerCase().includes(query),
+          (l) => l.label?.toLowerCase().includes(query) || l.desc?.toLowerCase().includes(query),
         )
-        .map((l: any) => ({
+        .map((l) => ({
           uuid: l.uuid,
           label: l.label,
           desc: l.desc,
         }));
 
-      // Slim matched groups
       const matchedGroups = groups
         .filter(
-          (g: any) =>
-            g.label?.toLowerCase().includes(query) || g.desc?.toLowerCase().includes(query),
+          (g) => g.label?.toLowerCase().includes(query) || g.desc?.toLowerCase().includes(query),
         )
-        .map((g: any) => ({
+        .map((g) => ({
           uuid: g.uuid,
           label: g.label,
           desc: g.desc,
           locationId: g.locationId,
         }));
 
-      const result = {
+      return this.successResult({
         total: matchedDevices.length + matchedLocations.length + matchedGroups.length,
         devices: matchedDevices,
         locations: matchedLocations,
         groups: matchedGroups,
-      };
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(result),
-          },
-        ],
-      };
+      });
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute fetch tool
-   * Retrieves complete resource details by ID in format "type:uuid"
-   *
-   * @param params - Fetch parameters with id in format "type:uuid"
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted resource data
-   */
+  /** Fetch resource by "type:uuid" format */
   private async executeFetch(params: FetchParams, context: ToolContext): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      // Extract userId from Bearer token
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
+      const { userId, projectApiKey } = this.extractUserContext(context);
 
-      // Parse id format "type:uuid"
       const parts = params.id.split(':');
       if (parts.length !== 2) {
         throw new Error('Invalid id format. Expected "type:uuid" (e.g., "device:abc-123")');
       }
 
       const [type, uuid] = parts;
-      let resource: any;
+      let resource: IotDevice | IotLocation | IotGroup;
 
-      // Route to appropriate API method based on type
       switch (type.toLowerCase()) {
         case 'device':
-          resource = await this.iotApiService.getDevice(
-            context.projectApiKey || 'unknown',
-            userId,
-            uuid,
-          );
+          resource = await this.iotApiService.getDevice(projectApiKey, userId, uuid);
           break;
         case 'location':
-          resource = await this.iotApiService.getLocation(
-            context.projectApiKey || 'unknown',
-            userId,
-            uuid,
-          );
+          resource = await this.iotApiService.getLocation(projectApiKey, userId, uuid);
           break;
         case 'group':
-          resource = await this.iotApiService.getGroup(
-            context.projectApiKey || 'unknown',
-            userId,
-            uuid,
-          );
+          resource = await this.iotApiService.getGroup(projectApiKey, userId, uuid);
           break;
         default:
           throw new Error(
@@ -514,76 +254,27 @@ export class ToolExecutorService {
           );
       }
 
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(resource),
-          },
-        ],
-      };
+      return this.successResult(resource);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute list_devices tool
-   * Lists all devices, optionally filtered by location
-   *
-   * @param params - Parameters with optional locationId
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted device list
-   */
+  /** List devices with slim response and device type enrichment */
   private async executeListDevices(
     params: ListDevicesParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
+      const { userId, projectApiKey } = this.extractUserContext(context);
 
       const devices = await this.iotApiService.listDevices(
-        context.projectApiKey || 'unknown',
+        projectApiKey,
         userId,
         params.locationId ?? undefined,
       );
 
-      // Enrich each device with device type from productInfos, then slim for token efficiency
-      const slimDevices = devices.map((device: Record<string, unknown>) => {
+      const slimDevices = devices.map((device) => {
         const typeInfo = resolveDeviceType(device);
         return {
           uuid: device.uuid,
@@ -597,500 +288,142 @@ export class ToolExecutorService {
         };
       });
 
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({ total: slimDevices.length, devices: slimDevices }),
-          },
-        ],
-      };
+      return this.successResult({ total: slimDevices.length, devices: slimDevices });
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute list_locations tool
-   * Lists all locations for the authenticated user
-   *
-   * @param params - Empty parameters object
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted location list
-   */
+  /** List locations with slim response */
   private async executeListLocations(
-    params: ListLocationsParams,
+    _params: ListLocationsParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
+      const { userId, projectApiKey } = this.extractUserContext(context);
 
-      const locations = await this.iotApiService.listLocations(
-        context.projectApiKey || 'unknown',
-        userId,
-      );
-      // Slim locations for token efficiency — drop extraInfo, userId, timestamps
-      const slimLocations = locations.map((loc: Record<string, unknown>) => ({
+      const locations = await this.iotApiService.listLocations(projectApiKey, userId);
+      const slimLocations = locations.map((loc) => ({
         uuid: loc.uuid,
         label: loc.label,
         desc: loc.desc,
       }));
 
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({ total: slimLocations.length, locations: slimLocations }),
-          },
-        ],
-      };
+      return this.successResult({ total: slimLocations.length, locations: slimLocations });
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute list_groups tool
-   * Lists all groups, optionally filtered by location
-   *
-   * @param params - Parameters with optional locationId
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted group list
-   */
+  /** List groups with slim response */
   private async executeListGroups(
     params: ListGroupsParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
+      const { userId, projectApiKey } = this.extractUserContext(context);
 
       const groups = await this.iotApiService.listGroups(
-        context.projectApiKey || 'unknown',
+        projectApiKey,
         userId,
         params.locationId ?? undefined,
       );
-      // Slim groups for token efficiency — drop elementId, extraInfo, userId, type, timestamps
-      const slimGroups = groups.map((group: Record<string, unknown>) => ({
+      const slimGroups = groups.map((group) => ({
         uuid: group.uuid,
         label: group.label,
         desc: group.desc,
         locationId: group.locationId,
       }));
 
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({ total: slimGroups.length, groups: slimGroups }),
-          },
-        ],
-      };
+      return this.successResult({ total: slimGroups.length, groups: slimGroups });
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute get_device tool
-   * Gets a specific device by UUID
-   *
-   * @param params - Tool parameters including device uuid
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted device data response
-   */
+  /** Get device with full payload + deviceType/brand enrichment */
   private async executeGetDevice(
     params: GetDeviceParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
+      const { userId, projectApiKey } = this.extractUserContext(context);
 
-      const device = await this.iotApiService.getDevice(
-        context.projectApiKey || 'unknown',
-        userId,
-        params.uuid,
-      );
+      const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
 
-      // Enrich with device type from productInfos (primary) + full decode for brand/ownership
-      const typeInfo = resolveDeviceType(device as Record<string, unknown>);
-      const productDecoded = device.productId ? decodeProductId(device.productId as string) : null;
+      const typeInfo = resolveDeviceType(device);
+      const productDecoded = device.productId ? decodeProductId(device.productId) : null;
       const enrichedDevice = {
         ...device,
         ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
         ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
       };
 
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(enrichedDevice),
-          },
-        ],
-      };
+      return this.successResult(enrichedDevice);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute update_device tool
-   * Updates device properties like label, description, location, or group
-   *
-   * @param params - Tool parameters including device uuid and optional fields to update
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted update response
-   */
+  /** Update device properties (label, desc, locationId, groupId) */
   private async executeUpdateDevice(
     params: UpdateDeviceParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
+      const { userId, projectApiKey } = this.extractUserContext(context);
 
       const { uuid, ...rawUpdates } = params;
       // Coerce null → undefined so downstream proxy types are satisfied
       const updates = Object.fromEntries(Object.entries(rawUpdates).filter(([, v]) => v !== null));
 
-      const result = await this.iotApiService.updateDevice(
-        context.projectApiKey || 'unknown',
-        userId,
-        uuid,
-        updates,
-      );
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(result),
-          },
-        ],
-      };
+      const result = await this.iotApiService.updateDevice(projectApiKey, userId, uuid, updates);
+      return this.successResult(result);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute delete_device tool
-   * Permanently deletes a device - DESTRUCTIVE OPERATION
-   *
-   * @param params - Tool parameters including device uuid to delete
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted deletion response
-   */
+  /** Permanently delete a device — DESTRUCTIVE OPERATION */
   private async executeDeleteDevice(
     params: DeleteDeviceParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
-
-      const result = await this.iotApiService.deleteDevice(
-        context.projectApiKey || 'unknown',
-        userId,
-        params.uuid,
-      );
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(result),
-          },
-        ],
-      };
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const result = await this.iotApiService.deleteDevice(projectApiKey, userId, params.uuid);
+      return this.successResult(result);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute get_device_state tool
-   * Gets device state by device UUID
-   *
-   * @param params - Tool parameters including device UUID
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted device state response
-   */
+  /** Get device state by UUID (auth required, no userId needed) */
   private async executeGetDeviceState(
     params: GetDeviceStateParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const state = await this.iotApiService.getDeviceState(
-        context.projectApiKey || 'unknown',
-        params.uuid,
-      );
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(state),
-          },
-        ],
-      };
+      const projectApiKey = this.requireAuthHeader(context);
+      const state = await this.iotApiService.getDeviceState(projectApiKey, params.uuid);
+      return this.successResult(state);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute get_location_state tool
-   * Gets state of all devices in a location
-   *
-   * @param params - Tool parameters including location UUID
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted location state response
-   */
+  /** Get all device states in a location with slim response */
   private async executeGetLocationState(
     params: GetLocationStateParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const state = await this.iotApiService.getLocationState(
-        context.projectApiKey || 'unknown',
-        params.locationUuid,
-      );
+      const projectApiKey = this.requireAuthHeader(context);
+      const state = await this.iotApiService.getLocationState(projectApiKey, params.locationUuid);
+
       // Slim location state — drop redundant loc/from/uuid, keep useful fields
       const slimState = Array.isArray(state)
-        ? state.map((entry: any) => ({
+        ? state.map((entry) => ({
             mac: entry.mac,
             devId: entry.devId,
             state: entry.state,
@@ -1098,136 +431,41 @@ export class ToolExecutorService {
           }))
         : state;
 
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(slimState),
-          },
-        ],
-      };
+      return this.successResult(slimState);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute get_device_state_by_mac tool
-   * Gets device state by MAC address within a location
-   *
-   * @param params - Tool parameters including location UUID and MAC address
-   * @param context - Request context with authorization header and projectApiKey
-   * @returns MCP-formatted device state response
-   */
+  /** Get device state by MAC address within a location */
   private async executeGetDeviceStateByMac(
     params: GetDeviceStateByMacParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
+      const projectApiKey = this.requireAuthHeader(context);
       const state = await this.iotApiService.getDeviceStateByMac(
-        context.projectApiKey || 'unknown',
+        projectApiKey,
         params.locationUuid,
         params.macAddress,
       );
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(state),
-          },
-        ],
-      };
+      return this.successResult(state);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute control_device tool
-   * Send raw control command to device
-   */
+  /** Send raw control command to device */
   private async executeControlDevice(
     params: ControlDeviceParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
+      const { userId, projectApiKey } = this.extractUserContext(context);
 
       // Fetch device details first to get required control fields
-      const device = await this.iotApiService.getDevice(
-        context.projectApiKey || 'unknown',
-        userId,
-        params.uuid,
-      );
+      const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
 
-      // Build control payload with required fields from device
       const controlPayload = {
         eid: device.eid,
         elementIds: params.elementIds,
@@ -1238,74 +476,23 @@ export class ToolExecutorService {
         protocolCtl: device.protocolCtl,
       };
 
-      const result = await this.iotApiService.controlDevice(
-        context.projectApiKey || 'unknown',
-        controlPayload,
-      );
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(result),
-          },
-        ],
-      };
+      const result = await this.iotApiService.controlDevice(projectApiKey, controlPayload);
+      return this.successResult(result);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute control_device_simple tool
-   * Control device using simplified actions
-   */
+  /** Control device using simplified action names */
   private async executeControlDeviceSimple(
     params: ControlDeviceSimpleParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
-    if (!context.authorization) {
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: 'Missing authorization header',
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
-    }
-
     try {
-      const token = extractBearerToken(context.authorization);
-      const decoded = decodeJwt(token);
-      const userId = getUserIdFromToken(decoded);
+      const { userId, projectApiKey } = this.extractUserContext(context);
 
       // Fetch device details first to get required control fields
-      const device = await this.iotApiService.getDevice(
-        context.projectApiKey || 'unknown',
-        userId,
-        params.uuid,
-      );
+      const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
 
       // Map simplified action to command array
       let command: number[];
@@ -1347,7 +534,6 @@ export class ToolExecutorService {
       // Use specified elementId or all device elementIds
       const elementIds = params.elementId != null ? [params.elementId] : device.elementIds;
 
-      // Build control payload with required fields from device
       const controlPayload = {
         eid: device.eid,
         elementIds,
@@ -1358,69 +544,22 @@ export class ToolExecutorService {
         protocolCtl: device.protocolCtl,
       };
 
-      const result = await this.iotApiService.controlDevice(
-        context.projectApiKey || 'unknown',
-        controlPayload,
-      );
-
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify(result),
-          },
-        ],
-      };
+      const result = await this.iotApiService.controlDevice(projectApiKey, controlPayload);
+      return this.successResult(result);
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-              _meta: {
-                'mcp/www_authenticate': 'Bearer realm="iot-cloud-mcp"',
-              },
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error);
     }
   }
 
-  /**
-   * Execute get_device_documentation tool
-   * Returns documentation markdown content
-   *
-   * @param params - Tool parameters including topic
-   * @returns MCP-formatted documentation content
-   */
+  /** Return device documentation markdown (no auth, no API call) */
   private executeGetDeviceDocumentation(params: { topic: string }): CallToolResult {
     try {
       const content = GET_DEVICE_DOCUMENTATION_TOOL.execute(params.topic);
       return {
-        content: [
-          {
-            type: 'text' as const,
-            text: content,
-          },
-        ],
+        content: [{ type: 'text' as const, text: content }],
       };
     } catch (error) {
-      const errorMessage = sanitizeErrorForClient(error);
-      return {
-        content: [
-          {
-            type: 'text' as const,
-            text: JSON.stringify({
-              isError: true,
-              error: errorMessage,
-            }),
-          },
-        ],
-      };
+      return this.errorResult(error, false);
     }
   }
 }

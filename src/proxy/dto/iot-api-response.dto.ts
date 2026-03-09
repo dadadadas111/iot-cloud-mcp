@@ -86,3 +86,72 @@ export interface IotApiErrorResponse {
   /** Additional error context */
   [key: string]: unknown;
 }
+
+// ─── IoT Resource Types ───────────────────────────────────────────────────────
+
+/**
+ * Device from IoT API (/iot-core/device/{userId})
+ * Index signature allows additional fields from the API that we don't explicitly type
+ */
+export interface IotDevice {
+  uuid: string;
+  label: string;
+  desc: string;
+  mac: string;
+  locationId: string;
+  groupId: string;
+  features: unknown;
+  productId: string;
+  productInfos: number[];
+  eid: number;
+  endpoint: string;
+  partnerId: string;
+  rootUuid: string;
+  protocolCtl: number;
+  elementIds: number[];
+  [key: string]: unknown;
+}
+
+/**
+ * Location from IoT API (/iot-core/location/{userId})
+ */
+export interface IotLocation {
+  uuid: string;
+  label: string;
+  desc: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Group from IoT API (/iot-core/group/{userId})
+ */
+export interface IotGroup {
+  uuid: string;
+  label: string;
+  desc: string;
+  locationId: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Device state entry from location state endpoint
+ * (/iot-core/state/{locationUuid})
+ */
+export interface IotLocationStateEntry {
+  mac: string;
+  devId: string;
+  state: unknown;
+  updatedAt: string;
+  [key: string]: unknown;
+}
+
+/** Control device request payload */
+export interface IotControlPayload {
+  eid: number;
+  elementIds: number[];
+  command: number[];
+  endpoint: string;
+  partnerId: string;
+  rootUuid: string;
+  protocolCtl: number;
+}
