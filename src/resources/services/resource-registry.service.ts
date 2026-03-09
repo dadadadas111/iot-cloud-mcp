@@ -10,6 +10,8 @@ import { DEVICE_ATTRIBUTES_RESOURCE } from '../definitions/device-attributes.res
 import { CONTROL_GUIDE_RESOURCE } from '../definitions/control-guide.resource';
 import { STATE_GUIDE_RESOURCE } from '../definitions/state-guide.resource';
 import { OVERVIEW_RESOURCE } from '../definitions/overview.resource';
+import { DEVICE_DASHBOARD_WIDGET } from '../../widgets/definitions/device-dashboard.widget';
+import { WidgetService } from '../../widgets/services/widget.service';
 
 /**
  * Service responsible for registering MCP resources with the MCP server
@@ -17,6 +19,8 @@ import { OVERVIEW_RESOURCE } from '../definitions/overview.resource';
 @Injectable()
 export class ResourceRegistryService {
   private readonly logger = new Logger(ResourceRegistryService.name);
+
+  constructor(private readonly widgetService: WidgetService) {}
 
   /**
    * Register all available resources with the MCP server
@@ -125,6 +129,32 @@ export class ResourceRegistryService {
               uri: OVERVIEW_RESOURCE.uri,
               mimeType: OVERVIEW_RESOURCE.mimeType,
               text: content,
+            },
+          ],
+        };
+      },
+    );
+
+    // Register device dashboard widget (ChatGPT interactive UI)
+    mcpServer.registerResource(
+      DEVICE_DASHBOARD_WIDGET.name,
+      DEVICE_DASHBOARD_WIDGET.uri,
+      {
+        description: DEVICE_DASHBOARD_WIDGET.description,
+        mimeType: DEVICE_DASHBOARD_WIDGET.mimeType,
+      },
+      async () => {
+        this.logger.log('🔍 [RESOURCE ACCESS] device-dashboard widget resource read requested');
+        const html = await this.widgetService.render('device-dashboard', {});
+        this.logger.log(
+          `✅ [RESOURCE ACCESS] device-dashboard widget resource read successful (${html.length} chars)`,
+        );
+        return {
+          contents: [
+            {
+              uri: DEVICE_DASHBOARD_WIDGET.uri,
+              mimeType: DEVICE_DASHBOARD_WIDGET.mimeType,
+              text: html,
             },
           ],
         };

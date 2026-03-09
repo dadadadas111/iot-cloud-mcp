@@ -53,4 +53,11 @@ export const GET_DEVICE_TOOL = {
     },
   },
   schema: GetDeviceParamsSchema,
+  _meta: {
+    'openai/outputTemplate': 'ui://widget/device-dashboard.html',
+    'openai/widgetAccessible': true,
+    'openai/resultCanProduceWidget': true,
+    'openai/toolInvocation/invoking': 'Loading device details...',
+    'openai/toolInvocation/invoked': 'Device loaded',
+  },
 };

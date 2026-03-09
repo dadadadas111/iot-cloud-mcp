@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { ToolsModule } from './tools/tools.module';
 import { McpModule } from './mcp/mcp.module';
 import { RedisModule } from './redis/redis.module';
+import { WidgetsModule } from './widgets/widgets.module';
 
 @Module({
   imports: [
@@ -58,6 +59,9 @@ import { RedisModule } from './redis/redis.module';
 
     // MCP Tools
     ToolsModule,
+
+    // MCP Widgets (ChatGPT interactive UI)
+    WidgetsModule,
 
     // MCP Protocol
     McpModule,

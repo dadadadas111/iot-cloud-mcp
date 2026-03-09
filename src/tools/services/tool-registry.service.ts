@@ -64,6 +64,7 @@ export class ToolRegistryService {
         {
           description: tool.metadata.description,
           inputSchema: tool.schema,
+          ...('_meta' in tool && tool._meta ? { _meta: tool._meta } : {}),
         },
         async (params: Record<string, unknown>, extra) => {
           return this.toolExecutor.executeTool(tool.name, params, {
