@@ -58,10 +58,10 @@ export const INTERACT_DEVICE_TOOL = {
   schema: InteractDeviceParamsSchema,
   _meta: {
     ui: {
-      resourceUri: 'ui://widget/device-control.html',
+      resourceUri: 'ui://widget/device-app.html',
       visibility: ['model', 'app'],
     },
-    'openai/outputTemplate': 'ui://widget/device-control.html',
+    'openai/outputTemplate': 'ui://widget/device-app.html',
     'openai/widgetAccessible': true,
     'openai/toolInvocation/invoking': 'Opening control panel...',
     'openai/toolInvocation/invoked': 'Control panel ready',

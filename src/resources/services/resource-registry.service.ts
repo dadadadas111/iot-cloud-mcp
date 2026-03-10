@@ -13,6 +13,7 @@ import { OVERVIEW_RESOURCE } from '../definitions/overview.resource';
 import { DEVICE_DASHBOARD_WIDGET } from '../../widgets/definitions/device-dashboard.widget';
 import { DEVICE_LIST_WIDGET } from '../../widgets/definitions/device-list.widget';
 import { DEVICE_CONTROL_WIDGET } from '../../widgets/definitions/device-control.widget';
+import { DEVICE_APP_WIDGET } from '../../widgets/definitions/device-app.widget';
 import { WidgetService } from '../../widgets/services/widget.service';
 
 /**
@@ -212,6 +213,34 @@ export class ResourceRegistryService {
             {
               uri: DEVICE_CONTROL_WIDGET.uri,
               mimeType: DEVICE_CONTROL_WIDGET.mimeType,
+              text: html,
+              _meta: { ui: { prefersBorder: true } },
+            },
+          ],
+        };
+      },
+    );
+
+    // Register unified device app widget (ChatGPT interactive SPA)
+    // Single HTML that renders list, dashboard, and control views based on _view hint
+    mcpServer.registerResource(
+      DEVICE_APP_WIDGET.name,
+      DEVICE_APP_WIDGET.uri,
+      {
+        description: DEVICE_APP_WIDGET.description,
+        mimeType: DEVICE_APP_WIDGET.mimeType,
+      },
+      async () => {
+        this.logger.log('🔍 [RESOURCE ACCESS] device-app widget resource read requested');
+        const html = await this.widgetService.readStaticHtml('device-app');
+        this.logger.log(
+          `✅ [RESOURCE ACCESS] device-app widget resource read successful (${html.length} chars)`,
+        );
+        return {
+          contents: [
+            {
+              uri: DEVICE_APP_WIDGET.uri,
+              mimeType: DEVICE_APP_WIDGET.mimeType,
               text: html,
               _meta: { ui: { prefersBorder: true } },
             },
