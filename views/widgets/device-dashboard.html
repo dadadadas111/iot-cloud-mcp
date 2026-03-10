@@ -534,38 +534,71 @@
         /* ── Parse state into per-element structure ────────── */
 
         /**
-         * State from API can be:
-         *   { state: { "1": { "1": [1,1], "28": [28,800] }, "2": { "1": [1,0] } } }
-         * or directly:
-         *   { "1": { "1": [1,1], "28": [28,800] } }
+         * Validates whether an object is an element→attribute map:
+         *   { "elemId": { "attrId": [attrId, value, ...] } }
+         * Attribute values MUST be arrays. If they're objects, we're
+         * one nesting level too high (e.g. seeing the wrapper, not the map).
+         */
+        function isElementAttrMap(obj) {
+          if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+          var keys = Object.keys(obj);
+          if (keys.length === 0) return false;
+
+          var first = obj[keys[0]];
+          if (!first || typeof first !== 'object' || Array.isArray(first)) return false;
+
+          // Critical check: the inner values (attribute values) should be ARRAYS
+          // e.g. { "1": [1, 1], "28": [28, 800] } — values are arrays ✓
+          // vs   { "1": { "1": [1,1] }, "2": { "1": [1,0] } } — values are objects ✗
+          var innerKeys = Object.keys(first);
+          if (innerKeys.length === 0) return false;
+          return Array.isArray(first[innerKeys[0]]);
+        }
+
+        /**
+         * State from API can arrive in multiple formats:
+         *   1. Flat:    { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
+         *   2. Wrapped: { state: { "1": { ... }, "2": { ... } }, mac: "...", ... }
+         *   3. Double:  { state: { state: { ... } } }
+         *   4. Array:   [{ state: { ... }, mac: ... }]
          * Returns array of { elementId, attrs: [{ attrId, values }] } or null.
          */
         function parseState(raw) {
           if (!raw || typeof raw !== 'object') return null;
 
-          // Unwrap if nested under .state key
           var stateObj = raw;
-          if (raw.state && typeof raw.state === 'object' && !Array.isArray(raw.state)) {
-            stateObj = raw.state;
-          }
 
-          // Also handle array wrapper (location state format)
-          if (Array.isArray(stateObj)) {
-            if (stateObj.length > 0 && stateObj[0] && stateObj[0].state) {
-              stateObj = stateObj[0].state;
-            } else {
+          // Iteratively unwrap until we find the element→attribute map.
+          // Max 4 iterations guards against infinite loops on bad data.
+          for (var depth = 0; depth < 4; depth++) {
+            // Handle array wrapper (location state format): [{ state: {...} }]
+            if (Array.isArray(stateObj)) {
+              if (stateObj.length > 0 && stateObj[0] && stateObj[0].state) {
+                stateObj = stateObj[0].state;
+                continue;
+              }
               return null;
             }
+
+            // Check if current level is the element→attribute map
+            if (isElementAttrMap(stateObj)) break;
+
+            // Not the right level — try unwrapping .state
+            if (stateObj.state && typeof stateObj.state === 'object') {
+              stateObj = stateObj.state;
+              continue;
+            }
+
+            // Can't unwrap further and it's not a valid map
+            break;
           }
+
+          // Final validation after unwrapping
+          if (!isElementAttrMap(stateObj)) return null;
 
           var elementIds = Object.keys(stateObj).sort(function (a, b) {
             return Number(a) - Number(b);
           });
-          if (elementIds.length === 0) return null;
-
-          // Check if this looks like element→attribute structure (values should be objects)
-          var first = stateObj[elementIds[0]];
-          if (!first || typeof first !== 'object' || Array.isArray(first)) return null;
 
           var elements = [];
           for (var i = 0; i < elementIds.length; i++) {

@@ -125,6 +125,42 @@ export class ToolExecutorService {
     };
   }
 
+  /**
+   * Extract flat element→attribute state map from various API response formats.
+   * The getDeviceState API may return:
+   *   - Wrapped:  { state: { "1": { ... } }, mac, devId, updatedAt }
+   *   - Flat:     { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
+   *   - Array:    [{ state: { ... }, mac, ... }]
+   * This normalizes all formats to the flat element→attribute map.
+   */
+  private extractStateMap(rawState: unknown): Record<string, unknown> | null {
+    if (!rawState || typeof rawState !== 'object') return null;
+
+    // Handle array wrapper: [{ state: {...} }]
+    if (Array.isArray(rawState)) {
+      const first = rawState[0] as Record<string, unknown> | undefined;
+      if (first?.state && typeof first.state === 'object') {
+        return first.state as Record<string, unknown>;
+      }
+      return null;
+    }
+
+    const record = rawState as Record<string, unknown>;
+
+    // Handle wrapped format: { state: { ... }, mac, devId, ... }
+    if (
+      'state' in record &&
+      record.state &&
+      typeof record.state === 'object' &&
+      !Array.isArray(record.state)
+    ) {
+      return record.state as Record<string, unknown>;
+    }
+
+    // Already flat: { "1": { "1": [1,1] }, ... }
+    return record;
+  }
+
   // ─── Public API ─────────────────────────────────────────────────────────────
 
   /**
@@ -366,13 +402,18 @@ export class ToolExecutorService {
 
       const typeInfo = resolveDeviceType(device);
       const productDecoded = device.productId ? decodeProductId(device.productId) : null;
+
+      // Normalize state to flat element→attribute map { "1": { "1": [1,1] }, ... }
+      // The getDeviceState API may return wrapped: { state: {...}, mac, devId, ... }
+      const stateMap = this.extractStateMap(state);
+
       const enrichedDevice = {
         ...device,
         ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
         ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
         locationLabel: location?.label ?? null,
         groupLabel: group?.label ?? null,
-        state: state ?? null,
+        state: stateMap,
       };
 
       // Return both text content (backward compatible) and structuredContent (for ChatGPT widgets)
