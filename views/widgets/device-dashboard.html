@@ -556,11 +556,11 @@
         }
 
         /**
-         * State from API can arrive in multiple formats:
-         *   1. Flat:    { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
-         *   2. Wrapped: { state: { "1": { ... }, "2": { ... } }, mac: "...", ... }
-         *   3. Double:  { state: { state: { ... } } }
-         *   4. Array:   [{ state: { ... }, mac: ... }]
+         * State from API arrives nested under device ID:
+         *   { DEVICE_ID: { ELEMENT_ID: { ATTR_ID: [attrId, value, ...] } } }
+         * May also be further wrapped:
+         *   { state: { DEVICE_ID: { ... } }, mac, devId, ... }
+         *   [{ state: { ... } }]
          * Returns array of { elementId, attrs: [{ attrId, values }] } or null.
          */
         function parseState(raw) {
@@ -569,9 +569,10 @@
           var stateObj = raw;
 
           // Iteratively unwrap until we find the element→attribute map.
-          // Max 4 iterations guards against infinite loops on bad data.
-          for (var depth = 0; depth < 4; depth++) {
-            // Handle array wrapper (location state format): [{ state: {...} }]
+          // Each iteration peels one wrapper: .state key, array[0], or device-ID key.
+          // Max 5 iterations guards against infinite loops on bad data.
+          for (var depth = 0; depth < 5; depth++) {
+            // Handle array wrapper: [{ state: {...} }]
             if (Array.isArray(stateObj)) {
               if (stateObj.length > 0 && stateObj[0] && stateObj[0].state) {
                 stateObj = stateObj[0].state;
@@ -580,20 +581,35 @@
               return null;
             }
 
-            // Check if current level is the element→attribute map
+            // Found it!
             if (isElementAttrMap(stateObj)) break;
 
-            // Not the right level — try unwrapping .state
+            // Try unwrapping .state key
             if (stateObj.state && typeof stateObj.state === 'object') {
               stateObj = stateObj.state;
               continue;
             }
 
-            // Can't unwrap further and it's not a valid map
-            break;
+            // Try unwrapping device-ID wrapper: single (or few) key(s) whose values
+            // are objects-of-objects (the element map). Pick the first one.
+            var topKeys = Object.keys(stateObj);
+            if (topKeys.length > 0) {
+              var candidate = stateObj[topKeys[0]];
+              if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+                if (isElementAttrMap(candidate)) {
+                  stateObj = candidate;
+                  break;
+                }
+                // Still deeper nesting — keep unwrapping
+                stateObj = candidate;
+                continue;
+              }
+            }
+
+            break; // Nothing more to unwrap
           }
 
-          // Final validation after unwrapping
+          // Final validation
           if (!isElementAttrMap(stateObj)) return null;
 
           var elementIds = Object.keys(stateObj).sort(function (a, b) {

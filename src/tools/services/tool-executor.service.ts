@@ -126,12 +126,13 @@ export class ToolExecutorService {
   }
 
   /**
-   * Extract flat element→attribute state map from various API response formats.
-   * The getDeviceState API may return:
-   *   - Wrapped:  { state: { "1": { ... } }, mac, devId, updatedAt }
-   *   - Flat:     { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
-   *   - Array:    [{ state: { ... }, mac, ... }]
-   * This normalizes all formats to the flat element→attribute map.
+   * Extract flat element→attribute state map from the getDeviceState API response.
+   *
+   * The API returns a nested structure:
+   *   { state: { DEVICE_ID: { ELEMENT_ID: { ATTR_ID: [attrId, val, ...] } } }, mac, ... }
+   *
+   * This normalizes it to the flat element→attribute map:
+   *   { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
    */
   private extractStateMap(rawState: unknown): Record<string, unknown> | null {
     if (!rawState || typeof rawState !== 'object') return null;
@@ -140,25 +141,47 @@ export class ToolExecutorService {
     if (Array.isArray(rawState)) {
       const first = rawState[0] as Record<string, unknown> | undefined;
       if (first?.state && typeof first.state === 'object') {
-        return first.state as Record<string, unknown>;
+        return this.extractStateMap(first);
       }
       return null;
     }
 
-    const record = rawState as Record<string, unknown>;
+    let record = rawState as Record<string, unknown>;
 
-    // Handle wrapped format: { state: { ... }, mac, devId, ... }
+    // Unwrap .state key: { state: { ... }, mac, devId, ... } → { ... }
     if (
       'state' in record &&
       record.state &&
       typeof record.state === 'object' &&
       !Array.isArray(record.state)
     ) {
-      return record.state as Record<string, unknown>;
+      record = record.state as Record<string, unknown>;
     }
 
-    // Already flat: { "1": { "1": [1,1] }, ... }
-    return record;
+    // Now record is either:
+    // A) element→attribute map: { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
+    //    where inner-most values are ARRAYS
+    // B) deviceId→elements wrapper: { "devUuid": { "1": { "1": [1,1] }, ... } }
+    //    where inner-most values at this depth are still OBJECTS
+    //
+    // Detect which by checking: are the leaf values at depth-2 arrays?
+    const keys = Object.keys(record);
+    if (keys.length === 0) return null;
+
+    const firstVal = record[keys[0]];
+    if (!firstVal || typeof firstVal !== 'object' || Array.isArray(firstVal)) {
+      return record; // Unexpected shape, return as-is
+    }
+
+    // Check if firstVal's values are arrays (= this IS the element→attribute map)
+    const inner = firstVal as Record<string, unknown>;
+    const innerKeys = Object.keys(inner);
+    if (innerKeys.length > 0 && Array.isArray(inner[innerKeys[0]])) {
+      return record; // Confirmed: element→attribute map
+    }
+
+    // Inner values are objects → device ID wrapper. Unwrap by taking first device's state.
+    return firstVal as Record<string, unknown>;
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────
