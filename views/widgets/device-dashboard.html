@@ -370,7 +370,7 @@
     <div id="ddw-root">
       <div class="ddw-loading">
         <div class="ddw-spinner"></div>
-        <span>Loading device data…</span>
+        <span id="ddw-loading-text">Loading device data…</span>
       </div>
     </div>
 
@@ -380,47 +380,99 @@
 
         var root = document.getElementById('ddw-root');
 
-        /* ── Device icon map ──────────────────────────────── */
+        /* ── i18n ──────────────────────────────────────────── */
+
+        // Locale data injected server-side as window.__I18N__
+        // from views/widgets/locales/*.json — add a new language
+        // by dropping a .json file there, zero code changes needed.
+        var STRINGS = window.__I18N__ || {};
+
+        /**
+         * Translate helper. Reads ChatGPT's locale from
+         * document.documentElement.lang (set by OpenAI Apps SDK),
+         * normalizes to base language code, falls back to English.
+         */
+        var _lang = null;
+        function t(key) {
+          if (!_lang) {
+            _lang = (document.documentElement.lang || 'en').split('-')[0].toLowerCase();
+            if (!STRINGS[_lang]) _lang = 'en';
+            // Update loading text on first call
+            var loadEl = document.getElementById('ddw-loading-text');
+            if (loadEl && STRINGS[_lang]) loadEl.textContent = STRINGS[_lang].loading || '';
+          }
+          return (STRINGS[_lang] && STRINGS[_lang][key]) || (STRINGS.en && STRINGS.en[key]) || key;
+        }
+
+        /* ── Device icon map (keyed by raw DEVICE_TYPE enum) ── */
 
         var DEVICE_ICONS = {
-          'LED Light': '\uD83D\uDCA1',
-          Switch: '\uD83D\uDD18',
+          LIGHT: '\uD83D\uDCA1',
+          SWITCH: '\uD83D\uDD18',
+          PLUG: '\uD83D\uDD0C',
+          CURTAINS: '\uD83E\uDE9F',
+          DOORLOCK: '\uD83D\uDD12',
+          DOORBELL: '\uD83D\uDD14',
+          CAMERA: '\uD83D\uDCF7',
+          SPEAKER: '\uD83D\uDD0A',
           AC: '\u2744\uFE0F',
-          Lock: '\uD83D\uDD12',
-          Gate: '\uD83D\uDEAA',
-          Fan: '\uD83C\uDF00',
-          Sensor: '\uD83D\uDCE1',
-          Curtain: '\uD83E\uDE9F',
-          'IR Remote': '\uD83D\uDCF1',
-          Camera: '\uD83D\uDCF7',
+          AC_CONTROLLER: '\u2744\uFE0F',
+          TV: '\uD83D\uDCFA',
+          FAN: '\uD83C\uDF00',
+          GATE: '\uD83D\uDEAA',
+          IR_DEVICE_CONTROLLER: '\uD83D\uDCF1',
+          SIREN: '\uD83D\uDEA8',
+          GATEWAY: '\uD83C\uDF10',
+          SENSOR_DEVICE: '\uD83D\uDCE1',
+          MOTION_SENSOR: '\uD83D\uDCE1',
+          MOTION_LUX_SENSOR: '\uD83D\uDCE1',
+          PRESENCE_SENSOR: '\uD83D\uDCE1',
+          TEMP_SENSOR: '\uD83C\uDF21',
+          HEAT_SENSOR: '\uD83C\uDF21',
+          SMOKE_SENSOR: '\uD83D\uDCA8',
+          DOOR_SENSOR: '\uD83D\uDEAA',
+          DUST_SENSOR: '\uD83C\uDF2B',
+          LUX_SENSOR: '\u2600\uFE0F',
+          DIMMER: '\uD83D\uDCA1',
+          DIMMER_SCENE: '\uD83D\uDCA1',
+          SWITCH_LIGHT_DIMMER: '\uD83D\uDCA1',
+          SWITCH_SCENE: '\uD83D\uDD18',
+          MACHINE_COFFEE: '\u2615',
         };
 
         function getIcon(deviceType) {
           return (deviceType && DEVICE_ICONS[deviceType]) || '\uD83D\uDCDF';
         }
 
-        /* ── Attribute ID → human-readable name ───────────── */
+        /* ── Attribute ID → translated name ───────────────── */
 
-        var ATTR_NAMES = {
-          1: 'Power',
-          2: 'Open/Close',
-          3: 'Lock',
-          17: 'Mode',
-          18: 'Swing',
-          19: 'Fan Speed',
-          20: 'Temperature',
-          28: 'Brightness',
-          29: 'Color Temp',
-          30: 'Brightness & Kelvin',
-          31: 'Color HSV',
-          82: 'IR Button',
-          257: 'AC Control',
+        var ATTR_NAME_KEYS = {
+          1: 'attr_power',
+          2: 'attr_open_close',
+          3: 'attr_lock',
+          17: 'attr_mode',
+          18: 'attr_swing',
+          19: 'attr_fan_speed',
+          20: 'attr_temperature',
+          28: 'attr_brightness',
+          29: 'attr_color_temp',
+          30: 'attr_brightness_kelvin',
+          31: 'attr_color_hsv',
+          82: 'attr_ir_button',
+          257: 'attr_ac_control',
         };
 
-        var AC_MODES = { 0: 'Auto', 1: 'Cool', 2: 'Dry', 3: 'Heat', 4: 'Fan' };
-        var FAN_SPEEDS = { 0: 'Auto', 1: 'Low', 2: 'Normal', 3: 'High', 4: 'Max', 255: 'Custom' };
+        var AC_MODE_KEYS = { 0: 'auto', 1: 'cool', 2: 'dry', 3: 'heat', 4: 'fan' };
+        var FAN_SPEED_KEYS = {
+          0: 'auto',
+          1: 'low',
+          2: 'normal',
+          3: 'high',
+          4: 'max',
+          255: 'custom',
+        };
 
-        /* ── Formatting helpers ───────────────────────────── */
+        /* ── Formatting helpers ──────────────────────────── */
 
         function esc(str) {
           if (str == null) return '';
@@ -438,36 +490,38 @@
           switch (String(attrId)) {
             case '1': // ON_OFF
               return vals[0] === 1
-                ? '<span class="ddw-power-dot ddw-power-on"></span><span class="ddw-power-label">On</span>'
-                : '<span class="ddw-power-dot ddw-power-off"></span><span class="ddw-power-label">Off</span>';
+                ? '<span class="ddw-power-dot ddw-power-on"></span><span class="ddw-power-label">' + esc(t('on')) + '</span>'
+                : '<span class="ddw-power-dot ddw-power-off"></span><span class="ddw-power-label">' + esc(t('off')) + '</span>';
 
             case '2': // OPEN_CLOSE
               return (
-                '<span class="ddw-attr-val">' + (vals[0] === 1 ? 'Open' : 'Closed') + '</span>'
+                '<span class="ddw-attr-val">' + esc(vals[0] === 1 ? t('open') : t('closed')) + '</span>'
               );
 
             case '3': // LOCK_UNLOCK
               return (
-                '<span class="ddw-attr-val">' + (vals[0] === 1 ? 'Unlocked' : 'Locked') + '</span>'
+                '<span class="ddw-attr-val">' + esc(vals[0] === 1 ? t('unlocked') : t('locked')) + '</span>'
               );
 
             case '17': // MODE (AC)
-              return '<span class="ddw-attr-val">' + esc(AC_MODES[vals[0]] || vals[0]) + '</span>';
+              var modeKey = AC_MODE_KEYS[vals[0]];
+              return '<span class="ddw-attr-val">' + esc(modeKey ? t(modeKey) : vals[0]) + '</span>';
 
             case '18': // FAN_SWING
               return (
                 '<span class="ddw-attr-val">' +
-                (vals[0] === 0 ? 'Auto' : vals[0] === 255 ? 'Off' : esc(vals[0])) +
+                esc(vals[0] === 0 ? t('auto') : vals[0] === 255 ? t('off') : vals[0]) +
                 '</span>'
               );
 
             case '19': // FAN_SPEED
+              var fsKey = FAN_SPEED_KEYS[vals[0]];
               return (
-                '<span class="ddw-attr-val">' + esc(FAN_SPEEDS[vals[0]] || vals[0]) + '</span>'
+                '<span class="ddw-attr-val">' + esc(fsKey ? t(fsKey) : vals[0]) + '</span>'
               );
 
             case '20': // TEMP_SET
-              return '<span class="ddw-attr-val">' + esc(vals[0]) + '°C</span>';
+              return '<span class="ddw-attr-val">' + esc(vals[0]) + '\u00B0C</span>';
 
             case '28': // BRIGHTNESS (0-1000)
               var pct = Math.round(vals[0] / 10);
@@ -491,7 +545,7 @@
                 '%"></span></span> ' +
                 '<span class="ddw-attr-val">' +
                 bPct +
-                '% · ' +
+                '% \u00B7 ' +
                 esc(vals[1]) +
                 'K</span>'
               );
@@ -507,7 +561,7 @@
                 ';vertical-align:middle;margin-right:4px;border:1px solid rgba(0,0,0,0.1)"></span>' +
                 '<span class="ddw-attr-val">H' +
                 h +
-                '° S' +
+                '\u00B0 S' +
                 s +
                 '% V' +
                 v +
@@ -516,22 +570,28 @@
 
             case '257': // AC combined [on/off, mode, temp, fan, swing]
               var parts = [];
-              parts.push(vals[0] === 1 ? 'On' : 'Off');
-              if (vals[1] != null) parts.push(AC_MODES[vals[1]] || 'Mode ' + vals[1]);
-              if (vals[2] != null) parts.push(vals[2] + '°C');
-              if (vals[3] != null) parts.push('Fan: ' + (FAN_SPEEDS[vals[3]] || vals[3]));
+              parts.push(vals[0] === 1 ? t('on') : t('off'));
+              if (vals[1] != null) {
+                var acMKey = AC_MODE_KEYS[vals[1]];
+                parts.push(acMKey ? t(acMKey) : t('mode_prefix') + ' ' + vals[1]);
+              }
+              if (vals[2] != null) parts.push(vals[2] + '\u00B0C');
+              if (vals[3] != null) {
+                var acFKey = FAN_SPEED_KEYS[vals[3]];
+                parts.push(t('fan_prefix') + ': ' + (acFKey ? t(acFKey) : vals[3]));
+              }
               if (vals[4] != null)
                 parts.push(
-                  'Swing: ' + (vals[4] === 0 ? 'Auto' : vals[4] === 255 ? 'Off' : vals[4]),
+                  t('swing_prefix') + ': ' + (vals[4] === 0 ? t('auto') : vals[4] === 255 ? t('off') : vals[4]),
                 );
-              return '<span class="ddw-attr-val">' + esc(parts.join(' · ')) + '</span>';
+              return '<span class="ddw-attr-val">' + esc(parts.join(' \u00B7 ')) + '</span>';
 
             default:
               return '<span class="ddw-attr-val">' + esc(vals.join(', ')) + '</span>';
           }
         }
 
-        /* ── Parse state into per-element structure ────────── */
+        /* ── Parse state into per-element structure ──────── */
 
         /**
          * Validates whether an object is an element→attribute map:
@@ -641,7 +701,7 @@
           if (!data) return;
 
           var icon = data.deviceIcon || getIcon(data.deviceType);
-          var label = data.label || 'Unnamed Device';
+          var label = data.label || t('unnamed_device');
           var desc = data.desc || '';
           var deviceType = data.deviceType || null;
           var locationLabel = data.locationLabel || null;
@@ -669,7 +729,7 @@
           html += '<div class="ddw-label">' + esc(label) + '</div>';
           if (desc) html += '<div class="ddw-desc">' + esc(desc) + '</div>';
           html += '</div>';
-          if (deviceType) html += '<span class="ddw-badge">' + esc(deviceType) + '</span>';
+          if (deviceType) html += '<span class="ddw-badge">' + esc(t('dt_' + deviceType)) + '</span>';
           html += '</div></div>';
 
           /* Body */
@@ -681,13 +741,13 @@
             html += '<div class="ddw-info-grid">';
             if (locationLabel) {
               html += '<div class="ddw-info-item">';
-              html += '<div class="ddw-info-label">Location</div>';
+              html += '<div class="ddw-info-label">' + esc(t('location')) + '</div>';
               html += '<div class="ddw-info-value">' + esc(locationLabel) + '</div>';
               html += '</div>';
             }
             if (groupLabel) {
               html += '<div class="ddw-info-item">';
-              html += '<div class="ddw-info-label">Group</div>';
+              html += '<div class="ddw-info-label">' + esc(t('group')) + '</div>';
               html += '<div class="ddw-info-value">' + esc(groupLabel) + '</div>';
               html += '</div>';
             }
@@ -696,7 +756,7 @@
 
           /* State section — per-element blocks */
           html += '<div class="ddw-state-section">';
-          html += '<div class="ddw-section-label">Device State</div>';
+          html += '<div class="ddw-section-label">' + esc(t('device_state')) + '</div>';
 
           if (stateElements) {
             var multiElement = stateElements.length > 1;
@@ -708,7 +768,7 @@
               /* Element header — only show label for multi-element devices */
               if (multiElement) {
                 html += '<div class="ddw-element-header">';
-                html += '<span class="ddw-element-id">Element ' + esc(el.elementId) + '</span>';
+                html += '<span class="ddw-element-id">' + esc(t('element')) + ' ' + esc(el.elementId) + '</span>';
                 html += '</div>';
               }
 
@@ -716,7 +776,8 @@
               html += '<div class="ddw-attr-list">';
               for (var ai = 0; ai < el.attrs.length; ai++) {
                 var attr = el.attrs[ai];
-                var attrName = ATTR_NAMES[attr.attrId] || 'Attr ' + attr.attrId;
+                var nameKey = ATTR_NAME_KEYS[attr.attrId];
+                var attrName = nameKey ? t(nameKey) : t('attr_prefix') + ' ' + attr.attrId;
                 html += '<div class="ddw-attr-chip">';
                 html += '<span class="ddw-attr-name">' + esc(attrName) + '</span> ';
                 html += formatAttrValue(attr.attrId, attr.values);
@@ -727,27 +788,27 @@
               html += '</div>'; // element-block
             }
           } else {
-            html += '<div class="ddw-state-empty">No state data available</div>';
+            html += '<div class="ddw-state-empty">' + esc(t('no_state')) + '</div>';
           }
           html += '</div>';
 
           /* Technical details (collapsible) */
           var technicalRows = [];
-          if (brand) technicalRows.push(['Brand', brand]);
-          if (ownership) technicalRows.push(['Ownership', ownership]);
-          if (uuid) technicalRows.push(['UUID', uuid]);
-          if (mac) technicalRows.push(['MAC', mac]);
-          if (productId) technicalRows.push(['Product ID', productId]);
-          if (locationId) technicalRows.push(['Location ID', locationId]);
-          if (groupId) technicalRows.push(['Group ID', groupId]);
-          if (eid != null) technicalRows.push(['EID', eid]);
-          if (endpoint) technicalRows.push(['Endpoint', endpoint]);
-          if (elementIds.length > 0) technicalRows.push(['Element IDs', elementIds.join(', ')]);
+          if (brand) technicalRows.push([t('td_brand'), brand]);
+          if (ownership) technicalRows.push([t('td_ownership'), ownership]);
+          if (uuid) technicalRows.push([t('td_uuid'), uuid]);
+          if (mac) technicalRows.push([t('td_mac'), mac]);
+          if (productId) technicalRows.push([t('td_product_id'), productId]);
+          if (locationId) technicalRows.push([t('td_location_id'), locationId]);
+          if (groupId) technicalRows.push([t('td_group_id'), groupId]);
+          if (eid != null) technicalRows.push([t('td_eid'), eid]);
+          if (endpoint) technicalRows.push([t('td_endpoint'), endpoint]);
+          if (elementIds.length > 0) technicalRows.push([t('td_element_ids'), elementIds.join(', ')]);
 
           if (technicalRows.length > 0) {
             html +=
               "<button class=\"ddw-details-toggle\" aria-expanded=\"false\" onclick=\"this.setAttribute('aria-expanded', this.getAttribute('aria-expanded') === 'true' ? 'false' : 'true'); this.nextElementSibling.classList.toggle('ddw-open')\">";
-            html += '<span class="ddw-details-arrow">\u25B6</span> Technical Details';
+            html += '<span class="ddw-details-arrow">\u25B6</span> ' + esc(t('technical_details'));
             html += '</button>';
             html += '<div class="ddw-details-content">';
             for (var ti = 0; ti < technicalRows.length; ti++) {
@@ -760,7 +821,7 @@
 
           /* Footer */
           html += '<div class="ddw-footer">';
-          html += '<span class="ddw-footer-text">Rogo IoT Cloud</span>';
+          html += '<span class="ddw-footer-text">' + esc(t('footer')) + '</span>';
           html += '</div>';
 
           html += '</div>'; // card
@@ -781,7 +842,7 @@
           );
         }
 
-        /* ── Data bridge: OpenAI Apps SDK ─────────────────── */
+        /* ── Data bridge: OpenAI Apps SDK ───────────────── */
 
         // 1. Try reading initial data from window.openai globals
         if (window.openai && window.openai.toolOutput) {

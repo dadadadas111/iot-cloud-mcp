@@ -1,13 +1,14 @@
 /**
  * Widget Service
  * Reads static HTML widget files for MCP resource responses,
+ * injects i18n locale data from views/widgets/locales/*.json,
  * and renders Handlebars templates for dev-time preview.
  * Widget files live at project root: views/widgets/
  */
 
 import { Injectable, Logger } from '@nestjs/common';
 import * as Handlebars from 'handlebars';
-import { readFile } from 'fs/promises';
+import { readFile, readdir } from 'fs/promises';
 import { join } from 'path';
 
 /** Data passed to widget preview templates */
@@ -26,29 +27,41 @@ export interface WidgetData {
 export class WidgetService {
   private readonly logger = new Logger(WidgetService.name);
   private readonly viewsPath: string;
+  private readonly localesPath: string;
+  private localeCache: Record<string, Record<string, string>> | null = null;
 
   constructor() {
     // Views live at project root /views/widgets/, read at runtime via process.cwd()
     // Same pattern as docs/ai-resources/ used by existing resources
     this.viewsPath = join(process.cwd(), 'views', 'widgets');
+    this.localesPath = join(this.viewsPath, 'locales');
 
     // Register custom Handlebars helpers for preview templates
     this.registerHelpers();
   }
 
   /**
-   * Read a static HTML widget file for MCP resource responses.
-   * The HTML contains embedded JS that reads data from window.openai.toolOutput
-   * at runtime in the ChatGPT iframe — no server-side data injection needed.
+   * Read a static HTML widget file and inject i18n locale data.
+   * Locale JSON files from views/widgets/locales/ are auto-discovered,
+   * bundled, and injected as window.__I18N__ before the widget script.
+   * The widget's t() helper reads document.documentElement.lang at runtime.
    *
    * @param widgetName - Name of the widget file (without .html extension)
-   * @returns Raw HTML string
+   * @returns HTML string with locale data injected
    */
   async readStaticHtml(widgetName: string): Promise<string> {
     const filePath = join(this.viewsPath, `${widgetName}.html`);
 
     try {
-      const html = await readFile(filePath, 'utf-8');
+      let html = await readFile(filePath, 'utf-8');
+
+      // Inject i18n locale data before the first <script> tag
+      const locales = await this.loadLocales();
+      if (Object.keys(locales).length > 0) {
+        const localeScript = `<script>window.__I18N__=${JSON.stringify(locales)}</script>\n`;
+        html = html.replace('<script>', localeScript + '<script>');
+      }
+
       return html;
     } catch (error) {
       this.logger.error(`Failed to read widget HTML: ${widgetName}`, error);
@@ -87,5 +100,32 @@ export class WidgetService {
         return a === b ? options.fn(this) : options.inverse(this);
       },
     );
+  }
+
+  /**
+   * Load all locale JSON files from views/widgets/locales/.
+   * Each file (e.g. en.json, vi.json) becomes a key in the returned object.
+   * Results are cached in memory after first load.
+   */
+  private async loadLocales(): Promise<Record<string, Record<string, string>>> {
+    if (this.localeCache) return this.localeCache;
+
+    try {
+      const files = await readdir(this.localesPath);
+      const locales: Record<string, Record<string, string>> = {};
+
+      for (const file of files) {
+        if (!file.endsWith('.json')) continue;
+        const lang = file.replace('.json', '');
+        const content = await readFile(join(this.localesPath, file), 'utf-8');
+        locales[lang] = JSON.parse(content);
+      }
+
+      this.localeCache = locales;
+      return locales;
+    } catch {
+      // No locales directory or read error — widget works without i18n
+      return {};
+    }
   }
 }

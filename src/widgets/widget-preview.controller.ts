@@ -2,10 +2,10 @@
  * Widget Preview Controller
  * Dev-time endpoint for previewing widget templates in a browser.
  * Injects sample data as window.openai.toolOutput to simulate the ChatGPT iframe environment.
- * Access via: GET /widgets/preview/device-dashboard
+ * Access via: GET /widgets/preview/device-dashboard?lang=vi
  */
 
-import { Controller, Get, Res } from '@nestjs/common';
+import { Controller, Get, Query, Res } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { WidgetService } from './services/widget.service';
@@ -26,7 +26,7 @@ export class WidgetPreviewController {
    * GET /widgets/preview/device-dashboard
    */
   @Get('device-dashboard')
-  async previewDeviceDashboard(@Res() res: Response): Promise<void> {
+  async previewDeviceDashboard(@Query('lang') lang: string, @Res() res: Response): Promise<void> {
     const sampleData = {
       uuid: '507f1f77bcf86cd799439011',
       label: 'Living Room Light',
@@ -37,7 +37,7 @@ export class WidgetPreviewController {
       groupId: '507f1f77bcf86cd799439033',
       groupLabel: 'Main Lights',
       features: { dimming: true, colorTemp: true },
-      deviceType: 'LED Light',
+      deviceType: 'LIGHT',
       deviceTypeId: 1,
       brand: 'Rogo',
       ownership: 'owned',
@@ -63,8 +63,10 @@ export class WidgetPreviewController {
 
     const widgetHtml = await this.widgetService.readStaticHtml('device-dashboard');
 
-    // Inject window.openai.toolOutput before the widget script runs
-    const previewHtml = widgetHtml.replace(
+    // Inject window.openai.toolOutput and set <html lang> for locale testing
+    const locale = lang || 'en';
+    let previewHtml = widgetHtml.replace('<html lang="en">', `<html lang="${locale}">`);
+    previewHtml = previewHtml.replace(
       '<script>',
       `<script>window.openai = { toolOutput: ${JSON.stringify(sampleData)} };</script>\n<script>`,
     );
