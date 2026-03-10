@@ -480,6 +480,7 @@
         var _lang = null;
         function t(key) {
           if (!_lang) {
+            console.log('[DDW] Setting language, document.documentElement.lang:', document.documentElement.lang);
             _lang = (document.documentElement.lang || 'en').split('-')[0].toLowerCase();
             if (!STRINGS[_lang]) _lang = 'en';
             // Update loading text on first call
@@ -490,7 +491,11 @@
         }
 
 
-        /* ── Theme detection ─────────────────────────────── */
+        /* ── Theme detection (with logging) ──────────────── */
+
+        console.log('[DDW] Initializing widget...');
+        console.log('[DDW] document.documentElement.lang:', document.documentElement.lang);
+        console.log('[DDW] window.openai:', window.openai);
 
         function applyTheme(theme) {
           var root = document.documentElement;
@@ -506,11 +511,13 @@
 
         // Read initial theme from OpenAI Apps SDK
         if (window.openai && window.openai.theme) {
+          console.log('[DDW] Initial theme from window.openai.theme:', window.openai.theme);
           applyTheme(window.openai.theme);
         }
 
         // Listen for theme changes from host
         window.addEventListener('openai:set_globals', function (event) {
+          console.log('[DDW] openai:set_globals received, event.detail:', event.detail);
           var globals = event.detail && event.detail.globals;
           if (globals && globals.theme) {
             applyTheme(globals.theme);
