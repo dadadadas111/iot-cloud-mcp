@@ -12,6 +12,7 @@ import { STATE_GUIDE_RESOURCE } from '../definitions/state-guide.resource';
 import { OVERVIEW_RESOURCE } from '../definitions/overview.resource';
 import { DEVICE_DASHBOARD_WIDGET } from '../../widgets/definitions/device-dashboard.widget';
 import { DEVICE_LIST_WIDGET } from '../../widgets/definitions/device-list.widget';
+import { DEVICE_CONTROL_WIDGET } from '../../widgets/definitions/device-control.widget';
 import { WidgetService } from '../../widgets/services/widget.service';
 
 /**
@@ -184,6 +185,33 @@ export class ResourceRegistryService {
             {
               uri: DEVICE_LIST_WIDGET.uri,
               mimeType: DEVICE_LIST_WIDGET.mimeType,
+              text: html,
+              _meta: { ui: { prefersBorder: true } },
+            },
+          ],
+        };
+      },
+    );
+
+    // Register device control widget (ChatGPT interactive UI)
+    mcpServer.registerResource(
+      DEVICE_CONTROL_WIDGET.name,
+      DEVICE_CONTROL_WIDGET.uri,
+      {
+        description: DEVICE_CONTROL_WIDGET.description,
+        mimeType: DEVICE_CONTROL_WIDGET.mimeType,
+      },
+      async () => {
+        this.logger.log('🔍 [RESOURCE ACCESS] device-control widget resource read requested');
+        const html = await this.widgetService.readStaticHtml('device-control');
+        this.logger.log(
+          `✅ [RESOURCE ACCESS] device-control widget resource read successful (${html.length} chars)`,
+        );
+        return {
+          contents: [
+            {
+              uri: DEVICE_CONTROL_WIDGET.uri,
+              mimeType: DEVICE_CONTROL_WIDGET.mimeType,
               text: html,
               _meta: { ui: { prefersBorder: true } },
             },

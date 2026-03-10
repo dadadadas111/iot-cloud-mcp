@@ -131,4 +131,50 @@ export class WidgetPreviewController {
 
     res.type('text/html').send(previewHtml);
   }
+
+
+  /**
+   * Preview the device control widget with sample data.
+   * GET /widgets/preview/device-control
+   */
+  @Get('device-control')
+  async previewDeviceControl(
+    @Query('lang') lang: string,
+    @Query('theme') theme: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    const sampleData = {
+      uuid: '507f1f77bcf86cd799439011',
+      label: 'Living Room Light',
+      deviceType: 'LIGHT',
+      deviceTypeId: 1,
+      elementIds: [1, 2, 3],
+      state: {
+        '1': {
+          '1': [1, 1],
+          '28': [28, 800],
+          '31': [31, 2400, 900, 700],
+        },
+        '2': {
+          '1': [1, 0],
+          '28': [28, 500],
+        },
+        '3': {
+          '1': [1, 1],
+        },
+      },
+    };
+
+    const widgetHtml = await this.widgetService.readStaticHtml('device-control');
+
+    const locale = lang || 'en';
+    const validTheme = theme === 'dark' || theme === 'light' ? theme : null;
+    let previewHtml = widgetHtml.replace('<html lang="en">', `<html lang="${locale}">`);
+    const openaiScript = validTheme
+      ? `window.openai = { toolOutput: ${JSON.stringify(sampleData)}, theme: '${validTheme}' };`
+      : `window.openai = { toolOutput: ${JSON.stringify(sampleData)} };`;
+    previewHtml = previewHtml.replace('<script>', `<script>${openaiScript}</script>\n<script>`);
+
+    res.type('text/html').send(previewHtml);
+  }
 }
