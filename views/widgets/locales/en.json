@@ -1,6 +1,5 @@
 {
-  "loading": "Loading device data\u2026",
-  "unnamed_device": "Unnamed Device",
+  "loading": "Loading device data…",
   "location": "Location",
   "group": "Group",
   "device_state": "Device State",
@@ -9,6 +8,10 @@
   "attr_prefix": "Attr",
   "technical_details": "Technical Details",
   "footer": "Rogo IoT Cloud",
+  "all_devices": "All Devices",
+  "devices_found": "devices found",
+  "no_devices": "No devices found",
+  "unnamed_device": "Unnamed device",
 
   "attr_power": "Power",
   "attr_open_close": "Open/Close",
@@ -21,6 +24,9 @@
   "attr_color_temp": "Color Temp",
   "attr_brightness_kelvin": "Brightness & Kelvin",
   "attr_color_hsv": "Color HSV",
+  "hsv_hue": "Hue",
+  "hsv_saturation": "Saturation",
+  "hsv_value": "Brightness",
   "attr_ir_button": "IR Button",
   "attr_ac_control": "AC Control",
 

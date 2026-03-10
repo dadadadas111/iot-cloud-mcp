@@ -9,6 +9,9 @@
   "attr_prefix": "Thu\u1ed9c t\u00ednh",
   "technical_details": "Chi ti\u1ebft k\u1ef9 thu\u1eadt",
   "footer": "Rogo IoT Cloud",
+  "all_devices": "Tất cả thiết bị",
+  "devices_found": "thiết bị",
+  "no_devices": "Không có thiết bị nào",
 
   "attr_power": "Ngu\u1ed3n",
   "attr_open_close": "\u0110\u00f3ng/M\u1edf",
@@ -21,6 +24,9 @@
   "attr_color_temp": "Nhi\u1ec7t m\u00e0u",
   "attr_brightness_kelvin": "\u0110\u1ed9 s\u00e1ng & Kelvin",
   "attr_color_hsv": "M\u00e0u HSV",
+  "hsv_hue": "Sắc độ",
+  "hsv_saturation": "Độ bão hòa",
+  "hsv_value": "Độ sáng",
   "attr_ir_button": "N\u00fat IR",
   "attr_ac_control": "\u0110i\u1ec1u khi\u1ec3n \u0111i\u1ec1u h\u00f2a",
 

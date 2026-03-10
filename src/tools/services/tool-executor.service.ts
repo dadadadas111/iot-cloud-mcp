@@ -34,6 +34,7 @@ import {
   ControlDeviceSimpleParams,
 } from '../definitions/control-device-simple.tool';
 import { GET_DEVICE_DOCUMENTATION_TOOL } from '../definitions/get-device-documentation.tool';
+import { INTERACT_DEVICE_TOOL, InteractDeviceParams } from '../definitions/interact-device.tool';
 import { sanitizeErrorForClient } from '../../common/utils/error.utils';
 
 /** Context for tool execution containing request metadata */
@@ -81,6 +82,7 @@ export class ToolExecutorService {
     [CONTROL_DEVICE_TOOL.name]: (p, c) => this.executeControlDevice(p as ControlDeviceParams, c),
     [CONTROL_DEVICE_SIMPLE_TOOL.name]: (p, c) =>
       this.executeControlDeviceSimple(p as ControlDeviceSimpleParams, c),
+    [INTERACT_DEVICE_TOOL.name]: (p, c) => this.executeInteractDevice(p as InteractDeviceParams, c),
     [GET_DEVICE_DOCUMENTATION_TOOL.name]: (p, _c) =>
       Promise.resolve(this.executeGetDeviceDocumentation(p as { topic: string })),
   };
@@ -630,6 +632,42 @@ export class ToolExecutorService {
 
       const result = await this.iotApiService.controlDevice(projectApiKey, controlPayload);
       return this.successResult(result);
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  /** Fetch device details + state for the interactive control panel widget */
+  private async executeInteractDevice(
+    params: InteractDeviceParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+
+      const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
+
+      const state = await this.iotApiService
+        .getDeviceState(projectApiKey, params.uuid)
+        .catch(() => null);
+
+      const typeInfo = resolveDeviceType(device);
+      const stateMap = this.extractStateMap(state);
+
+      const controlData = {
+        uuid: device.uuid,
+        label: device.label,
+        desc: device.desc,
+        deviceType: typeInfo?.deviceType ?? null,
+        deviceTypeId: typeInfo?.deviceTypeId ?? null,
+        elementIds: device.elementIds,
+        state: stateMap,
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(controlData) }],
+        structuredContent: controlData as Record<string, unknown>,
+      };
     } catch (error) {
       return this.errorResult(error);
     }
