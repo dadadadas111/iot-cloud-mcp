@@ -74,7 +74,7 @@ export class WidgetPreviewController {
     const openaiScript = validTheme
       ? `window.openai = { toolOutput: ${JSON.stringify(sampleData)}, theme: '${validTheme}' };`
       : `window.openai = { toolOutput: ${JSON.stringify(sampleData)} };`;
-    previewHtml = previewHtml.replace('<script>', openaiScript + '\n<script>');
+    previewHtml = previewHtml.replace('<script>', `<script>${openaiScript}</script>\n<script>`);
 
     res.type('text/html').send(previewHtml);
   }
@@ -127,7 +127,7 @@ export class WidgetPreviewController {
     const openaiScript = validTheme
       ? `window.openai = { toolOutput: ${JSON.stringify(sampleData)}, theme: '${validTheme}' };`
       : `window.openai = { toolOutput: ${JSON.stringify(sampleData)} };`;
-    previewHtml = previewHtml.replace('<script>', openaiScript + '\n<script>');
+    previewHtml = previewHtml.replace('<script>', `<script>${openaiScript}</script>\n<script>`);
 
     res.type('text/html').send(previewHtml);
   }
