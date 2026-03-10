@@ -269,6 +269,23 @@
         white-space: nowrap;
       }
 
+      /* HSV channel rows */
+      .ddw-hsv-channel {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      .ddw-hsv-channel:last-child {
+        margin-bottom: 0;
+      }
+      .ddw-hsv-label {
+        font-size: 12px;
+        color: var(--ddw-text-secondary);
+        min-width: 72px;
+        flex-shrink: 0;
+      }
+
       /* Segmented buttons */
       .ddw-seg {
         display: flex;
@@ -563,7 +580,7 @@
             max: 6500,
             unit: 'K',
           },
-          31: { key: 'attr_color_hsv', type: 'display_hsv' },
+          31: { key: 'attr_color_hsv', type: 'hsv' },
         };
 
         /* Send control command */
@@ -597,11 +614,47 @@
           }
         }
 
+        /* Send raw command via control_device (for compound attributes like HSV) */
+        function sendRawControl(uuid, elementId, command, rowEl) {
+          if (rowEl) rowEl.classList.add('ddw-sending');
+          var args = { uuid: uuid, elementIds: [elementId], command: command };
+
+          if (window.openai && typeof window.openai.callTool === 'function') {
+            try {
+              var p = window.openai.callTool('control_device', args);
+              if (p && typeof p.then === 'function') {
+                p.then(function () {
+                  if (rowEl) rowEl.classList.remove('ddw-sending');
+                }).catch(function () {
+                  if (rowEl) rowEl.classList.remove('ddw-sending');
+                });
+              } else {
+                setTimeout(function () {
+                  if (rowEl) rowEl.classList.remove('ddw-sending');
+                }, 1500);
+              }
+            } catch (e) {
+              if (rowEl) rowEl.classList.remove('ddw-sending');
+            }
+          } else {
+            setTimeout(function () {
+              if (rowEl) rowEl.classList.remove('ddw-sending');
+            }, 800);
+          }
+        }
+
         var _sliderTimers = {};
         function debouncedControl(key, uuid, action, value, elementId, rowEl) {
           if (_sliderTimers[key]) clearTimeout(_sliderTimers[key]);
           _sliderTimers[key] = setTimeout(function () {
             sendControl(uuid, action, value, elementId, rowEl);
+          }, 300);
+        }
+
+        function debouncedRawControl(key, uuid, elementId, command, rowEl) {
+          if (_sliderTimers[key]) clearTimeout(_sliderTimers[key]);
+          _sliderTimers[key] = setTimeout(function () {
+            sendRawControl(uuid, elementId, command, rowEl);
           }, 300);
         }
 
@@ -753,28 +806,38 @@
                       '</button>';
                   }
                   html += '</div>';
-                } else if (def.type === 'display_hsv') {
-                  var h = attrData[1] != null ? attrData[1] : 0;
-                  var s = attrData[2] != null ? attrData[2] : 0;
-                  var v = attrData[3] != null ? attrData[3] : 0;
-                  var swatch =
-                    'hsl(' +
-                    Math.round((h / 65535) * 360) +
-                    ',' +
-                    Math.round((s / 1000) * 100) +
-                    '%,' +
-                    Math.round((v / 1000) * 50 + 25) +
-                    '%)';
-                  html +=
-                    '<span class="ddw-display-val" style="border-left:12px solid ' +
-                    swatch +
-                    ';padding-left:8px">H:' +
-                    h +
-                    ' S:' +
-                    s +
-                    ' V:' +
-                    v +
-                    '</span>';
+                } else if (def.type === 'hsv') {
+                  var hsvChannels = [
+                    { key: 'hsv_hue', idx: 1, min: 0, max: 3600 },
+                    { key: 'hsv_saturation', idx: 2, min: 0, max: 1000 },
+                    { key: 'hsv_value', idx: 3, min: 0, max: 1000 },
+                  ];
+                  var hsvGroupId = 'hsv-' + elId;
+                  for (var ci = 0; ci < hsvChannels.length; ci++) {
+                    var ch = hsvChannels[ci];
+                    var chVal = attrData[ch.idx] != null ? attrData[ch.idx] : 0;
+                    var chSliderId = hsvGroupId + '-' + ch.key;
+                    html += '<div class="ddw-hsv-channel">';
+                    html +=
+                      '<span class="ddw-hsv-label">' + esc(t(ch.key)) + '</span>';
+                    html += '<div class="ddw-slider-wrap">';
+                    html +=
+                      '<input type="range" class="ddw-slider" id="' +
+                      chSliderId +
+                      '" min="' + ch.min +
+                      '" max="' + ch.max +
+                      '" value="' + chVal +
+                      '" data-uuid="' + esc(uuid) +
+                      '" data-el="' + esc(elId) +
+                      '" data-hsv-group="' + hsvGroupId +
+                      '" data-hsv-channel="' + ch.key +
+                      '" />';
+                    html +=
+                      '<span class="ddw-slider-value" id="' +
+                      chSliderId + '-val">' + chVal + '</span>';
+                    html += '</div>';
+                    html += '</div>';
+                  }
                 }
 
                 html += '</div>';
@@ -820,6 +883,23 @@
             var row2 = target.closest('.ddw-attr-row');
             debouncedControl(target.id, uuid2, action, val, elId2, row2);
           }
+
+          /* HSV slider */
+          if (target.type === 'range' && target.getAttribute('data-hsv-group')) {
+            var hsvGroup = target.getAttribute('data-hsv-group');
+            var uuid4 = target.getAttribute('data-uuid');
+            var elId4 = Number(target.getAttribute('data-el'));
+            var hSlider = document.getElementById(hsvGroup + '-hsv_hue');
+            var sSlider = document.getElementById(hsvGroup + '-hsv_saturation');
+            var vSlider = document.getElementById(hsvGroup + '-hsv_value');
+            var hVal = hSlider ? Number(hSlider.value) : 0;
+            var sVal = sSlider ? Number(sSlider.value) : 0;
+            var vVal = vSlider ? Number(vSlider.value) : 0;
+            var valEl4 = document.getElementById(target.id + '-val');
+            if (valEl4) valEl4.textContent = String(Number(target.value));
+            var row4 = target.closest('.ddw-attr-row');
+            debouncedRawControl(hsvGroup, uuid4, elId4, [31, hVal, sVal, vVal], row4);
+          }
         });
 
         /* Slider live update (input event for real-time display) */
@@ -831,6 +911,12 @@
             var val = Number(target.value);
             var valEl = document.getElementById(target.id + '-val');
             if (valEl) valEl.textContent = (scale !== 1 ? Math.round(val * scale) : val) + unit;
+          }
+
+          /* HSV slider live update */
+          if (target.type === 'range' && target.getAttribute('data-hsv-group')) {
+            var valEl5 = document.getElementById(target.id + '-val');
+            if (valEl5) valEl5.textContent = String(Number(target.value));
           }
         });
 

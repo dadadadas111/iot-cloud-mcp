@@ -24,6 +24,9 @@
   "attr_color_temp": "Color Temp",
   "attr_brightness_kelvin": "Brightness & Kelvin",
   "attr_color_hsv": "Color HSV",
+  "hsv_hue": "Hue",
+  "hsv_saturation": "Saturation",
+  "hsv_value": "Brightness",
   "attr_ir_button": "IR Button",
   "attr_ac_control": "AC Control",
 
