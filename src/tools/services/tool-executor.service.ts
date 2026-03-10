@@ -359,7 +359,11 @@ export class ToolExecutorService {
         ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
       };
 
-      return this.successResult(enrichedDevice);
+      // Return both text content (backward compatible) and structuredContent (for ChatGPT widgets)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(enrichedDevice) }],
+        structuredContent: enrichedDevice as Record<string, unknown>,
+      };
     } catch (error) {
       return this.errorResult(error);
     }
