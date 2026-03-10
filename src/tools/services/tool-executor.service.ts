@@ -349,7 +349,7 @@ export class ToolExecutorService {
         };
       });
 
-      const result = { total: slimDevices.length, devices: slimDevices };
+      const result = { _view: 'list', total: slimDevices.length, devices: slimDevices };
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         structuredContent: result as Record<string, unknown>,
@@ -437,6 +437,7 @@ export class ToolExecutorService {
       const stateMap = this.extractStateMap(state);
 
       const enrichedDevice = {
+        _view: 'dashboard',
         ...device,
         ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
         ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
@@ -669,6 +670,7 @@ export class ToolExecutorService {
       const stateMap = this.extractStateMap(state);
 
       const controlData = {
+        _view: 'control',
         ...device,
         ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
         ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),

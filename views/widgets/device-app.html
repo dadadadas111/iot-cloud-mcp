@@ -1,0 +1,1983 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Device App</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --ddw-bg-card: #ffffff;
+        --ddw-text: #1a1a1a;
+        --ddw-text-secondary: rgba(0, 0, 0, 0.5);
+        --ddw-text-muted: rgba(0, 0, 0, 0.4);
+        --ddw-text-faint: rgba(0, 0, 0, 0.35);
+        --ddw-bg-surface: #f8f9fa;
+        --ddw-bg-element: #f8f9fb;
+        --ddw-bg-icon: #f0f4ff;
+        --ddw-border: rgba(0, 0, 0, 0.08);
+        --ddw-border-light: rgba(0, 0, 0, 0.06);
+        --ddw-border-subtle: rgba(0, 0, 0, 0.05);
+        --ddw-border-faint: rgba(0, 0, 0, 0.04);
+        --ddw-badge-bg: #e8f5e9;
+        --ddw-badge-text: #2e7d32;
+        --ddw-accent: #5b7cf7;
+        --ddw-text-label: #4a5568;
+        --ddw-text-chip: #2d3748;
+        --ddw-bar-bg: #e2e8f0;
+        --ddw-bar-fill: #f6ad55;
+        --ddw-power-on: #48bb78;
+        --ddw-power-off: #cbd5e0;
+        --ddw-toggle-hover: #f0f1f3;
+        --ddw-loading-text: rgba(0, 0, 0, 0.45);
+        --ddw-attr-chip-bg: #ffffff;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        color: var(--ddw-text);
+        background: transparent;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ── Navigation Loading ────────────────────────────── */
+      .ddw-nav-loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.5);
+        backdrop-filter: blur(2px);
+        -webkit-backdrop-filter: blur(2px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+
+      /* ── Loading state ─────────────────────────────────── */
+      .ddw-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 120px;
+        gap: 12px;
+        color: var(--ddw-loading-text);
+        font-size: 14px;
+      }
+
+      .ddw-spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid var(--ddw-border);
+        border-top-color: var(--ddw-accent);
+        border-radius: 50%;
+        animation: ddw-spin 0.7s linear infinite;
+      }
+
+      @keyframes ddw-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* ── Card container ────────────────────────────────── */
+      .ddw-card {
+        max-width: 560px;
+        margin: 0 auto;
+        background: var(--ddw-bg-card);
+        border: 1px solid var(--ddw-border);
+        border-radius: 16px;
+        overflow: hidden;
+        position: relative;
+      }
+
+      /* ── Header ────────────────────────────────────────── */
+      .ddw-header {
+        padding: 20px 24px 16px;
+        border-bottom: 1px solid var(--ddw-border-light);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .ddw-header-top {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .ddw-back-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--ddw-bg-surface);
+        border: 1px solid var(--ddw-border-light);
+        color: var(--ddw-text-label);
+        cursor: pointer;
+        transition: background 0.15s ease;
+        flex-shrink: 0;
+      }
+      .ddw-back-btn:hover {
+        background: var(--ddw-toggle-hover);
+      }
+
+      /* For List view */
+      .ddw-title {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .ddw-subtitle {
+        font-size: 13px;
+        color: var(--ddw-text-secondary);
+        margin-top: 2px;
+      }
+
+      /* For Dashboard/Control */
+      .ddw-title-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+      }
+
+      .ddw-device-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        background: var(--ddw-bg-icon);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        flex-shrink: 0;
+      }
+
+      .ddw-title-text {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .ddw-label {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--ddw-text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ddw-desc {
+        font-size: 13px;
+        color: var(--ddw-text-secondary);
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ddw-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--ddw-badge-bg);
+        color: var(--ddw-badge-text);
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+
+      /* ── Device List (from device-list) ────────────────── */
+      .ddw-list {
+        list-style: none;
+      }
+
+      .ddw-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--ddw-border-light);
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+
+      .ddw-item:hover {
+        background: var(--ddw-bg-surface);
+      }
+
+      .ddw-item:active {
+        background: var(--ddw-bg-element);
+      }
+
+      .ddw-item:last-child {
+        border-bottom: none;
+      }
+
+      .ddw-item-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: var(--ddw-bg-icon);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+      }
+
+      .ddw-item-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .ddw-item-label {
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ddw-item-meta {
+        font-size: 12px;
+        color: var(--ddw-text-secondary);
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ddw-item-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        background: var(--ddw-badge-bg);
+        color: var(--ddw-badge-text);
+        flex-shrink: 0;
+      }
+
+      .ddw-item-chevron {
+        flex-shrink: 0;
+        color: var(--ddw-text-muted);
+        font-size: 14px;
+        margin-left: 4px;
+      }
+
+      /* ── Body ──────────────────────────────────────────── */
+      .ddw-body {
+        padding: 16px 24px 20px;
+      }
+
+      .ddw-section-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--ddw-text-muted);
+        margin: 0 0 8px;
+      }
+
+      /* Info grid (location, group, brand, ownership) */
+      .ddw-info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+
+      .ddw-info-item {
+        padding: 10px 12px;
+        background: var(--ddw-bg-surface);
+        border-radius: 10px;
+      }
+
+      .ddw-info-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--ddw-text-muted);
+        margin-bottom: 3px;
+      }
+
+      .ddw-info-value {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ddw-text);
+        word-break: break-word;
+      }
+
+      /* ── State section ─────────────────────────────────── */
+      .ddw-state-section {
+        margin-bottom: 16px;
+      }
+
+      .ddw-state-empty {
+        padding: 12px;
+        background: var(--ddw-bg-surface);
+        border-radius: 10px;
+        color: var(--ddw-text-faint);
+        font-size: 13px;
+        text-align: center;
+        font-style: italic;
+      }
+
+      /* Per-element state block */
+      .ddw-element-block {
+        background: var(--ddw-bg-element);
+        border: 1px solid var(--ddw-border-subtle);
+        border-radius: 12px;
+        padding: 12px 14px;
+        margin-bottom: 10px;
+      }
+
+      .ddw-element-block:last-child {
+        margin-bottom: 0;
+      }
+
+      .ddw-element-header {
+        margin-bottom: 8px;
+      }
+
+      .ddw-element-id {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--ddw-text-label);
+      }
+
+      .ddw-power-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 4px;
+        vertical-align: middle;
+      }
+
+      .ddw-power-on {
+        background: var(--ddw-power-on);
+      }
+      .ddw-power-off {
+        background: var(--ddw-power-off);
+      }
+      .ddw-power-label {
+        font-size: 12px;
+        font-weight: 600;
+        vertical-align: middle;
+      }
+
+      .ddw-attr-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .ddw-attr-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 10px;
+        background: var(--ddw-attr-chip-bg);
+        border: 1px solid var(--ddw-border);
+        border-radius: 8px;
+        font-size: 12px;
+        color: var(--ddw-text-chip);
+      }
+
+      .ddw-attr-name {
+        color: var(--ddw-text-secondary);
+        font-weight: 500;
+      }
+
+      .ddw-attr-val {
+        font-weight: 600;
+      }
+
+      /* Brightness bar */
+      .ddw-brightness-bar {
+        display: inline-block;
+        width: 40px;
+        height: 6px;
+        background: var(--ddw-bar-bg);
+        border-radius: 3px;
+        vertical-align: middle;
+        overflow: hidden;
+      }
+
+      .ddw-brightness-fill {
+        display: block;
+        height: 100%;
+        background: var(--ddw-bar-fill);
+        border-radius: 3px;
+      }
+
+      /* ── Technical details (collapsible) ───────────────── */
+      .ddw-details-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        padding: 10px 12px;
+        background: var(--ddw-bg-surface);
+        border: 1px solid var(--ddw-border-light);
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ddw-text-label);
+        transition: background-color 0.15s;
+      }
+
+      .ddw-details-toggle:hover {
+        background: var(--ddw-toggle-hover);
+      }
+
+      .ddw-details-arrow {
+        font-size: 10px;
+        transition: transform 0.2s;
+      }
+
+      .ddw-details-toggle[aria-expanded='true'] .ddw-details-arrow {
+        transform: rotate(90deg);
+      }
+
+      .ddw-details-content {
+        display: none;
+        margin-top: 8px;
+      }
+
+      .ddw-details-content.ddw-open {
+        display: block;
+      }
+
+      .ddw-detail-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 6px 12px;
+        font-size: 12px;
+        border-bottom: 1px solid var(--ddw-border-faint);
+      }
+
+      .ddw-detail-row:last-child {
+        border-bottom: none;
+      }
+
+      .ddw-detail-key {
+        color: var(--ddw-loading-text);
+        font-weight: 600;
+        white-space: nowrap;
+        min-width: 80px;
+      }
+
+      .ddw-detail-val {
+        color: var(--ddw-text);
+        font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+        font-size: 11px;
+        word-break: break-all;
+      }
+
+      /* ── Control section (from device-control) ─────────── */
+      .ddw-element {
+        padding: 12px 14px;
+        background: var(--ddw-bg-element);
+        border: 1px solid var(--ddw-border-light);
+        border-radius: 12px;
+        margin-bottom: 10px;
+      }
+
+      .ddw-element:last-child {
+        margin-bottom: 0;
+      }
+
+      .ddw-element-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--ddw-text-secondary);
+        margin-bottom: 10px;
+      }
+
+      /* Attribute row */
+      .ddw-attr-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 0;
+      }
+
+      .ddw-attr-row + .ddw-attr-row {
+        border-top: 1px solid var(--ddw-border-light);
+      }
+
+      .ddw-attr-label {
+        font-size: 13px;
+        color: var(--ddw-text-label);
+        flex-shrink: 0;
+        min-width: 90px;
+      }
+
+      .ddw-attr-control {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        justify-content: flex-end;
+      }
+
+      /* Toggle switch */
+      .ddw-toggle {
+        position: relative;
+        width: 44px;
+        height: 24px;
+        flex-shrink: 0;
+      }
+
+      .ddw-toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+
+      .ddw-toggle-track {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #ccc;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+      }
+
+      .ddw-toggle-track::before {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 20px;
+        height: 20px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        transition: transform 0.2s ease;
+      }
+
+      .ddw-toggle input:checked + .ddw-toggle-track {
+        background: var(--ddw-accent);
+      }
+
+      .ddw-toggle input:checked + .ddw-toggle-track::before {
+        transform: translateX(20px);
+      }
+
+      .ddw-toggle-label {
+        font-size: 12px;
+        font-weight: 600;
+        min-width: 28px;
+        text-align: right;
+      }
+
+      .ddw-toggle--readonly .ddw-toggle-track {
+        cursor: default;
+        opacity: 0.65;
+      }
+
+      /* Slider */
+      .ddw-slider-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex: 1;
+        max-width: 240px;
+      }
+
+      .ddw-slider {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--ddw-border);
+        outline: none;
+        flex: 1;
+      }
+
+      .ddw-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        border: 2px solid var(--ddw-accent);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+        cursor: pointer;
+      }
+
+      .ddw-slider::-moz-range-thumb {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        border: 2px solid var(--ddw-accent);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+        cursor: pointer;
+      }
+
+      .ddw-slider-value {
+        font-size: 13px;
+        font-weight: 600;
+        min-width: 42px;
+        text-align: right;
+        white-space: nowrap;
+      }
+
+      /* HSV layout */
+      .ddw-attr-row.ddw-attr-row--hsv {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .ddw-attr-row--hsv .ddw-attr-control {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 6px;
+      }
+      .ddw-hsv-channel {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .ddw-hsv-label {
+        font-size: 12px;
+        color: var(--ddw-text-secondary);
+        min-width: 72px;
+        flex-shrink: 0;
+      }
+      .ddw-attr-row--hsv .ddw-slider-wrap {
+        max-width: none;
+      }
+
+      /* Segmented buttons */
+      .ddw-seg {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+
+      .ddw-seg-btn {
+        padding: 4px 10px;
+        border-radius: 10px;
+        border: 1px solid var(--ddw-border);
+        background: var(--ddw-bg-surface);
+        color: var(--ddw-text-secondary);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        font-family: inherit;
+      }
+
+      .ddw-seg-btn:hover {
+        background: var(--ddw-bg-element);
+      }
+
+      .ddw-seg-btn.active {
+        background: var(--ddw-accent);
+        color: #fff;
+        border-color: var(--ddw-accent);
+      }
+
+      .ddw-seg--readonly .ddw-seg-btn {
+        cursor: default;
+        opacity: 0.75;
+      }
+
+      .ddw-seg--readonly .ddw-seg-btn:hover {
+        background: var(--ddw-bg-surface);
+      }
+
+      .ddw-seg--readonly .ddw-seg-btn.active:hover {
+        background: var(--ddw-accent);
+      }
+
+      /* Display-only value chip */
+      .ddw-display-val {
+        font-size: 12px;
+        font-weight: 600;
+        padding: 3px 10px;
+        border-radius: 8px;
+        background: var(--ddw-bg-surface);
+        color: var(--ddw-text-secondary);
+      }
+
+      /* Empty state */
+      .ddw-empty {
+        padding: 24px 20px;
+        text-align: center;
+        color: var(--ddw-text-muted);
+        font-size: 14px;
+      }
+
+      /* Control feedback */
+      .ddw-controlling {
+        opacity: 0.6;
+        pointer-events: none;
+      }
+
+      @keyframes ddw-pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
+
+      .ddw-attr-row.ddw-sending .ddw-attr-label::after {
+        content: ' …';
+        animation: ddw-pulse 1s ease-in-out infinite;
+      }
+
+      /* ── Footer ────────────────────────────────────────── */
+      .ddw-footer {
+        padding: 12px 24px;
+        background: var(--ddw-bg-surface);
+        border-top: 1px solid var(--ddw-border-light);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .ddw-footer-text {
+        font-size: 11px;
+        color: var(--ddw-text-faint);
+      }
+
+      .ddw-control-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        border: 1px solid var(--ddw-accent);
+        background: transparent;
+        color: var(--ddw-accent);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.15s ease;
+      }
+
+      .ddw-control-btn:hover {
+        background: var(--ddw-accent);
+        color: #fff;
+      }
+
+      /* ── Responsive ────────────────────────────────────── */
+      @media (max-width: 480px) {
+        .ddw-info-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ── Dark theme ─────────────────────────────────── */
+      .ddw-dark {
+        --ddw-bg-card: #2d2d2d;
+        --ddw-text: #e0e0e0;
+        --ddw-text-secondary: rgba(255, 255, 255, 0.6);
+        --ddw-text-muted: rgba(255, 255, 255, 0.45);
+        --ddw-text-faint: rgba(255, 255, 255, 0.35);
+        --ddw-bg-surface: #383838;
+        --ddw-bg-element: #353535;
+        --ddw-bg-icon: #2a3040;
+        --ddw-border: rgba(255, 255, 255, 0.1);
+        --ddw-border-light: rgba(255, 255, 255, 0.08);
+        --ddw-border-subtle: rgba(255, 255, 255, 0.06);
+        --ddw-border-faint: rgba(255, 255, 255, 0.05);
+        --ddw-badge-bg: #1b3a2a;
+        --ddw-badge-text: #66bb6a;
+        --ddw-accent: #7b9cf7;
+        --ddw-text-label: #a0aec0;
+        --ddw-text-chip: #cbd5e0;
+        --ddw-bar-bg: #4a5568;
+        --ddw-bar-fill: #f6ad55;
+        --ddw-power-on: #48bb78;
+        --ddw-power-off: #4a5568;
+        --ddw-toggle-hover: #444444;
+        --ddw-loading-text: rgba(255, 255, 255, 0.45);
+        --ddw-attr-chip-bg: #3a3a3a;
+      }
+
+      .ddw-dark .ddw-toggle-track {
+        background: #555;
+      }
+      .ddw-dark .ddw-slider::-webkit-slider-thumb {
+        background: #e0e0e0;
+      }
+      .ddw-dark .ddw-slider::-moz-range-thumb {
+        background: #e0e0e0;
+      }
+      .ddw-dark.ddw-nav-loading {
+        background: rgba(45, 45, 45, 0.5);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not(.ddw-light) {
+          --ddw-bg-card: #2d2d2d;
+          --ddw-text: #e0e0e0;
+          --ddw-text-secondary: rgba(255, 255, 255, 0.6);
+          --ddw-text-muted: rgba(255, 255, 255, 0.45);
+          --ddw-text-faint: rgba(255, 255, 255, 0.35);
+          --ddw-bg-surface: #383838;
+          --ddw-bg-element: #353535;
+          --ddw-bg-icon: #2a3040;
+          --ddw-border: rgba(255, 255, 255, 0.1);
+          --ddw-border-light: rgba(255, 255, 255, 0.08);
+          --ddw-border-subtle: rgba(255, 255, 255, 0.06);
+          --ddw-border-faint: rgba(255, 255, 255, 0.05);
+          --ddw-badge-bg: #1b3a2a;
+          --ddw-badge-text: #66bb6a;
+          --ddw-accent: #7b9cf7;
+          --ddw-text-label: #a0aec0;
+          --ddw-text-chip: #cbd5e0;
+          --ddw-bar-bg: #4a5568;
+          --ddw-bar-fill: #f6ad55;
+          --ddw-power-on: #48bb78;
+          --ddw-power-off: #4a5568;
+          --ddw-toggle-hover: #444444;
+          --ddw-loading-text: rgba(255, 255, 255, 0.45);
+          --ddw-attr-chip-bg: #3a3a3a;
+        }
+
+        :root:not(.ddw-light) .ddw-toggle-track {
+          background: #555;
+        }
+        :root:not(.ddw-light) .ddw-slider::-webkit-slider-thumb {
+          background: #e0e0e0;
+        }
+        :root:not(.ddw-light) .ddw-slider::-moz-range-thumb {
+          background: #e0e0e0;
+        }
+        :root:not(.ddw-light) .ddw-nav-loading {
+          background: rgba(45, 45, 45, 0.5);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ddw-root">
+      <div class="ddw-loading">
+        <div class="ddw-spinner"></div>
+        <span id="ddw-loading-text">Loading...</span>
+      </div>
+    </div>
+    <div id="ddw-nav-loading" class="ddw-nav-loading" style="display: none">
+      <div class="ddw-spinner"></div>
+    </div>
+    <script>
+      (function () {
+        'use strict';
+
+        var root = document.getElementById('ddw-root');
+
+        /* ── SPA State ─────────────────────────────────────── */
+        var _history = [];
+        var _currentView = null;
+        var _currentData = null;
+
+        function renderView(view, data) {
+          if (!view) {
+            if (data && data._view) view = data._view;
+            else if (data && data.devices) view = 'list';
+            else view = 'dashboard';
+          }
+
+          _currentView = view;
+          _currentData = data;
+
+          if (view === 'list') renderList(data);
+          else if (view === 'dashboard') renderDashboard(data);
+          else if (view === 'control') renderControl(data);
+        }
+
+        function navigate(view, data) {
+          if (_currentView) { _history.push({ view: _currentView, data: _currentData }); }
+          renderView(view, data);
+        }
+
+        function goBack() {
+          if (_history.length === 0) return;
+          var prev = _history.pop();
+          renderView(prev.view, prev.data);
+        }
+
+        function showNavLoading() {
+          var el = document.getElementById('ddw-nav-loading');
+          if (el) el.style.display = 'flex';
+        }
+
+        function hideNavLoading() {
+          var el = document.getElementById('ddw-nav-loading');
+          if (el) el.style.display = 'none';
+        }
+
+        function callToolAndNavigate(tool, args, targetView) {
+          if (window.openai && typeof window.openai.callTool === 'function') {
+            showNavLoading();
+            window.openai
+              .callTool(tool, args)
+              .then(function (result) {
+                hideNavLoading();
+                navigate(targetView, result);
+              })
+              .catch(function (err) {
+                hideNavLoading();
+                console.error('[DDW] callTool failed', err);
+              });
+          } else {
+            console.log('[DDW] [Preview] callTool', tool, args, '->', targetView);
+          }
+        }
+
+        function getBackButtonHtml() {
+          if (_history.length === 0) return '';
+          return (
+            '<button class="ddw-back-btn" data-action="back" title="' +
+            esc(t('back')) +
+            '">&#8592;</button>'
+          );
+        }
+
+        /* ── i18n ──────────────────────────────────────────── */
+        var STRINGS = window.__I18N__ || {};
+        var _lang = null;
+        function t(key) {
+          if (!_lang) {
+            _lang = (document.documentElement.lang || 'en').split('-')[0].toLowerCase();
+            if (!STRINGS[_lang]) _lang = 'en';
+            var loadEl = document.getElementById('ddw-loading-text');
+            if (loadEl && STRINGS[_lang]) loadEl.textContent = STRINGS[_lang].loading || '';
+          }
+          return (STRINGS[_lang] && STRINGS[_lang][key]) || (STRINGS.en && STRINGS.en[key]) || key;
+        }
+
+        /* ── Theme detection ───────────────────────────────── */
+        function applyTheme(theme) {
+          var el = document.documentElement;
+          var nav = document.getElementById('ddw-nav-loading');
+          if (theme === 'dark') {
+            el.classList.add('ddw-dark');
+            el.classList.remove('ddw-light');
+            if (nav) nav.classList.add('ddw-dark');
+          } else if (theme === 'light') {
+            el.classList.add('ddw-light');
+            el.classList.remove('ddw-dark');
+            if (nav) nav.classList.remove('ddw-dark');
+          }
+        }
+        if (window.openai && window.openai.theme) {
+          applyTheme(window.openai.theme);
+        }
+        window.addEventListener(
+          'openai:set_globals',
+          function (event) {
+            var globals = event.detail && event.detail.globals;
+            if (globals && globals.theme) applyTheme(globals.theme);
+          },
+          { passive: true },
+        );
+
+        /* ── Device Icons ──────────────────────────────────── */
+        var DEVICE_ICONS = {
+          LIGHT: '\uD83D\uDCA1',
+          SWITCH: '\uD83D\uDD18',
+          PLUG: '\uD83D\uDD0C',
+          CURTAINS: '\uD83E\uDE9F',
+          DOORLOCK: '\uD83D\uDD12',
+          DOORBELL: '\uD83D\uDD14',
+          CAMERA: '\uD83D\uDCF7',
+          SPEAKER: '\uD83D\uDD0A',
+          AC: '\u2744\uFE0F',
+          AC_CONTROLLER: '\u2744\uFE0F',
+          TV: '\uD83D\uDCFA',
+          FAN: '\uD83C\uDF00',
+          GATE: '\uD83D\uDEAA',
+          IR_DEVICE_CONTROLLER: '\uD83D\uDCF1',
+          SIREN: '\uD83D\uDEA8',
+          GATEWAY: '\uD83C\uDF10',
+          SENSOR_DEVICE: '\uD83D\uDCE1',
+          MOTION_SENSOR: '\uD83D\uDCE1',
+          MOTION_LUX_SENSOR: '\uD83D\uDCE1',
+          PRESENCE_SENSOR: '\uD83D\uDCE1',
+          TEMP_SENSOR: '\uD83C\uDF21',
+          HEAT_SENSOR: '\uD83C\uDF21',
+          SMOKE_SENSOR: '\uD83D\uDCA8',
+          DOOR_SENSOR: '\uD83D\uDEAA',
+          DUST_SENSOR: '\uD83C\uDF2B',
+          LUX_SENSOR: '\u2600\uFE0F',
+          DIMMER: '\uD83D\uDCA1',
+          DIMMER_SCENE: '\uD83D\uDCA1',
+          SWITCH_LIGHT_DIMMER: '\uD83D\uDCA1',
+          SWITCH_SCENE: '\uD83D\uDD18',
+          MACHINE_COFFEE: '\u2615',
+        };
+
+        function getIcon(deviceType) {
+          return (deviceType && DEVICE_ICONS[deviceType]) || '\uD83D\uDCDF';
+        }
+
+        function esc(str) {
+          if (str == null) return '';
+          var d = document.createElement('div');
+          d.appendChild(document.createTextNode(String(str)));
+          return d.innerHTML;
+        }
+
+        /* ── Constants and Formatters (Dashboard + Control) ── */
+        var ATTR_NAME_KEYS = {
+          1: 'attr_power',
+          2: 'attr_open_close',
+          3: 'attr_lock',
+          17: 'attr_mode',
+          18: 'attr_swing',
+          19: 'attr_fan_speed',
+          20: 'attr_temperature',
+          28: 'attr_brightness',
+          29: 'attr_color_temp',
+          30: 'attr_brightness_kelvin',
+          31: 'attr_color_hsv',
+          82: 'attr_ir_button',
+          257: 'attr_ac_control',
+        };
+
+        var AC_MODE_KEYS = { 0: 'auto', 1: 'cool', 2: 'dry', 3: 'heat', 4: 'fan' };
+        var FAN_SPEED_KEYS = {
+          0: 'auto',
+          1: 'low',
+          2: 'normal',
+          3: 'high',
+          4: 'max',
+          255: 'custom',
+        };
+
+        var ATTR_MAP = {
+          1: { key: 'attr_power', type: 'toggle', action: 'power' },
+          2: { key: 'attr_open_close', type: 'toggle_ro', stateLabels: ['closed', 'open'] },
+          3: { key: 'attr_lock', type: 'toggle_ro', stateLabels: ['unlocked', 'locked'] },
+          17: {
+            key: 'attr_mode',
+            type: 'segment',
+            action: 'set_mode',
+            options: [
+              { value: 0, label: 'auto' },
+              { value: 1, label: 'cool' },
+              { value: 2, label: 'dry' },
+              { value: 3, label: 'heat' },
+              { value: 4, label: 'fan' },
+            ],
+          },
+          19: {
+            key: 'attr_fan_speed',
+            type: 'segment_ro',
+            options: [
+              { value: 0, label: 'auto' },
+              { value: 1, label: 'low' },
+              { value: 2, label: 'normal' },
+              { value: 3, label: 'high' },
+              { value: 4, label: 'max' },
+            ],
+          },
+          20: {
+            key: 'attr_temperature',
+            type: 'slider',
+            action: 'set_temperature',
+            min: 15,
+            max: 30,
+            unit: '°C',
+          },
+          28: {
+            key: 'attr_brightness',
+            type: 'slider',
+            action: 'set_brightness',
+            min: 0,
+            max: 1000,
+            unit: '%',
+            displayScale: 0.1,
+          },
+          29: {
+            key: 'attr_color_temp',
+            type: 'slider',
+            action: 'set_kelvin',
+            min: 2000,
+            max: 6500,
+            unit: 'K',
+          },
+          31: { key: 'attr_color_hsv', type: 'hsv' },
+        };
+
+        function formatAttrValue(attrId, arr) {
+          if (!Array.isArray(arr) || arr.length < 2) return esc(JSON.stringify(arr));
+          var vals = arr.slice(1);
+          switch (String(attrId)) {
+            case '1':
+              return vals[0] === 1
+                ? '<span class="ddw-power-dot ddw-power-on"></span><span class="ddw-power-label">' +
+                    esc(t('on')) +
+                    '</span>'
+                : '<span class="ddw-power-dot ddw-power-off"></span><span class="ddw-power-label">' +
+                    esc(t('off')) +
+                    '</span>';
+            case '2':
+              return (
+                '<span class="ddw-attr-val">' +
+                esc(vals[0] === 1 ? t('open') : t('closed')) +
+                '</span>'
+              );
+            case '3':
+              return (
+                '<span class="ddw-attr-val">' +
+                esc(vals[0] === 1 ? t('unlocked') : t('locked')) +
+                '</span>'
+              );
+            case '17':
+              var m = AC_MODE_KEYS[vals[0]];
+              return '<span class="ddw-attr-val">' + esc(m ? t(m) : vals[0]) + '</span>';
+            case '18':
+              return (
+                '<span class="ddw-attr-val">' +
+                esc(vals[0] === 0 ? t('auto') : vals[0] === 255 ? t('off') : vals[0]) +
+                '</span>'
+              );
+            case '19':
+              var f = FAN_SPEED_KEYS[vals[0]];
+              return '<span class="ddw-attr-val">' + esc(f ? t(f) : vals[0]) + '</span>';
+            case '20':
+              return '<span class="ddw-attr-val">' + esc(vals[0]) + '\u00B0C</span>';
+            case '28':
+              var p = Math.round(vals[0] / 10);
+              return (
+                '<span class="ddw-brightness-bar"><span class="ddw-brightness-fill" style="width:' +
+                p +
+                '%"></span></span> <span class="ddw-attr-val">' +
+                p +
+                '%</span>'
+              );
+            case '29':
+              return '<span class="ddw-attr-val">' + esc(vals[0]) + 'K</span>';
+            case '30':
+              var bp = Math.round(vals[0] / 10);
+              return (
+                '<span class="ddw-brightness-bar"><span class="ddw-brightness-fill" style="width:' +
+                bp +
+                '%"></span></span> <span class="ddw-attr-val">' +
+                bp +
+                '% \u00B7 ' +
+                esc(vals[1]) +
+                'K</span>'
+              );
+            case '31':
+              var h = Math.round(vals[0] / 10);
+              var s = Math.round(vals[1] / 10);
+              var v = Math.round(vals[2] / 10);
+              var prev = 'hsl(' + h + ', ' + s + '%, ' + Math.max(v, 30) + '%)';
+              return (
+                '<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:' +
+                prev +
+                ';vertical-align:middle;margin-right:4px;border:1px solid rgba(0,0,0,0.1)"></span><span class="ddw-attr-val">H' +
+                h +
+                '\u00B0 S' +
+                s +
+                '% V' +
+                v +
+                '%</span>'
+              );
+            case '257':
+              var parts = [];
+              parts.push(vals[0] === 1 ? t('on') : t('off'));
+              if (vals[1] != null) {
+                var mk = AC_MODE_KEYS[vals[1]];
+                parts.push(mk ? t(mk) : t('mode_prefix') + ' ' + vals[1]);
+              }
+              if (vals[2] != null) parts.push(vals[2] + '\u00B0C');
+              if (vals[3] != null) {
+                var fk = FAN_SPEED_KEYS[vals[3]];
+                parts.push(t('fan_prefix') + ': ' + (fk ? t(fk) : vals[3]));
+              }
+              if (vals[4] != null)
+                parts.push(
+                  t('swing_prefix') +
+                    ': ' +
+                    (vals[4] === 0 ? t('auto') : vals[4] === 255 ? t('off') : vals[4]),
+                );
+              return '<span class="ddw-attr-val">' + esc(parts.join(' \u00B7 ')) + '</span>';
+            default:
+              return '<span class="ddw-attr-val">' + esc(vals.join(', ')) + '</span>';
+          }
+        }
+
+        function isElementAttrMap(obj) {
+          if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return false;
+          var keys = Object.keys(obj);
+          if (keys.length === 0) return false;
+          var first = obj[keys[0]];
+          if (!first || typeof first !== 'object' || Array.isArray(first)) return false;
+          var innerKeys = Object.keys(first);
+          if (innerKeys.length === 0) return false;
+          return Array.isArray(first[innerKeys[0]]);
+        }
+
+        function parseState(raw) {
+          if (!raw || typeof raw !== 'object') return null;
+          var stateObj = raw;
+          for (var depth = 0; depth < 5; depth++) {
+            if (Array.isArray(stateObj)) {
+              if (stateObj.length > 0 && stateObj[0] && stateObj[0].state) {
+                stateObj = stateObj[0].state;
+                continue;
+              }
+              return null;
+            }
+            if (isElementAttrMap(stateObj)) break;
+            if (stateObj.state && typeof stateObj.state === 'object') {
+              stateObj = stateObj.state;
+              continue;
+            }
+            var topKeys = Object.keys(stateObj);
+            if (topKeys.length > 0) {
+              var candidate = stateObj[topKeys[0]];
+              if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+                if (isElementAttrMap(candidate)) {
+                  stateObj = candidate;
+                  break;
+                }
+                stateObj = candidate;
+                continue;
+              }
+            }
+            break;
+          }
+          if (!isElementAttrMap(stateObj)) return null;
+
+          var elementIds = Object.keys(stateObj).sort(function (a, b) {
+            return Number(a) - Number(b);
+          });
+          var elements = [];
+          for (var i = 0; i < elementIds.length; i++) {
+            var eid = elementIds[i];
+            var attrObj = stateObj[eid];
+            if (!attrObj || typeof attrObj !== 'object') continue;
+            var attrIds = Object.keys(attrObj).sort(function (a, b) {
+              return Number(a) - Number(b);
+            });
+            var attrs = [];
+            for (var j = 0; j < attrIds.length; j++) {
+              attrs.push({ attrId: attrIds[j], values: attrObj[attrIds[j]] });
+            }
+            elements.push({ elementId: eid, attrs: attrs });
+          }
+          return elements.length > 0 ? elements : null;
+        }
+
+        /* ── Render: List View ─────────────────────────────── */
+        function renderList(data) {
+          if (!data || !data.devices) {
+            root.innerHTML =
+              '<div class="ddw-card"><div class="ddw-empty">' +
+              esc(t('no_devices')) +
+              '</div></div>';
+            return;
+          }
+          var devices = data.devices;
+          var total = data.total || devices.length;
+
+          var html = '<div class="ddw-card">';
+          html += '<div class="ddw-header">';
+          html += '<div class="ddw-title">' + esc(t('all_devices')) + '</div>';
+          html += '<div class="ddw-subtitle">' + total + ' ' + esc(t('devices_found')) + '</div>';
+          html += '</div>';
+
+          if (devices.length === 0) {
+            html += '<div class="ddw-empty">' + esc(t('no_devices')) + '</div>';
+          } else {
+            html += '<ul class="ddw-list">';
+            for (var i = 0; i < devices.length; i++) {
+              var d = devices[i];
+              var icon = getIcon(d.deviceType);
+              var typeLabel = d.deviceType ? t('dt_' + d.deviceType) : '';
+              html +=
+                '<li class="ddw-item" data-action="get_device" data-uuid="' + esc(d.uuid) + '">';
+              html += '<div class="ddw-item-icon">' + esc(icon) + '</div>';
+              html += '<div class="ddw-item-info">';
+              html +=
+                '<div class="ddw-item-label">' + esc(d.label || t('unnamed_device')) + '</div>';
+              html += '<div class="ddw-item-meta">' + esc(d.desc || d.mac || '') + '</div>';
+              html += '</div>';
+              if (typeLabel) html += '<span class="ddw-item-badge">' + esc(typeLabel) + '</span>';
+              html += '<span class="ddw-item-chevron">&#8250;</span>';
+              html += '</li>';
+            }
+            html += '</ul>';
+          }
+          html +=
+            '<div class="ddw-footer"><span class="ddw-footer-text">' +
+            esc(t('footer')) +
+            '</span></div>';
+          html += '</div>';
+          root.innerHTML = html;
+        }
+
+        /* ── Render: Dashboard View ────────────────────────── */
+        function renderDashboard(data) {
+          if (!data) return;
+          var icon = data.deviceIcon || getIcon(data.deviceType);
+          var label = data.label || t('unnamed_device');
+          var desc = data.desc || '';
+          var deviceType = data.deviceType || null;
+          var locationLabel = data.locationLabel || null;
+          var groupLabel = data.groupLabel || null;
+          var stateElements = parseState(data.state);
+
+          var uuid = data.uuid || null;
+          var brand = data.brand || null;
+          var ownership = data.ownership || null;
+          var mac = data.mac || null;
+          var productId = data.productId || null;
+          var locationId = data.locationId || null;
+          var groupId = data.groupId || null;
+          var eid = data.eid != null ? data.eid : null;
+          var endpoint = data.endpoint || null;
+          var elementIds = data.elementIds || [];
+
+          var html = '<div class="ddw-card">';
+          html += '<div class="ddw-header"><div class="ddw-header-top">';
+          html += getBackButtonHtml();
+          html += '<div class="ddw-title-row">';
+          html += '<div class="ddw-device-icon">' + esc(icon) + '</div>';
+          html += '<div class="ddw-title-text">';
+          html += '<div class="ddw-label">' + esc(label) + '</div>';
+          if (desc) html += '<div class="ddw-desc">' + esc(desc) + '</div>';
+          html += '</div>';
+          if (deviceType)
+            html += '<span class="ddw-badge">' + esc(t('dt_' + deviceType)) + '</span>';
+          html += '</div></div></div>'; // header
+
+          html += '<div class="ddw-body">';
+          var hasInfo = locationLabel || groupLabel;
+          if (hasInfo) {
+            html += '<div class="ddw-info-grid">';
+            if (locationLabel) {
+              html +=
+                '<div class="ddw-info-item"><div class="ddw-info-label">' +
+                esc(t('location')) +
+                '</div><div class="ddw-info-value">' +
+                esc(locationLabel) +
+                '</div></div>';
+            }
+            if (groupLabel) {
+              html +=
+                '<div class="ddw-info-item"><div class="ddw-info-label">' +
+                esc(t('group')) +
+                '</div><div class="ddw-info-value">' +
+                esc(groupLabel) +
+                '</div></div>';
+            }
+            html += '</div>';
+          }
+
+          html += '<div class="ddw-state-section">';
+          html += '<div class="ddw-section-label">' + esc(t('device_state')) + '</div>';
+          if (stateElements) {
+            var multiElement = stateElements.length > 1;
+            for (var ei = 0; ei < stateElements.length; ei++) {
+              var el = stateElements[ei];
+              html += '<div class="ddw-element-block">';
+              if (multiElement) {
+                html +=
+                  '<div class="ddw-element-header"><span class="ddw-element-id">' +
+                  esc(t('element')) +
+                  ' ' +
+                  esc(el.elementId) +
+                  '</span></div>';
+              }
+              html += '<div class="ddw-attr-list">';
+              for (var ai = 0; ai < el.attrs.length; ai++) {
+                var attr = el.attrs[ai];
+                var nameKey = ATTR_NAME_KEYS[attr.attrId];
+                var attrName = nameKey ? t(nameKey) : t('attr_prefix') + ' ' + attr.attrId;
+                html +=
+                  '<div class="ddw-attr-chip"><span class="ddw-attr-name">' +
+                  esc(attrName) +
+                  '</span> ' +
+                  formatAttrValue(attr.attrId, attr.values) +
+                  '</div>';
+              }
+              html += '</div></div>';
+            }
+          } else {
+            html += '<div class="ddw-state-empty">' + esc(t('no_state')) + '</div>';
+          }
+          html += '</div>'; // state-section
+
+          /* Technical details */
+          var techRows = [];
+          if (brand) techRows.push([t('td_brand'), brand]);
+          if (ownership) techRows.push([t('td_ownership'), ownership]);
+          if (uuid) techRows.push([t('td_uuid'), uuid]);
+          if (mac) techRows.push([t('td_mac'), mac]);
+          if (productId) techRows.push([t('td_product_id'), productId]);
+          if (locationId) techRows.push([t('td_location_id'), locationId]);
+          if (groupId) techRows.push([t('td_group_id'), groupId]);
+          if (eid != null) techRows.push([t('td_eid'), eid]);
+          if (endpoint) techRows.push([t('td_endpoint'), endpoint]);
+          if (elementIds.length > 0) techRows.push([t('td_element_ids'), elementIds.join(', ')]);
+
+          if (techRows.length > 0) {
+            html +=
+              '<button class="ddw-details-toggle" data-action="toggle-details" aria-expanded="false">';
+            html += '<span class="ddw-details-arrow">\u25B6</span> ' + esc(t('technical_details'));
+            html += '</button><div class="ddw-details-content">';
+            for (var ti = 0; ti < techRows.length; ti++) {
+              html +=
+                '<div class="ddw-detail-row"><span class="ddw-detail-key">' +
+                esc(techRows[ti][0]) +
+                '</span><span class="ddw-detail-val">' +
+                esc(techRows[ti][1]) +
+                '</span></div>';
+            }
+            html += '</div>';
+          }
+          html += '</div>'; // body
+
+          /* Footer */
+          html += '<div class="ddw-footer">';
+          html += '<span class="ddw-footer-text">' + esc(t('footer')) + '</span>';
+          if (uuid) {
+            html +=
+              '<button class="ddw-control-btn" data-action="interact_device" data-uuid="' +
+              esc(uuid) +
+              '">';
+            html += '\uD83C\uDFAE ' + esc(t('control_device'));
+            html += '</button>';
+          }
+          html += '</div></div>';
+          root.innerHTML = html;
+        }
+
+        /* ── Render: Control View ──────────────────────────── */
+        function renderControl(data) {
+          if (!data || !data.state) {
+            root.innerHTML =
+              '<div class="ddw-card"><div class="ddw-empty">' + esc(t('no_state')) + '</div></div>';
+            return;
+          }
+
+          var uuid = data.uuid || '';
+          var icon = getIcon(data.deviceType);
+          var label = data.label || t('unnamed_device');
+          var desc = data.desc || '';
+          var deviceType = data.deviceType || null;
+          var locationLabel = data.locationLabel || null;
+          var groupLabel = data.groupLabel || null;
+
+          var brand = data.brand || null;
+          var ownership = data.ownership || null;
+          var mac = data.mac || null;
+          var productId = data.productId || null;
+          var locationId = data.locationId || null;
+          var groupId = data.groupId || null;
+          var eid = data.eid != null ? data.eid : null;
+          var endpoint = data.endpoint || null;
+          var elementIds = data.elementIds || [];
+
+          var html = '<div class="ddw-card">';
+          html += '<div class="ddw-header"><div class="ddw-header-top">';
+          html += getBackButtonHtml();
+          html += '<div class="ddw-title-row">';
+          html += '<div class="ddw-device-icon">' + esc(icon) + '</div>';
+          html += '<div class="ddw-title-text">';
+          html += '<div class="ddw-label">' + esc(label) + '</div>';
+          if (desc) html += '<div class="ddw-desc">' + esc(desc) + '</div>';
+          html += '</div>';
+          if (deviceType)
+            html += '<span class="ddw-badge">' + esc(t('dt_' + deviceType)) + '</span>';
+          html += '</div></div></div>'; // header
+
+          html += '<div class="ddw-body">';
+          var hasInfo = locationLabel || groupLabel;
+          if (hasInfo) {
+            html += '<div class="ddw-info-grid">';
+            if (locationLabel) {
+              html +=
+                '<div class="ddw-info-item"><div class="ddw-info-label">' +
+                esc(t('location')) +
+                '</div><div class="ddw-info-value">' +
+                esc(locationLabel) +
+                '</div></div>';
+            }
+            if (groupLabel) {
+              html +=
+                '<div class="ddw-info-item"><div class="ddw-info-label">' +
+                esc(t('group')) +
+                '</div><div class="ddw-info-value">' +
+                esc(groupLabel) +
+                '</div></div>';
+            }
+            html += '</div>';
+          }
+
+          html += '<div class="ddw-section-label">' + esc(t('device_state')) + '</div>';
+          var state = data.state;
+          var elementKeys = Object.keys(state).sort(function (a, b) {
+            return Number(a) - Number(b);
+          });
+
+          if (elementKeys.length === 0) {
+            html += '<div class="ddw-empty">' + esc(t('no_state')) + '</div>';
+          } else {
+            for (var ei = 0; ei < elementKeys.length; ei++) {
+              var elId = elementKeys[ei];
+              var attrs = state[elId];
+              var attrKeys = Object.keys(attrs).sort(function (a, b) {
+                return Number(a) - Number(b);
+              });
+
+              html += '<div class="ddw-element">';
+              if (elementKeys.length > 1) {
+                html +=
+                  '<div class="ddw-element-title">' +
+                  esc(t('element')) +
+                  ' ' +
+                  esc(elId) +
+                  '</div>';
+              }
+
+              for (var ai = 0; ai < attrKeys.length; ai++) {
+                var attrId = attrKeys[ai];
+                var attrData = attrs[attrId];
+                var def = ATTR_MAP[Number(attrId)];
+                if (!def) continue;
+
+                var rowId = 'row-' + elId + '-' + attrId;
+                var rowClass = 'ddw-attr-row' + (def.type === 'hsv' ? ' ddw-attr-row--hsv' : '');
+                html += '<div class="' + rowClass + '" id="' + rowId + '">';
+                html += '<span class="ddw-attr-label">' + esc(t(def.key)) + '</span>';
+                html += '<div class="ddw-attr-control">';
+
+                if (def.type === 'toggle') {
+                  var isOn = attrData[1] === 1;
+                  var chkId = 'chk-' + elId + '-' + attrId;
+                  html +=
+                    '<span class="ddw-toggle-label">' + esc(t(isOn ? 'on' : 'off')) + '</span>';
+                  html += '<label class="ddw-toggle">';
+                  html +=
+                    '<input type="checkbox" id="' +
+                    chkId +
+                    '" data-uuid="' +
+                    esc(uuid) +
+                    '" data-el="' +
+                    esc(elId) +
+                    '" data-attr="power"' +
+                    (isOn ? ' checked' : '') +
+                    ' />';
+                  html += '<span class="ddw-toggle-track"></span></label>';
+                } else if (def.type === 'toggle_ro') {
+                  var val = attrData[1] || 0;
+                  var lbl = def.stateLabels ? def.stateLabels[val] || def.stateLabels[0] : '';
+                  html += '<span class="ddw-display-val">' + esc(t(lbl)) + '</span>';
+                  html +=
+                    '<label class="ddw-toggle ddw-toggle--readonly"><input type="checkbox" disabled' +
+                    (val ? ' checked' : '') +
+                    ' /><span class="ddw-toggle-track"></span></label>';
+                } else if (def.type === 'slider') {
+                  var sv = attrData[1] != null ? attrData[1] : def.min;
+                  var displayVal = def.displayScale ? Math.round(sv * def.displayScale) : sv;
+                  var sliderId = 'sld-' + elId + '-' + attrId;
+                  html += '<div class="ddw-slider-wrap">';
+                  html +=
+                    '<input type="range" class="ddw-slider" id="' +
+                    sliderId +
+                    '" min="' +
+                    def.min +
+                    '" max="' +
+                    def.max +
+                    '" value="' +
+                    sv +
+                    '" data-uuid="' +
+                    esc(uuid) +
+                    '" data-el="' +
+                    esc(elId) +
+                    '" data-action="' +
+                    def.action +
+                    '" data-scale="' +
+                    (def.displayScale || 1) +
+                    '" data-unit="' +
+                    esc(def.unit) +
+                    '" />';
+                  html +=
+                    '<span class="ddw-slider-value" id="' +
+                    sliderId +
+                    '-val">' +
+                    displayVal +
+                    esc(def.unit) +
+                    '</span></div>';
+                } else if (def.type === 'segment' || def.type === 'segment_ro') {
+                  var curVal = attrData[1] != null ? attrData[1] : -1;
+                  var roClass = def.type === 'segment_ro' ? ' ddw-seg--readonly' : '';
+                  html += '<div class="ddw-seg' + roClass + '">';
+                  for (var si = 0; si < def.options.length; si++) {
+                    var opt = def.options[si];
+                    var isActive = opt.value === curVal;
+                    html +=
+                      '<button class="ddw-seg-btn' +
+                      (isActive ? ' active' : '') +
+                      '"' +
+                      (def.action
+                        ? ' data-uuid="' +
+                          esc(uuid) +
+                          '" data-el="' +
+                          esc(elId) +
+                          '" data-action="' +
+                          def.action +
+                          '" data-value="' +
+                          opt.value +
+                          '"'
+                        : '') +
+                      '>' +
+                      esc(t(opt.label)) +
+                      '</button>';
+                  }
+                  html += '</div>';
+                } else if (def.type === 'hsv') {
+                  var hsvChannels = [
+                    { key: 'hsv_hue', idx: 1, min: 0, max: 3600 },
+                    { key: 'hsv_saturation', idx: 2, min: 0, max: 1000 },
+                    { key: 'hsv_value', idx: 3, min: 0, max: 1000 },
+                  ];
+                  var hsvGroupId = 'hsv-' + elId;
+                  for (var ci = 0; ci < hsvChannels.length; ci++) {
+                    var ch = hsvChannels[ci];
+                    var chVal = attrData[ch.idx] != null ? attrData[ch.idx] : 0;
+                    var chSliderId = hsvGroupId + '-' + ch.key;
+                    html += '<div class="ddw-hsv-channel">';
+                    html += '<span class="ddw-hsv-label">' + esc(t(ch.key)) + '</span>';
+                    html += '<div class="ddw-slider-wrap">';
+                    html +=
+                      '<input type="range" class="ddw-slider" id="' +
+                      chSliderId +
+                      '" min="' +
+                      ch.min +
+                      '" max="' +
+                      ch.max +
+                      '" value="' +
+                      chVal +
+                      '" data-uuid="' +
+                      esc(uuid) +
+                      '" data-el="' +
+                      esc(elId) +
+                      '" data-hsv-group="' +
+                      hsvGroupId +
+                      '" data-hsv-channel="' +
+                      ch.key +
+                      '" />';
+                    html +=
+                      '<span class="ddw-slider-value" id="' +
+                      chSliderId +
+                      '-val">' +
+                      chVal +
+                      '</span>';
+                    html += '</div></div>';
+                  }
+                }
+                html += '</div></div>';
+              }
+              html += '</div>';
+            }
+          }
+
+          /* Technical details */
+          var techRows2 = [];
+          if (brand) techRows2.push([t('td_brand'), brand]);
+          if (ownership) techRows2.push([t('td_ownership'), ownership]);
+          if (uuid) techRows2.push([t('td_uuid'), uuid]);
+          if (mac) techRows2.push([t('td_mac'), mac]);
+          if (productId) techRows2.push([t('td_product_id'), productId]);
+          if (locationId) techRows2.push([t('td_location_id'), locationId]);
+          if (groupId) techRows2.push([t('td_group_id'), groupId]);
+          if (eid != null) techRows2.push([t('td_eid'), eid]);
+          if (endpoint) techRows2.push([t('td_endpoint'), endpoint]);
+          if (elementIds.length > 0) techRows2.push([t('td_element_ids'), elementIds.join(', ')]);
+
+          if (techRows2.length > 0) {
+            html +=
+              '<button class="ddw-details-toggle" data-action="toggle-details" aria-expanded="false">';
+            html += '<span class="ddw-details-arrow">\u25B6</span> ' + esc(t('technical_details'));
+            html += '</button><div class="ddw-details-content">';
+            for (var ti2 = 0; ti2 < techRows2.length; ti2++) {
+              html +=
+                '<div class="ddw-detail-row"><span class="ddw-detail-key">' +
+                esc(techRows2[ti2][0]) +
+                '</span><span class="ddw-detail-val">' +
+                esc(techRows2[ti2][1]) +
+                '</span></div>';
+            }
+            html += '</div>';
+          }
+          html += '</div>'; // body
+
+          html +=
+            '<div class="ddw-footer"><span class="ddw-footer-text">' +
+            esc(t('footer')) +
+            '</span></div>';
+          html += '</div>';
+          root.innerHTML = html;
+        }
+
+        /* ── Control Action Handlers ───────────────────────── */
+        function sendControl(uuid, action, value, elementId, rowEl) {
+          if (rowEl) rowEl.classList.add('ddw-sending');
+          var args = { uuid: uuid, action: action, elementId: elementId };
+          if (value != null) args.value = value;
+
+          if (window.openai && typeof window.openai.callTool === 'function') {
+            try {
+              var p = window.openai.callTool('control_device_simple', args);
+              if (p && typeof p.then === 'function') {
+                p.then(function () {
+                  if (rowEl) rowEl.classList.remove('ddw-sending');
+                }).catch(function () {
+                  if (rowEl) rowEl.classList.remove('ddw-sending');
+                });
+              } else {
+                setTimeout(function () {
+                  if (rowEl) rowEl.classList.remove('ddw-sending');
+                }, 1500);
+              }
+            } catch (e) {
+              if (rowEl) rowEl.classList.remove('ddw-sending');
+            }
+          } else {
+            setTimeout(function () {
+              if (rowEl) rowEl.classList.remove('ddw-sending');
+            }, 800);
+          }
+        }
+
+        function sendRawControl(uuid, elementId, command, rowEl) {
+          if (rowEl) rowEl.classList.add('ddw-sending');
+          var args = { uuid: uuid, elementIds: [elementId], command: command };
+          if (window.openai && typeof window.openai.callTool === 'function') {
+            try {
+              var p = window.openai.callTool('control_device', args);
+              if (p && typeof p.then === 'function') {
+                p.then(function () {
+                  if (rowEl) rowEl.classList.remove('ddw-sending');
+                }).catch(function () {
+                  if (rowEl) rowEl.classList.remove('ddw-sending');
+                });
+              } else {
+                setTimeout(function () {
+                  if (rowEl) rowEl.classList.remove('ddw-sending');
+                }, 1500);
+              }
+            } catch (e) {
+              if (rowEl) rowEl.classList.remove('ddw-sending');
+            }
+          } else {
+            setTimeout(function () {
+              if (rowEl) rowEl.classList.remove('ddw-sending');
+            }, 800);
+          }
+        }
+
+        var _sliderTimers = {};
+        function debouncedControl(key, uuid, action, value, elementId, rowEl) {
+          if (_sliderTimers[key]) clearTimeout(_sliderTimers[key]);
+          _sliderTimers[key] = setTimeout(function () {
+            sendControl(uuid, action, value, elementId, rowEl);
+          }, 300);
+        }
+
+        function debouncedRawControl(key, uuid, elementId, command, rowEl) {
+          if (_sliderTimers[key]) clearTimeout(_sliderTimers[key]);
+          _sliderTimers[key] = setTimeout(function () {
+            sendRawControl(uuid, elementId, command, rowEl);
+          }, 300);
+        }
+
+        /* ── Event Delegation ──────────────────────────────── */
+        root.addEventListener('click', function (e) {
+          var target = e.target;
+
+          /* Back Button */
+          var backBtn = target.closest('.ddw-back-btn');
+          if (backBtn && backBtn.getAttribute('data-action') === 'back') {
+            goBack();
+            return;
+          }
+
+          /* Details Toggle */
+          var detailsToggle = target.closest('.ddw-details-toggle');
+          if (detailsToggle && detailsToggle.getAttribute('data-action') === 'toggle-details') {
+            var expanded = detailsToggle.getAttribute('aria-expanded') === 'true';
+            detailsToggle.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+            if (detailsToggle.nextElementSibling) {
+              detailsToggle.nextElementSibling.classList.toggle('ddw-open');
+            }
+            return;
+          }
+
+          /* List Item -> Dashboard */
+          var listItem = target.closest('.ddw-item');
+          if (listItem && listItem.getAttribute('data-action') === 'get_device') {
+            var uuid = listItem.getAttribute('data-uuid');
+            if (uuid) callToolAndNavigate('get_device', { uuid: uuid }, 'dashboard');
+            return;
+          }
+
+          /* Control Button -> Control View */
+          var controlBtn = target.closest('.ddw-control-btn');
+          if (controlBtn && controlBtn.getAttribute('data-action') === 'interact_device') {
+            var cUuid = controlBtn.getAttribute('data-uuid');
+            if (cUuid) callToolAndNavigate('interact_device', { uuid: cUuid }, 'control');
+            return;
+          }
+
+          /* Seg Button Control */
+          var segBtn = target.closest('.ddw-seg-btn');
+          if (segBtn && segBtn.getAttribute('data-action')) {
+            if (segBtn.closest('.ddw-seg--readonly')) return;
+            var sUuid = segBtn.getAttribute('data-uuid');
+            var sElId = Number(segBtn.getAttribute('data-el'));
+            var sAction = segBtn.getAttribute('data-action');
+            var sVal = Number(segBtn.getAttribute('data-value'));
+            var sRow = segBtn.closest('.ddw-attr-row');
+
+            var siblings = segBtn.parentNode.querySelectorAll('.ddw-seg-btn');
+            for (var si = 0; si < siblings.length; si++) siblings[si].classList.remove('active');
+            segBtn.classList.add('active');
+
+            sendControl(sUuid, sAction, sVal, sElId, sRow);
+            return;
+          }
+        });
+
+        root.addEventListener('change', function (e) {
+          var target = e.target;
+          /* Toggle Control */
+          if (target.type === 'checkbox' && target.getAttribute('data-attr') === 'power') {
+            var uuid = target.getAttribute('data-uuid');
+            var elId = Number(target.getAttribute('data-el'));
+            var isOn = target.checked;
+            var row = target.closest('.ddw-attr-row');
+            var lbl = row && row.querySelector('.ddw-toggle-label');
+            if (lbl) lbl.textContent = t(isOn ? 'on' : 'off');
+            sendControl(uuid, isOn ? 'turn_on' : 'turn_off', null, elId, row);
+          }
+
+          /* Slider Control */
+          if (target.type === 'range' && target.getAttribute('data-action')) {
+            var uuid2 = target.getAttribute('data-uuid');
+            var elId2 = Number(target.getAttribute('data-el'));
+            var action = target.getAttribute('data-action');
+            var val = Number(target.value);
+            var scale = Number(target.getAttribute('data-scale')) || 1;
+            var unit = target.getAttribute('data-unit') || '';
+            var valEl = document.getElementById(target.id + '-val');
+            if (valEl) valEl.textContent = (scale !== 1 ? Math.round(val * scale) : val) + unit;
+            var row2 = target.closest('.ddw-attr-row');
+            debouncedControl(target.id, uuid2, action, val, elId2, row2);
+          }
+
+          /* HSV Control */
+          if (target.type === 'range' && target.getAttribute('data-hsv-group')) {
+            var hsvGroup = target.getAttribute('data-hsv-group');
+            var uuid4 = target.getAttribute('data-uuid');
+            var elId4 = Number(target.getAttribute('data-el'));
+            var hSlider = document.getElementById(hsvGroup + '-hsv_hue');
+            var sSlider = document.getElementById(hsvGroup + '-hsv_saturation');
+            var vSlider = document.getElementById(hsvGroup + '-hsv_value');
+            var hVal = hSlider ? Number(hSlider.value) : 0;
+            var sVal = sSlider ? Number(sSlider.value) : 0;
+            var vVal = vSlider ? Number(vSlider.value) : 0;
+            var valEl4 = document.getElementById(target.id + '-val');
+            if (valEl4) valEl4.textContent = String(Number(target.value));
+            var row4 = target.closest('.ddw-attr-row');
+            debouncedRawControl(hsvGroup, uuid4, elId4, [31, hVal, sVal, vVal], row4);
+          }
+        });
+
+        root.addEventListener('input', function (e) {
+          var target = e.target;
+          if (target.type === 'range' && target.getAttribute('data-action')) {
+            var scale = Number(target.getAttribute('data-scale')) || 1;
+            var unit = target.getAttribute('data-unit') || '';
+            var val = Number(target.value);
+            var valEl = document.getElementById(target.id + '-val');
+            if (valEl) valEl.textContent = (scale !== 1 ? Math.round(val * scale) : val) + unit;
+          }
+          if (target.type === 'range' && target.getAttribute('data-hsv-group')) {
+            var valEl5 = document.getElementById(target.id + '-val');
+            if (valEl5) valEl5.textContent = String(Number(target.value));
+          }
+        });
+
+        /* ── Initialization & Data Bridge ──────────────────── */
+        if (window.openai && window.openai.toolOutput) {
+          renderView(null, window.openai.toolOutput);
+        }
+
+        window.addEventListener(
+          'message',
+          function (event) {
+            if (event.source !== window.parent) return;
+            var msg = event.data;
+            if (!msg || typeof msg !== 'object') return;
+            if (msg.jsonrpc === '2.0' && msg.method === 'ui/notifications/tool-result') {
+              var sc = msg.params && msg.params.structuredContent;
+              if (sc) renderView(null, sc);
+            }
+            if (msg.type === 'tool-result' && msg.structuredContent) {
+              renderView(null, msg.structuredContent);
+            }
+          },
+          { passive: true },
+        );
+
+        window.addEventListener(
+          'openai:set_globals',
+          function (event) {
+            var globals = event.detail && event.detail.globals;
+            if (globals && globals.toolOutput) renderView(null, globals.toolOutput);
+          },
+          { passive: true },
+        );
+      })();
+    </script>
+  </body>
+</html>
