@@ -136,6 +136,8 @@ export class ResourceRegistryService {
     );
 
     // Register device dashboard widget (ChatGPT interactive UI)
+    // Returns static HTML with embedded JS that reads data from window.openai.toolOutput
+    // at runtime in the ChatGPT iframe — no server-side data injection needed.
     mcpServer.registerResource(
       DEVICE_DASHBOARD_WIDGET.name,
       DEVICE_DASHBOARD_WIDGET.uri,
@@ -145,7 +147,7 @@ export class ResourceRegistryService {
       },
       async () => {
         this.logger.log('🔍 [RESOURCE ACCESS] device-dashboard widget resource read requested');
-        const html = await this.widgetService.render('device-dashboard', {});
+        const html = await this.widgetService.readStaticHtml('device-dashboard');
         this.logger.log(
           `✅ [RESOURCE ACCESS] device-dashboard widget resource read successful (${html.length} chars)`,
         );
@@ -155,6 +157,7 @@ export class ResourceRegistryService {
               uri: DEVICE_DASHBOARD_WIDGET.uri,
               mimeType: DEVICE_DASHBOARD_WIDGET.mimeType,
               text: html,
+              _meta: { ui: { prefersBorder: true } },
             },
           ],
         };

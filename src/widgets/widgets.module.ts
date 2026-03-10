@@ -1,7 +1,7 @@
 /**
  * Widgets Module
- * Provides widget rendering services for ChatGPT interactive UI
- * Handles Handlebars template compilation and preview endpoints
+ * Provides widget services for ChatGPT interactive UI (OpenAI Apps SDK)
+ * Handles static HTML widget reading for MCP resources and Handlebars preview rendering
  */
 
 import { Module } from '@nestjs/common';
@@ -10,8 +10,8 @@ import { WidgetPreviewController } from './widget-preview.controller';
 
 /**
  * WidgetsModule provides:
- * - WidgetService: Handlebars template compilation and rendering
- * - WidgetPreviewController: Dev-time preview endpoint for widget templates
+ * - WidgetService: Static HTML reading (MCP resources) + Handlebars preview rendering
+ * - WidgetPreviewController: Dev-time preview endpoint with injected sample data
  */
 @Module({
   controllers: [WidgetPreviewController],
