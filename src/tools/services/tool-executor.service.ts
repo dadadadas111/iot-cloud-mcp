@@ -349,7 +349,11 @@ export class ToolExecutorService {
         };
       });
 
-      return this.successResult({ total: slimDevices.length, devices: slimDevices });
+      const result = { total: slimDevices.length, devices: slimDevices };
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        structuredContent: result as Record<string, unknown>,
+      };
     } catch (error) {
       return this.errorResult(error);
     }
@@ -647,20 +651,29 @@ export class ToolExecutorService {
 
       const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
 
-      const state = await this.iotApiService
-        .getDeviceState(projectApiKey, params.uuid)
-        .catch(() => null);
+      // Fetch location label, group label, and device state in parallel
+      const [location, group, state] = await Promise.all([
+        device.locationId
+          ? this.iotApiService
+              .getLocation(projectApiKey, userId, device.locationId)
+              .catch(() => null)
+          : Promise.resolve(null),
+        device.groupId
+          ? this.iotApiService.getGroup(projectApiKey, userId, device.groupId).catch(() => null)
+          : Promise.resolve(null),
+        this.iotApiService.getDeviceState(projectApiKey, params.uuid).catch(() => null),
+      ]);
 
       const typeInfo = resolveDeviceType(device);
+      const productDecoded = device.productId ? decodeProductId(device.productId) : null;
       const stateMap = this.extractStateMap(state);
 
       const controlData = {
-        uuid: device.uuid,
-        label: device.label,
-        desc: device.desc,
-        deviceType: typeInfo?.deviceType ?? null,
-        deviceTypeId: typeInfo?.deviceTypeId ?? null,
-        elementIds: device.elementIds,
+        ...device,
+        ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
+        ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
+        locationLabel: location?.label ?? null,
+        groupLabel: group?.label ?? null,
         state: stateMap,
       };
 

@@ -8,6 +8,7 @@
   "attr_prefix": "Attr",
   "technical_details": "Technical Details",
   "footer": "Rogo IoT Cloud",
+  "control_device": "Control",
   "all_devices": "All Devices",
   "devices_found": "devices found",
   "no_devices": "No devices found",

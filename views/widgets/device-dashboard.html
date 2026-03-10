@@ -384,6 +384,27 @@
         color: var(--ddw-text-faint);
       }
 
+      .ddw-control-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 14px;
+        border-radius: 20px;
+        border: 1px solid var(--ddw-accent);
+        background: transparent;
+        color: var(--ddw-accent);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.15s ease;
+      }
+
+      .ddw-control-btn:hover {
+        background: var(--ddw-accent);
+        color: #fff;
+      }
+
       /* ── Responsive ────────────────────────────────────── */
 
       @media (max-width: 480px) {
@@ -942,6 +963,11 @@
           /* Footer */
           html += '<div class="ddw-footer">';
           html += '<span class="ddw-footer-text">' + esc(t('footer')) + '</span>';
+          if (uuid) {
+            html += '<button class="ddw-control-btn" data-uuid="' + esc(uuid) + '">';
+            html += '\uD83C\uDFAE ' + esc(t('control_device'));
+            html += '</button>';
+          }
           html += '</div>';
 
           html += '</div>'; // card
@@ -961,6 +987,20 @@
             '</div>'
           );
         }
+
+        /* ── Control button click → navigate to interact_device ── */
+        root.addEventListener('click', function (e) {
+          var btn = e.target.closest('.ddw-control-btn');
+          if (!btn) return;
+          var deviceUuid = btn.getAttribute('data-uuid');
+          if (!deviceUuid) return;
+          if (window.openai && typeof window.openai.sendFollowUpMessage === 'function') {
+            window.openai.sendFollowUpMessage({
+              prompt: 'Show the interactive control panel for device ' + deviceUuid,
+              scrollToBottom: true,
+            });
+          }
+        });
 
         /* ── Data bridge: OpenAI Apps SDK ───────────────── */
 

@@ -77,51 +77,200 @@
         overflow: hidden;
       }
 
-      /* Header */
+      /* Header (matches device-dashboard) */
       .ddw-header {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 16px 20px;
+        padding: 20px 24px 16px;
         border-bottom: 1px solid var(--ddw-border-light);
       }
 
-      .ddw-header-icon {
-        width: 44px;
-        height: 44px;
-        border-radius: 12px;
+      .ddw-title-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .ddw-device-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
         background: var(--ddw-bg-icon);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 22px;
+        font-size: 24px;
         flex-shrink: 0;
       }
 
-      .ddw-header-info {
+      .ddw-title-text {
         flex: 1;
         min-width: 0;
       }
 
-      .ddw-title {
-        font-size: 16px;
+      .ddw-label {
+        font-size: 18px;
         font-weight: 700;
+        color: var(--ddw-text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
-      .ddw-subtitle {
+      .ddw-desc {
         font-size: 13px;
         color: var(--ddw-text-secondary);
-        margin-top: 1px;
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ddw-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--ddw-badge-bg);
+        color: var(--ddw-badge-text);
+        flex-shrink: 0;
+        white-space: nowrap;
+      }
+
+      /* Body */
+      .ddw-body {
+        padding: 16px 24px 20px;
+      }
+
+      .ddw-section-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--ddw-text-muted);
+        margin: 0 0 8px;
+      }
+
+      /* Info grid (location, group) */
+      .ddw-info-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-bottom: 16px;
+      }
+
+      .ddw-info-item {
+        padding: 10px 12px;
+        background: var(--ddw-bg-surface);
+        border-radius: 10px;
+      }
+
+      .ddw-info-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--ddw-text-muted);
+        margin-bottom: 3px;
+      }
+
+      .ddw-info-value {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ddw-text);
+        word-break: break-word;
+      }
+
+      /* Technical details (collapsible) */
+      .ddw-details-toggle {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border: 1px solid var(--ddw-border);
+        border-radius: 10px;
+        background: var(--ddw-bg-surface);
+        color: var(--ddw-text-secondary);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        width: 100%;
+        margin-top: 12px;
+        font-family: inherit;
+      }
+
+      .ddw-details-toggle:hover {
+        background: var(--ddw-bg-element);
+      }
+
+      .ddw-details-arrow {
+        font-size: 10px;
+        transition: transform 0.2s;
+      }
+
+      .ddw-details-toggle[aria-expanded='true'] .ddw-details-arrow {
+        transform: rotate(90deg);
+      }
+
+      .ddw-details-content {
+        display: none;
+        margin-top: 8px;
+      }
+
+      .ddw-details-content.ddw-open {
+        display: block;
+      }
+
+      .ddw-detail-row {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 6px 12px;
+        font-size: 12px;
+        border-bottom: 1px solid var(--ddw-border-light);
+      }
+
+      .ddw-detail-row:last-child {
+        border-bottom: none;
+      }
+
+      .ddw-detail-key {
+        color: var(--ddw-loading-text);
+        font-weight: 600;
+        white-space: nowrap;
+        min-width: 80px;
+      }
+
+      .ddw-detail-val {
+        color: var(--ddw-text);
+        font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+        font-size: 11px;
+        word-break: break-all;
+      }
+
+      .ddw-footer-text {
+        font-size: 11px;
+        color: var(--ddw-text-muted);
+      }
+
+      @media (max-width: 480px) {
+        .ddw-info-grid {
+          grid-template-columns: 1fr;
+        }
       }
 
       /* Element section */
       .ddw-element {
-        padding: 14px 20px;
-        border-bottom: 1px solid var(--ddw-border-light);
+        padding: 12px 14px;
+        background: var(--ddw-bg-element);
+        border: 1px solid var(--ddw-border-light);
+        border-radius: 12px;
+        margin-bottom: 10px;
       }
 
       .ddw-element:last-child {
-        border-bottom: none;
+        margin-bottom: 0;
       }
 
       .ddw-element-title {
@@ -357,11 +506,12 @@
 
       /* Footer */
       .ddw-footer {
-        padding: 10px 20px;
+        padding: 12px 24px;
         background: var(--ddw-bg-surface);
         border-top: 1px solid var(--ddw-border-light);
-        font-size: 11px;
-        color: var(--ddw-text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
       }
 
       /* Control feedback */
@@ -676,22 +826,63 @@
 
           var uuid = data.uuid || '';
           var icon = getIcon(data.deviceType);
-          var typeLabel = data.deviceType ? t('dt_' + data.deviceType) : '';
+          var label = data.label || t('unnamed_device');
+          var desc = data.desc || '';
+          var deviceType = data.deviceType || null;
+          var locationLabel = data.locationLabel || null;
+          var groupLabel = data.groupLabel || null;
+          var brand = data.brand || null;
+          var ownership = data.ownership || null;
+          var mac = data.mac || null;
+          var productId = data.productId || null;
+          var locationId = data.locationId || null;
+          var groupId = data.groupId || null;
+          var eid = data.eid != null ? data.eid : null;
+          var endpoint = data.endpoint || null;
+          var elementIds = data.elementIds || [];
+
+          function detailRow(key, val) {
+            return '<div class="ddw-detail-row"><span class="ddw-detail-key">' +
+              esc(key) + '</span><span class="ddw-detail-val">' + esc(String(val)) + '</span></div>';
+          }
 
           var html = '<div class="ddw-card">';
 
-          /* Header */
-          html += '<div class="ddw-header">';
-          html += '<div class="ddw-header-icon">' + esc(icon) + '</div>';
-          html += '<div class="ddw-header-info">';
-          html += '<div class="ddw-title">' + esc(data.label || t('unnamed_device')) + '</div>';
-          if (typeLabel) {
-            html += '<div class="ddw-subtitle">' + esc(typeLabel) + '</div>';
-          }
+          /* Header (matches device-dashboard) */
+          html += '<div class="ddw-header"><div class="ddw-title-row">';
+          html += '<div class="ddw-device-icon">' + esc(icon) + '</div>';
+          html += '<div class="ddw-title-text">';
+          html += '<div class="ddw-label">' + esc(label) + '</div>';
+          if (desc) html += '<div class="ddw-desc">' + esc(desc) + '</div>';
           html += '</div>';
-          html += '</div>';
+          if (deviceType) html += '<span class="ddw-badge">' + esc(t('dt_' + deviceType)) + '</span>';
+          html += '</div></div>';
 
-          /* Elements */
+          /* Body */
+          html += '<div class="ddw-body">';
+
+          /* Info grid */
+          var hasInfo = locationLabel || groupLabel;
+          if (hasInfo) {
+            html += '<div class="ddw-info-grid">';
+            if (locationLabel) {
+              html += '<div class="ddw-info-item">';
+              html += '<div class="ddw-info-label">' + esc(t('location')) + '</div>';
+              html += '<div class="ddw-info-value">' + esc(locationLabel) + '</div>';
+              html += '</div>';
+            }
+            if (groupLabel) {
+              html += '<div class="ddw-info-item">';
+              html += '<div class="ddw-info-label">' + esc(t('group')) + '</div>';
+              html += '<div class="ddw-info-value">' + esc(groupLabel) + '</div>';
+              html += '</div>';
+            }
+            html += '</div>';
+          }
+
+          /* Controls section */
+          html += '<div class="ddw-section-label">' + esc(t('device_state')) + '</div>';
+
           var state = data.state;
           var elementKeys = Object.keys(state).sort(function (a, b) {
             return Number(a) - Number(b);
@@ -857,7 +1048,37 @@
             }
           }
 
-          html += '<div class="ddw-footer">' + esc(t('footer')) + '</div>';
+          /* Technical details (collapsible) */
+          var technicalRows = [];
+          if (brand) technicalRows.push([t('td_brand'), brand]);
+          if (ownership) technicalRows.push([t('td_ownership'), ownership]);
+          if (uuid) technicalRows.push([t('td_uuid'), uuid]);
+          if (mac) technicalRows.push([t('td_mac'), mac]);
+          if (productId) technicalRows.push([t('td_product_id'), productId]);
+          if (locationId) technicalRows.push([t('td_location_id'), locationId]);
+          if (groupId) technicalRows.push([t('td_group_id'), groupId]);
+          if (eid != null) technicalRows.push([t('td_eid'), eid]);
+          if (endpoint) technicalRows.push([t('td_endpoint'), endpoint]);
+          if (elementIds.length > 0) technicalRows.push([t('td_element_ids'), elementIds.join(', ')]);
+
+          if (technicalRows.length > 0) {
+            html +=
+              "<button class=\"ddw-details-toggle\" aria-expanded=\"false\" onclick=\"this.setAttribute('aria-expanded', this.getAttribute('aria-expanded') === 'true' ? 'false' : 'true'); this.nextElementSibling.classList.toggle('ddw-open')\">";
+            html += '<span class="ddw-details-arrow">\u25B6</span> ' + esc(t('technical_details'));
+            html += '</button>';
+            html += '<div class="ddw-details-content">';
+            for (var ti = 0; ti < technicalRows.length; ti++) {
+              html += detailRow(technicalRows[ti][0], technicalRows[ti][1]);
+            }
+            html += '</div>';
+          }
+
+          html += '</div>'; /* body */
+
+          /* Footer */
+          html += '<div class="ddw-footer">';
+          html += '<span class="ddw-footer-text">' + esc(t('footer')) + '</span>';
+          html += '</div>';
           html += '</div>';
 
           root.innerHTML = html;
