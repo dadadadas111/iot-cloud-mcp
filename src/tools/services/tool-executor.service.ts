@@ -35,6 +35,10 @@ import {
 } from '../definitions/control-device-simple.tool';
 import { GET_DEVICE_DOCUMENTATION_TOOL } from '../definitions/get-device-documentation.tool';
 import { INTERACT_DEVICE_TOOL, InteractDeviceParams } from '../definitions/interact-device.tool';
+import {
+  WIDGET_GET_DEVICE_TOOL,
+  WidgetGetDeviceParams,
+} from '../definitions/widget-get-device.tool';
 import { sanitizeErrorForClient } from '../../common/utils/error.utils';
 
 /** Context for tool execution containing request metadata */
@@ -83,6 +87,8 @@ export class ToolExecutorService {
     [CONTROL_DEVICE_SIMPLE_TOOL.name]: (p, c) =>
       this.executeControlDeviceSimple(p as ControlDeviceSimpleParams, c),
     [INTERACT_DEVICE_TOOL.name]: (p, c) => this.executeInteractDevice(p as InteractDeviceParams, c),
+    [WIDGET_GET_DEVICE_TOOL.name]: (p, c) =>
+      this.executeWidgetGetDevice(p as WidgetGetDeviceParams, c),
     [GET_DEVICE_DOCUMENTATION_TOOL.name]: (p, _c) =>
       Promise.resolve(this.executeGetDeviceDocumentation(p as { topic: string })),
   };
@@ -682,6 +688,54 @@ export class ToolExecutorService {
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(controlData) }],
         structuredContent: controlData as Record<string, unknown>,
+      };
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  /**
+   * Widget-only: fetch device details + state for in-place navigation.
+   * Same logic as executeGetDevice but without _view hint — the widget decides the view.
+   * Not visible to the model (visibility: ['app']).
+   */
+  private async executeWidgetGetDevice(
+    params: WidgetGetDeviceParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+
+      const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
+
+      const [location, group, state] = await Promise.all([
+        device.locationId
+          ? this.iotApiService
+              .getLocation(projectApiKey, userId, device.locationId)
+              .catch(() => null)
+          : Promise.resolve(null),
+        device.groupId
+          ? this.iotApiService.getGroup(projectApiKey, userId, device.groupId).catch(() => null)
+          : Promise.resolve(null),
+        this.iotApiService.getDeviceState(projectApiKey, params.uuid).catch(() => null),
+      ]);
+
+      const typeInfo = resolveDeviceType(device);
+      const productDecoded = device.productId ? decodeProductId(device.productId) : null;
+      const stateMap = this.extractStateMap(state);
+
+      const enrichedDevice = {
+        ...device,
+        ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
+        ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
+        locationLabel: location?.label ?? null,
+        groupLabel: group?.label ?? null,
+        state: stateMap,
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(enrichedDevice) }],
+        structuredContent: enrichedDevice as Record<string, unknown>,
       };
     } catch (error) {
       return this.errorResult(error);

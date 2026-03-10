@@ -1856,7 +1856,7 @@
           var listItem = target.closest('.ddw-item');
           if (listItem && listItem.getAttribute('data-action') === 'get_device') {
             var uuid = listItem.getAttribute('data-uuid');
-            if (uuid) callToolAndNavigate('get_device', { uuid: uuid }, 'dashboard');
+            if (uuid) callToolAndNavigate('_widget_get_device', { uuid: uuid }, 'dashboard');
             return;
           }
 
@@ -1864,7 +1864,7 @@
           var controlBtn = target.closest('.ddw-control-btn');
           if (controlBtn && controlBtn.getAttribute('data-action') === 'interact_device') {
             var cUuid = controlBtn.getAttribute('data-uuid');
-            if (cUuid) callToolAndNavigate('interact_device', { uuid: cUuid }, 'control');
+            if (cUuid) callToolAndNavigate('_widget_get_device', { uuid: cUuid }, 'control');
             return;
           }
 
