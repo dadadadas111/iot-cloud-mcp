@@ -40,8 +40,7 @@ export const INTERACT_DEVICE_TOOL = {
     name: 'interact_device',
     description:
       'Open interactive control panel for a device. Shows toggles, sliders, and buttons for real-time device control. Use this when the user wants to control or adjust a device (brightness, temperature, on/off, mode, etc.).',
-    readOnlyHint: false,
-    destructiveHint: true,
+    readOnlyHint: true,
     securitySchemes: {
       oauth2: {
         type: 'oauth2',

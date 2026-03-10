@@ -76,6 +76,8 @@ export const CONTROL_DEVICE_TOOL = {
         description: 'Turns off elements 1 and 2 of the specified device.',
       },
     ],
+    readOnlyHint: false,
+    destructiveHint: false,
     securitySchemes: {
       oauth2: {
         type: 'oauth2',
