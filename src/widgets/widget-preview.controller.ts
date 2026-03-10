@@ -146,9 +146,18 @@ export class WidgetPreviewController {
     const sampleData = {
       uuid: '507f1f77bcf86cd799439011',
       label: 'Living Room Light',
+      desc: 'Main ceiling light in the living area',
       deviceType: 'LIGHT',
       deviceTypeId: 1,
+      mac: '9c9e6eed3444',
+      productId: 'RG-BLE-LB01',
+      locationId: 'loc-001',
+      groupId: 'grp-001',
       elementIds: [1, 2, 3],
+      locationLabel: 'Living Room',
+      groupLabel: 'Main Lights',
+      brand: 'Rogo',
+      ownership: 'owner',
       state: {
         '1': {
           '1': [1, 1],
