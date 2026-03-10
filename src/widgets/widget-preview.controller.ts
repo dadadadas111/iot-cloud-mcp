@@ -1,6 +1,7 @@
 /**
  * Widget Preview Controller
- * Dev-time endpoint for previewing widget templates in a browser
+ * Dev-time endpoint for previewing widget templates in a browser.
+ * Injects sample data as window.openai.toolOutput to simulate the ChatGPT iframe environment.
  * Access via: GET /widgets/preview/device-dashboard
  */
 
@@ -10,8 +11,10 @@ import { Response } from 'express';
 import { WidgetService } from './services/widget.service';
 
 /**
- * Preview controller for testing widget rendering during development
- * Exempt from rate limiting via @SkipThrottle()
+ * Preview controller for testing widget rendering during development.
+ * Wraps the static widget HTML in a host page that provides window.openai.toolOutput
+ * with sample device data, mimicking the ChatGPT iframe bridge.
+ * Exempt from rate limiting via @SkipThrottle().
  */
 @SkipThrottle()
 @Controller('widgets/preview')
@@ -19,7 +22,7 @@ export class WidgetPreviewController {
   constructor(private readonly widgetService: WidgetService) {}
 
   /**
-   * Preview the device dashboard widget with sample data
+   * Preview the device dashboard widget with sample data.
    * GET /widgets/preview/device-dashboard
    */
   @Get('device-dashboard')
@@ -30,7 +33,9 @@ export class WidgetPreviewController {
       desc: 'Main ceiling LED light in the living room',
       mac: 'AA:BB:CC:DD:EE:FF',
       locationId: '507f1f77bcf86cd799439022',
+      locationLabel: 'Living Room',
       groupId: '507f1f77bcf86cd799439033',
+      groupLabel: 'Main Lights',
       features: { dimming: true, colorTemp: true },
       deviceType: 'LED Light',
       deviceTypeId: 1,
@@ -38,9 +43,32 @@ export class WidgetPreviewController {
       ownership: 'owned',
       elementIds: [1, 2, 3],
       productId: '0100010001',
+      eid: 1,
+      endpoint: 'mqtt://broker.rogo.io',
+      state: {
+        '1': {
+          '1': [1, 1],
+          '28': [28, 800],
+          '31': [31, 2400, 900, 700],
+        },
+        '2': {
+          '1': [1, 0],
+          '28': [28, 500],
+        },
+        '3': {
+          '1': [1, 1],
+        },
+      },
     };
 
-    const html = await this.widgetService.render('device-dashboard', sampleData);
-    res.type('text/html').send(html);
+    const widgetHtml = await this.widgetService.readStaticHtml('device-dashboard');
+
+    // Inject window.openai.toolOutput before the widget script runs
+    const previewHtml = widgetHtml.replace(
+      '<script>',
+      `<script>window.openai = { toolOutput: ${JSON.stringify(sampleData)} };</script>\n<script>`,
+    );
+
+    res.type('text/html').send(previewHtml);
   }
 }

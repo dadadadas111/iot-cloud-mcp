@@ -341,7 +341,7 @@ export class ToolExecutorService {
     }
   }
 
-  /** Get device with full payload + deviceType/brand enrichment */
+  /** Get device with full payload + deviceType/brand enrichment + location/group labels + state */
   private async executeGetDevice(
     params: GetDeviceParams,
     context: ToolContext,
@@ -351,12 +351,28 @@ export class ToolExecutorService {
 
       const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
 
+      // Fetch location label, group label, and device state in parallel
+      const [location, group, state] = await Promise.all([
+        device.locationId
+          ? this.iotApiService
+              .getLocation(projectApiKey, userId, device.locationId)
+              .catch(() => null)
+          : Promise.resolve(null),
+        device.groupId
+          ? this.iotApiService.getGroup(projectApiKey, userId, device.groupId).catch(() => null)
+          : Promise.resolve(null),
+        this.iotApiService.getDeviceState(projectApiKey, params.uuid).catch(() => null),
+      ]);
+
       const typeInfo = resolveDeviceType(device);
       const productDecoded = device.productId ? decodeProductId(device.productId) : null;
       const enrichedDevice = {
         ...device,
         ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
         ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
+        locationLabel: location?.label ?? null,
+        groupLabel: group?.label ?? null,
+        state: state ?? null,
       };
 
       // Return both text content (backward compatible) and structuredContent (for ChatGPT widgets)
