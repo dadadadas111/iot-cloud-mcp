@@ -105,6 +105,16 @@
         gap: 12px;
         padding: 12px 20px;
         border-bottom: 1px solid var(--ddw-border-light);
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+
+      .ddw-item:hover {
+        background: var(--ddw-bg-surface);
+      }
+
+      .ddw-item:active {
+        background: var(--ddw-bg-element);
       }
 
       .ddw-item:last-child {
@@ -155,6 +165,13 @@
         background: var(--ddw-badge-bg);
         color: var(--ddw-badge-text);
         flex-shrink: 0;
+      }
+
+      .ddw-item-chevron {
+        flex-shrink: 0;
+        color: var(--ddw-text-muted);
+        font-size: 14px;
+        margin-left: 4px;
       }
 
       /* Empty state */
@@ -335,7 +352,7 @@
               var d = devices[i];
               var icon = getIcon(d.deviceType);
               var typeLabel = d.deviceType ? t('dt_' + d.deviceType) : '';
-              html += '<li class="ddw-item">';
+              html += '<li class="ddw-item" data-uuid="' + esc(d.uuid) + '" data-label="' + esc(d.label || t('unnamed_device')) + '">';
               html += '<div class="ddw-item-icon">' + esc(icon) + '</div>';
               html += '<div class="ddw-item-info">';
               html +=
@@ -345,6 +362,7 @@
               if (typeLabel) {
                 html += '<span class="ddw-item-badge">' + esc(typeLabel) + '</span>';
               }
+              html += '<span class="ddw-item-chevron">&#8250;</span>';
               html += '</li>';
             }
             html += '</ul>';
@@ -355,6 +373,22 @@
 
           root.innerHTML = html;
         }
+        }
+
+        /* Click-to-detail: delegate clicks on device items */
+        root.addEventListener('click', function (e) {
+          var item = e.target.closest('.ddw-item');
+          if (!item) return;
+          var uuid = item.getAttribute('data-uuid');
+          var label = item.getAttribute('data-label');
+          if (!uuid) return;
+          if (window.openai && typeof window.openai.sendFollowUpMessage === 'function') {
+            window.openai.sendFollowUpMessage({
+              prompt: 'Show me full details and state for device "' + label + '" (UUID: ' + uuid + ')',
+              scrollToBottom: true,
+            });
+          }
+        });
 
         /* Data bridge */
         if (window.openai && window.openai.toolOutput) {

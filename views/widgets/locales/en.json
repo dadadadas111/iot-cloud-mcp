@@ -11,6 +11,7 @@
   "all_devices": "All Devices",
   "devices_found": "devices found",
   "no_devices": "No devices found",
+  "unnamed_device": "Unnamed device",
 
   "attr_power": "Power",
   "attr_open_close": "Open/Close",
