@@ -1,6 +1,5 @@
 {
-  "loading": "Loading device data\u2026",
-  "unnamed_device": "Unnamed Device",
+  "loading": "Loading device data…",
   "location": "Location",
   "group": "Group",
   "device_state": "Device State",
@@ -9,6 +8,9 @@
   "attr_prefix": "Attr",
   "technical_details": "Technical Details",
   "footer": "Rogo IoT Cloud",
+  "all_devices": "All Devices",
+  "devices_found": "devices found",
+  "no_devices": "No devices found",
 
   "attr_power": "Power",
   "attr_open_close": "Open/Close",

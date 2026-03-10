@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Device List</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --ddw-bg-card: #ffffff;
+        --ddw-text: #1a1a1a;
+        --ddw-text-secondary: rgba(0, 0, 0, 0.5);
+        --ddw-text-muted: rgba(0, 0, 0, 0.4);
+        --ddw-bg-surface: #f8f9fa;
+        --ddw-bg-element: #f8f9fb;
+        --ddw-bg-icon: #f0f4ff;
+        --ddw-border: rgba(0, 0, 0, 0.08);
+        --ddw-border-light: rgba(0, 0, 0, 0.06);
+        --ddw-badge-bg: #e8f5e9;
+        --ddw-badge-text: #2e7d32;
+        --ddw-accent: #5b7cf7;
+        --ddw-text-label: #4a5568;
+        --ddw-attr-chip-bg: #ffffff;
+        --ddw-loading-text: rgba(0, 0, 0, 0.45);
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        color: var(--ddw-text);
+        background: transparent;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Loading */
+      .ddw-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 80px;
+        gap: 12px;
+        color: var(--ddw-loading-text);
+        font-size: 14px;
+      }
+
+      .ddw-spinner {
+        width: 24px;
+        height: 24px;
+        border: 3px solid var(--ddw-border);
+        border-top-color: var(--ddw-accent);
+        border-radius: 50%;
+        animation: ddw-spin 0.7s linear infinite;
+      }
+
+      @keyframes ddw-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Card */
+      .ddw-card {
+        max-width: 560px;
+        margin: 0 auto;
+        background: var(--ddw-bg-card);
+        border: 1px solid var(--ddw-border);
+        border-radius: 16px;
+        overflow: hidden;
+      }
+
+      /* Header */
+      .ddw-header {
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--ddw-border-light);
+      }
+
+      .ddw-title {
+        font-size: 16px;
+        font-weight: 700;
+      }
+
+      .ddw-subtitle {
+        font-size: 13px;
+        color: var(--ddw-text-secondary);
+        margin-top: 2px;
+      }
+
+      /* Device list */
+      .ddw-list {
+        list-style: none;
+      }
+
+      .ddw-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 20px;
+        border-bottom: 1px solid var(--ddw-border-light);
+      }
+
+      .ddw-item:last-child {
+        border-bottom: none;
+      }
+
+      .ddw-item-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        background: var(--ddw-bg-icon);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 18px;
+        flex-shrink: 0;
+      }
+
+      .ddw-item-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .ddw-item-label {
+        font-size: 14px;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ddw-item-meta {
+        font-size: 12px;
+        color: var(--ddw-text-secondary);
+        margin-top: 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ddw-item-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        background: var(--ddw-badge-bg);
+        color: var(--ddw-badge-text);
+        flex-shrink: 0;
+      }
+
+      /* Empty state */
+      .ddw-empty {
+        padding: 24px 20px;
+        text-align: center;
+        color: var(--ddw-text-muted);
+        font-size: 14px;
+      }
+
+      /* Footer */
+      .ddw-footer {
+        padding: 10px 20px;
+        background: var(--ddw-bg-surface);
+        border-top: 1px solid var(--ddw-border-light);
+        font-size: 11px;
+        color: var(--ddw-text-muted);
+      }
+
+      /* Dark theme */
+      .ddw-dark {
+        --ddw-bg-card: #2d2d2d;
+        --ddw-text: #e0e0e0;
+        --ddw-text-secondary: rgba(255, 255, 255, 0.6);
+        --ddw-text-muted: rgba(255, 255, 255, 0.45);
+        --ddw-bg-surface: #383838;
+        --ddw-bg-element: #353535;
+        --ddw-bg-icon: #2a3040;
+        --ddw-border: rgba(255, 255, 255, 0.1);
+        --ddw-border-light: rgba(255, 255, 255, 0.08);
+        --ddw-badge-bg: #1b3a2a;
+        --ddw-badge-text: #66bb6a;
+        --ddw-accent: #7b9cf7;
+        --ddw-text-label: #a0aec0;
+        --ddw-attr-chip-bg: #3a3a3a;
+        --ddw-loading-text: rgba(255, 255, 255, 0.45);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root:not(.ddw-light) {
+          --ddw-bg-card: #2d2d2d;
+          --ddw-text: #e0e0e0;
+          --ddw-text-secondary: rgba(255, 255, 255, 0.6);
+          --ddw-text-muted: rgba(255, 255, 255, 0.45);
+          --ddw-bg-surface: #383838;
+          --ddw-bg-element: #353535;
+          --ddw-bg-icon: #2a3040;
+          --ddw-border: rgba(255, 255, 255, 0.1);
+          --ddw-border-light: rgba(255, 255, 255, 0.08);
+          --ddw-badge-bg: #1b3a2a;
+          --ddw-badge-text: #66bb6a;
+          --ddw-accent: #7b9cf7;
+          --ddw-text-label: #a0aec0;
+          --ddw-attr-chip-bg: #3a3a3a;
+          --ddw-loading-text: rgba(255, 255, 255, 0.45);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="ddw-root">
+      <div class="ddw-loading">
+        <div class="ddw-spinner"></div>
+        <span id="ddw-loading-text">Loading...</span>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        'use strict';
+
+        var root = document.getElementById('ddw-root');
+
+        /* i18n */
+        var STRINGS = window.__I18N__ || {};
+        var _lang = null;
+        function t(key) {
+          if (!_lang) {
+            _lang = (document.documentElement.lang || 'en').split('-')[0].toLowerCase();
+            if (!STRINGS[_lang]) _lang = 'en';
+            var loadEl = document.getElementById('ddw-loading-text');
+            if (loadEl && STRINGS[_lang]) loadEl.textContent = STRINGS[_lang].loading || '';
+          }
+          return (STRINGS[_lang] && STRINGS[_lang][key]) || (STRINGS.en && STRINGS.en[key]) || key;
+        }
+
+        /* Theme detection */
+        function applyTheme(theme) {
+          var root = document.documentElement;
+          if (theme === 'dark') {
+            root.classList.add('ddw-dark');
+          } else if (theme === 'light') {
+            root.classList.remove('ddw-dark');
+          }
+        }
+        if (window.openai && window.openai.theme) {
+          applyTheme(window.openai.theme);
+        }
+        window.addEventListener(
+          'openai:set_globals',
+          function (event) {
+            var globals = event.detail && event.detail.globals;
+            if (globals && globals.theme) applyTheme(globals.theme);
+          },
+          { passive: true },
+        );
+
+        /* Device icons (same as device-dashboard) */
+        var DEVICE_ICONS = {
+          LIGHT: '\uD83D\uDCA1',
+          SWITCH: '\uD83D\uDD18',
+          PLUG: '\uD83D\uDD0C',
+          CURTAINS: '\uD83E\uDE9F',
+          DOORLOCK: '\uD83D\uDD12',
+          DOORBELL: '\uD83D\uDD14',
+          CAMERA: '\uD83D\uDCF7',
+          SPEAKER: '\uD83D\uDD0A',
+          AC: '\u2744\uFE0F',
+          AC_CONTROLLER: '\u2744\uFE0F',
+          TV: '\uD83D\uDCFA',
+          FAN: '\uD83C\uDF00',
+          GATE: '\uD83D\uDEAA',
+          IR_DEVICE_CONTROLLER: '\uD83D\uDCF1',
+          SIREN: '\uD83D\uDEA8',
+          GATEWAY: '\uD83C\uDF10',
+          SENSOR_DEVICE: '\uD83D\uDCE1',
+          MOTION_SENSOR: '\uD83D\uDCE1',
+          MOTION_LUX_SENSOR: '\uD83D\uDCE1',
+          PRESENCE_SENSOR: '\uD83D\uDCE1',
+          TEMP_SENSOR: '\uD83C\uDF21',
+          HEAT_SENSOR: '\uD83C\uDF21',
+          SMOKE_SENSOR: '\uD83D\uDCA8',
+          DOOR_SENSOR: '\uD83D\uDEAA',
+          DUST_SENSOR: '\uD83C\uDF2B',
+          LUX_SENSOR: '\u2600\uFE0F',
+          DIMMER: '\uD83D\uDCA1',
+          DIMMER_SCENE: '\uD83D\uDCA1',
+          SWITCH_LIGHT_DIMMER: '\uD83D\uDCA1',
+          SWITCH_SCENE: '\uD83D\uDD18',
+          MACHINE_COFFEE: '\u2615',
+        };
+
+        function getIcon(deviceType) {
+          return (deviceType && DEVICE_ICONS[deviceType]) || '\uD83D\uDCDF';
+        }
+
+        function esc(str) {
+          if (str == null) return '';
+          var d = document.createElement('div');
+          d.appendChild(document.createTextNode(String(str)));
+          return d.innerHTML;
+        }
+
+        /* Render device list */
+        function render(data) {
+          if (!data || !data.devices) {
+            root.innerHTML =
+              '<div class="ddw-card"><div class="ddw-empty">' +
+              esc(t('no_devices')) +
+              '</div></div>';
+            return;
+          }
+
+          var devices = data.devices;
+          var total = data.total || devices.length;
+
+          var html = '<div class="ddw-card">';
+          html += '<div class="ddw-header">';
+          html += '<div class="ddw-title">' + esc(t('all_devices')) + '</div>';
+          html += '<div class="ddw-subtitle">' + total + ' ' + esc(t('devices_found')) + '</div>';
+          html += '</div>';
+
+          if (devices.length === 0) {
+            html += '<div class="ddw-empty">' + esc(t('no_devices')) + '</div>';
+          } else {
+            html += '<ul class="ddw-list">';
+            for (var i = 0; i < devices.length; i++) {
+              var d = devices[i];
+              var icon = getIcon(d.deviceType);
+              var typeLabel = d.deviceType ? t('dt_' + d.deviceType) : '';
+              html += '<li class="ddw-item">';
+              html += '<div class="ddw-item-icon">' + esc(icon) + '</div>';
+              html += '<div class="ddw-item-info">';
+              html +=
+                '<div class="ddw-item-label">' + esc(d.label || t('unnamed_device')) + '</div>';
+              html += '<div class="ddw-item-meta">' + esc(d.desc || d.mac || '') + '</div>';
+              html += '</div>';
+              if (typeLabel) {
+                html += '<span class="ddw-item-badge">' + esc(typeLabel) + '</span>';
+              }
+              html += '</li>';
+            }
+            html += '</ul>';
+          }
+
+          html += '<div class="ddw-footer">' + esc(t('footer')) + '</div>';
+          html += '</div>';
+
+          root.innerHTML = html;
+        }
+
+        /* Data bridge */
+        if (window.openai && window.openai.toolOutput) {
+          render(window.openai.toolOutput);
+        }
+
+        window.addEventListener(
+          'message',
+          function (event) {
+            if (event.source !== window.parent) return;
+            var msg = event.data;
+            if (!msg || typeof msg !== 'object') return;
+            if (msg.jsonrpc === '2.0' && msg.method === 'ui/notifications/tool-result') {
+              var sc = msg.params && msg.params.structuredContent;
+              if (sc) render(sc);
+            }
+            if (msg.type === 'tool-result' && msg.structuredContent) {
+              render(msg.structuredContent);
+            }
+          },
+          { passive: true },
+        );
+
+        window.addEventListener(
+          'openai:set_globals',
+          function (event) {
+            var globals = event.detail && event.detail.globals;
+            if (globals && globals.toolOutput) render(globals.toolOutput);
+          },
+          { passive: true },
+        );
+      })();
+    </script>
+  </body>
+</html>

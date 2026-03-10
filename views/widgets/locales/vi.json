@@ -9,6 +9,9 @@
   "attr_prefix": "Thu\u1ed9c t\u00ednh",
   "technical_details": "Chi ti\u1ebft k\u1ef9 thu\u1eadt",
   "footer": "Rogo IoT Cloud",
+  "all_devices": "Tất cả thiết bị",
+  "devices_found": "thiết bị",
+  "no_devices": "Không có thiết bị nào",
 
   "attr_power": "Ngu\u1ed3n",
   "attr_open_close": "\u0110\u00f3ng/M\u1edf",
