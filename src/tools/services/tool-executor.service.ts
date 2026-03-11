@@ -39,6 +39,10 @@ import {
   WIDGET_GET_DEVICE_TOOL,
   WidgetGetDeviceParams,
 } from '../definitions/widget-get-device.tool';
+import {
+  WIDGET_CONTROL_DEVICE_TOOL,
+  WidgetControlDeviceParams,
+} from '../definitions/widget-control-device.tool';
 import { sanitizeErrorForClient } from '../../common/utils/error.utils';
 
 /** Context for tool execution containing request metadata */
@@ -89,6 +93,8 @@ export class ToolExecutorService {
     [WIDGET_LIST_DEVICES_TOOL.name]: (p, c) => this.executeWidgetListDevices(p as WidgetListDevicesParams, c),
     [WIDGET_GET_DEVICE_TOOL.name]: (p, c) =>
       this.executeWidgetGetDevice(p as WidgetGetDeviceParams, c),
+    [WIDGET_CONTROL_DEVICE_TOOL.name]: (p, c) =>
+      this.executeWidgetControlDevice(p as WidgetControlDeviceParams, c),
     [GET_DEVICE_DOCUMENTATION_TOOL.name]: (p, _c) =>
       Promise.resolve(this.executeGetDeviceDocumentation(p as { topic: string })),
   };
@@ -678,6 +684,56 @@ export class ToolExecutorService {
       const stateMap = this.extractStateMap(state);
 
       const enrichedDevice = {
+        _view: 'dashboard',
+        ...device,
+        ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
+        ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
+        locationLabel: location?.label ?? null,
+        groupLabel: group?.label ?? null,
+        state: stateMap,
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(enrichedDevice) }],
+        structuredContent: enrichedDevice as Record<string, unknown>,
+      };
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  /**
+   * Widget-only: fetch device details + state for dashboard→control view transition.
+   * Same logic as executeWidgetGetDevice but adds _view: 'control' to structuredContent.
+   * Not visible to the model (visibility: ['app']).
+   */
+  private async executeWidgetControlDevice(
+    params: WidgetControlDeviceParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+
+      const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
+
+      const [location, group, state] = await Promise.all([
+        device.locationId
+          ? this.iotApiService
+              .getLocation(projectApiKey, userId, device.locationId)
+              .catch(() => null)
+          : Promise.resolve(null),
+        device.groupId
+          ? this.iotApiService.getGroup(projectApiKey, userId, device.groupId).catch(() => null)
+          : Promise.resolve(null),
+        this.iotApiService.getDeviceState(projectApiKey, params.uuid).catch(() => null),
+      ]);
+
+      const typeInfo = resolveDeviceType(device);
+      const productDecoded = device.productId ? decodeProductId(device.productId) : null;
+      const stateMap = this.extractStateMap(state);
+
+      const enrichedDevice = {
+        _view: 'control',
         ...device,
         ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
         ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),

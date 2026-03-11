@@ -778,6 +778,46 @@
         color: var(--ddw-text-faint);
       }
 
+      /* ── Pagination ─────────────────────────────────── */
+      .ddw-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 24px 2px;
+      }
+
+      .ddw-page-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 32px;
+        height: 32px;
+        padding: 0 10px;
+        border-radius: 8px;
+        border: 1px solid var(--ddw-border-light);
+        background: var(--ddw-bg-surface);
+        color: var(--ddw-text-primary);
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .ddw-page-btn:hover:not(:disabled) {
+        border-color: var(--ddw-accent);
+        color: var(--ddw-accent);
+      }
+
+      .ddw-page-btn:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+
+      .ddw-page-info {
+        font-size: 12px;
+        color: var(--ddw-text-secondary);
+      }
+
       .ddw-control-btn {
         display: inline-flex;
         align-items: center;
@@ -910,6 +950,8 @@
         var _history = [];
         var _currentView = null;
         var _currentData = null;
+        var _listPage = 0;
+        var LIST_PAGE_SIZE = 10;
 
         function renderView(view, data) {
           if (!view) {
@@ -921,7 +963,7 @@
           _currentView = view;
           _currentData = data;
 
-          if (view === 'list') renderList(data);
+          if (view === 'list') { _listPage = 0; renderList(data); }
           else if (view === 'dashboard') renderDashboard(data);
           else if (view === 'control') renderControl(data);
         }
@@ -954,7 +996,8 @@
               .callTool(tool, args)
               .then(function (result) {
                 hideNavLoading();
-                navigate(targetView, result);
+                var data = result && result.structuredContent ? result.structuredContent : result;
+                navigate(targetView, data);
               })
               .catch(function (err) {
                 hideNavLoading();
@@ -1316,6 +1359,12 @@
           var devices = data.devices;
           var total = data.total || devices.length;
 
+          /* client-side pagination */
+          var totalPages = Math.ceil(devices.length / LIST_PAGE_SIZE);
+          if (_listPage >= totalPages) _listPage = Math.max(0, totalPages - 1);
+          var start = _listPage * LIST_PAGE_SIZE;
+          var pageDevices = devices.slice(start, start + LIST_PAGE_SIZE);
+
           var html = '<div class="ddw-card">';
           html += '<div class="ddw-header">';
           html += '<div class="ddw-title">' + esc(t('all_devices')) + '</div>';
@@ -1326,8 +1375,8 @@
             html += '<div class="ddw-empty">' + esc(t('no_devices')) + '</div>';
           } else {
             html += '<ul class="ddw-list">';
-            for (var i = 0; i < devices.length; i++) {
-              var d = devices[i];
+            for (var i = 0; i < pageDevices.length; i++) {
+              var d = pageDevices[i];
               var icon = getIcon(d.deviceType);
               var typeLabel = d.deviceType ? t('dt_' + d.deviceType) : '';
               html +=
@@ -1343,6 +1392,26 @@
               html += '</li>';
             }
             html += '</ul>';
+
+            /* pagination controls */
+            if (totalPages > 1) {
+              html += '<div class="ddw-pagination">';
+              html +=
+                '<button class="ddw-page-btn" data-action="page_prev"' +
+                (_listPage === 0 ? ' disabled' : '') +
+                '>&#8249;</button>';
+              html +=
+                '<span class="ddw-page-info">' +
+                (_listPage + 1) +
+                ' / ' +
+                totalPages +
+                '</span>';
+              html +=
+                '<button class="ddw-page-btn" data-action="page_next"' +
+                (_listPage >= totalPages - 1 ? ' disabled' : '') +
+                '>&#8250;</button>';
+              html += '</div>';
+            }
           }
           html +=
             '<div class="ddw-footer"><span class="ddw-footer-text">' +
@@ -1479,7 +1548,7 @@
           html += '<span class="ddw-footer-text">' + esc(t('footer')) + '</span>';
           if (uuid) {
             html +=
-              '<button class="ddw-control-btn" data-action="interact_device" data-uuid="' +
+              '<button class="ddw-control-btn" data-action="control_device" data-uuid="' +
               esc(uuid) +
               '">';
             html += '\uD83C\uDFAE ' + esc(t('control_device'));
@@ -1852,6 +1921,20 @@
             return;
           }
 
+          /* Pagination */
+          var pageBtn = target.closest('.ddw-page-btn');
+          if (pageBtn) {
+            var pageAction = pageBtn.getAttribute('data-action');
+            if (pageAction === 'page_prev' && _listPage > 0) {
+              _listPage--;
+              renderList(_currentData);
+            } else if (pageAction === 'page_next') {
+              _listPage++;
+              renderList(_currentData);
+            }
+            return;
+          }
+
           /* List Item -> Dashboard */
           var listItem = target.closest('.ddw-item');
           if (listItem && listItem.getAttribute('data-action') === 'get_device') {
@@ -1862,9 +1945,9 @@
 
           /* Control Button -> Control View */
           var controlBtn = target.closest('.ddw-control-btn');
-          if (controlBtn && controlBtn.getAttribute('data-action') === 'interact_device') {
+          if (controlBtn && controlBtn.getAttribute('data-action') === 'control_device') {
             var cUuid = controlBtn.getAttribute('data-uuid');
-            if (cUuid) callToolAndNavigate('_widget_get_device', { uuid: cUuid }, 'control');
+            if (cUuid) callToolAndNavigate('_widget_control_device', { uuid: cUuid }, 'control');
             return;
           }
 

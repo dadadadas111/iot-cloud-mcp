@@ -24,6 +24,7 @@ import { CONTROL_DEVICE_SIMPLE_TOOL } from '../definitions/control-device-simple
 import { GET_DEVICE_DOCUMENTATION_TOOL } from '../definitions/get-device-documentation.tool';
 import { WIDGET_LIST_DEVICES_TOOL } from '../definitions/widget-list-devices.tool';
 import { WIDGET_GET_DEVICE_TOOL } from '../definitions/widget-get-device.tool';
+import { WIDGET_CONTROL_DEVICE_TOOL } from '../definitions/widget-control-device.tool';
 
 /** All tool definitions in registration order */
 const ALL_TOOL_DEFINITIONS = [
@@ -44,6 +45,7 @@ const ALL_TOOL_DEFINITIONS = [
   GET_DEVICE_DOCUMENTATION_TOOL,
   WIDGET_LIST_DEVICES_TOOL,
   WIDGET_GET_DEVICE_TOOL,
+  WIDGET_CONTROL_DEVICE_TOOL,
 ] as const;
 
 /**
