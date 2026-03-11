@@ -52,10 +52,11 @@ export const LIST_DEVICES_TOOL = {
   },
   schema: ListDevicesParamsSchema,
   _meta: {
-    tool: {
-      outputTemplate: {
-        resourceUri: 'ui://widget/device-app.html',
-      },
-    },
+    ui: { resourceUri: 'ui://widget/device-app.html' },
+    'openai/outputTemplate': 'ui://widget/device-app.html',
+    'openai/widgetAccessible': true,
+    'openai/resultCanProduceWidget': true,
+    'openai/toolInvocation/invoking': 'Loading devices...',
+    'openai/toolInvocation/invoked': 'Devices loaded',
   },
 };
