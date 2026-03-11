@@ -750,47 +750,58 @@
         align-items: stretch;
       }
       .ddw-attr-row--hsv .ddw-attr-control {
-        flex-direction: column;
+        flex-direction: row;
         align-items: stretch;
+        gap: 14px;
+      }
+      .ddw-hsv-sliders {
+        display: flex;
+        flex-direction: column;
         gap: 10px;
+        flex: 1;
+        min-width: 0;
+        justify-content: center;
       }
       .ddw-hsv-preview {
         position: relative;
-        height: 52px;
+        width: 80px;
+        min-height: 80px;
         border-radius: 14px;
         border: 1px solid var(--ddw-hsv-preview-border);
         overflow: hidden;
+        flex-shrink: 0;
         box-shadow:
           inset 0 1px 0 rgba(255, 255, 255, 0.28),
-          0 8px 18px rgba(15, 23, 42, 0.08);
+          0 4px 12px rgba(15, 23, 42, 0.08);
       }
 
       .ddw-hsv-preview::after {
         content: '';
         position: absolute;
         inset: 0;
-        background: linear-gradient(135deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0));
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0));
         pointer-events: none;
       }
 
       .ddw-hsv-channel {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
       }
       .ddw-hsv-label {
-        font-size: 12px;
+        font-size: 11px;
         color: var(--ddw-text-secondary);
-        min-width: 72px;
+        min-width: 14px;
         flex-shrink: 0;
-        font-weight: 600;
+        font-weight: 700;
+        text-transform: uppercase;
       }
       .ddw-attr-row--hsv .ddw-slider-wrap {
         max-width: none;
       }
       .ddw-hsv-channel .ddw-slider-value {
-        min-width: 94px;
-        font-size: 12px;
+        min-width: 52px;
+        font-size: 11px;
         color: var(--ddw-text-secondary);
       }
 
@@ -918,24 +929,23 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        border: none;
+        border: 1px solid var(--ddw-border);
         border-radius: 8px;
         font-size: 20px;
         font-weight: 600;
         cursor: pointer;
         z-index: 2;
         color: var(--ddw-text-secondary);
-        background: var(--ddw-bg-card);
+        background: var(--ddw-bg-surface);
         box-shadow: 0 1px 6px rgba(0,0,0,0.10);
         transition: all 0.18s ease;
-        opacity: 0.85;
         padding: 0;
         font-family: inherit;
       }
 
       .ddw-page-arrow:hover {
-        opacity: 1;
         color: var(--ddw-accent);
+        border-color: var(--ddw-accent);
         box-shadow: 0 2px 10px rgba(0,0,0,0.15);
       }
 
@@ -1453,12 +1463,13 @@
               var h = Math.round(vals[0] / 10);
               var s = Math.round(vals[1] / 10);
               var v = Math.round(vals[2] / 10);
-              var prev = 'hsl(' + h + ', ' + s + '%, ' + Math.max(v, 30) + '%)';
+              var prevColor = hsvToHslString(h, s, v);
+              var shadowColor = 'hsla(' + hsvToHsl(h, s, v).h + ', ' + hsvToHsl(h, s, v).s + '%, ' + hsvToHsl(h, s, v).l + '%, 0.35)';
               return (
                 '<span class="ddw-attr-val">' +
                 '<span style="display:inline-block;width:18px;height:18px;border-radius:6px;background:' +
-                prev +
-                ';border:1px solid rgba(0,0,0,0.1);box-shadow:0 1px 4px ' + prev.replace(')', ',0.35)') + '"></span>' +
+                prevColor +
+                ';border:1px solid rgba(0,0,0,0.1);box-shadow:0 1px 4px ' + shadowColor + '"></span>' +
                 'H' + h + '\u00B0 S' + s + '% V' + v + '%</span>'
               );
             case '257':
@@ -2066,18 +2077,18 @@
                   html += '</div>';
                 } else if (def.type === 'hsv') {
                   var hsvChannels = [
-                    { key: 'hsv_hue', idx: 1, min: 0, max: 3600 },
-                    { key: 'hsv_saturation', idx: 2, min: 0, max: 1000 },
-                    { key: 'hsv_value', idx: 3, min: 0, max: 1000 },
+                    { key: 'hsv_hue', shortLabel: 'H', idx: 1, min: 0, max: 3600 },
+                    { key: 'hsv_saturation', shortLabel: 'S', idx: 2, min: 0, max: 1000 },
+                    { key: 'hsv_value', shortLabel: 'V', idx: 3, min: 0, max: 1000 },
                   ];
                   var hsvGroupId = 'hsv-' + elId;
-                  html += '<div class="ddw-hsv-preview" id="' + hsvGroupId + '-preview"></div>';
+                  html += '<div class="ddw-hsv-sliders">';
                   for (var ci = 0; ci < hsvChannels.length; ci++) {
                     var ch = hsvChannels[ci];
                     var chVal = attrData[ch.idx] != null ? attrData[ch.idx] : 0;
                     var chSliderId = hsvGroupId + '-' + ch.key;
                     html += '<div class="ddw-hsv-channel">';
-                    html += '<span class="ddw-hsv-label">' + esc(t(ch.key)) + '</span>';
+                    html += '<span class="ddw-hsv-label">' + esc(ch.shortLabel) + '</span>';
                     html += '<div class="ddw-slider-wrap">';
                     html +=
                       '<input type="range" class="ddw-slider" id="' +
@@ -2105,6 +2116,8 @@
                       '</span>';
                     html += '</div></div>';
                   }
+                  html += '</div>';
+                  html += '<div class="ddw-hsv-preview" id="' + hsvGroupId + '-preview"></div>';
                 }
                 html += '</div></div>';
               }
