@@ -15,6 +15,7 @@ import { z } from 'zod';
 
 const WidgetListDevicesParamsSchema = z.object({
   locationId: z.string().nullish().describe('Optional location ID to filter devices by location'),
+  groupId: z.string().nullish().describe('Optional group ID to filter devices by group'),
 });
 
 /** Type for _widget_list_devices parameters */
@@ -40,6 +41,10 @@ export const WIDGET_LIST_DEVICES_TOOL = {
       locationId: {
         type: ['string', 'null'],
         description: 'Optional location ID to filter devices by location',
+      },
+      groupId: {
+        type: ['string', 'null'],
+        description: 'Optional group ID to filter devices by group',
       },
     },
     required: [],

@@ -320,6 +320,23 @@
         border-radius: 10px;
       }
 
+      .ddw-info-item--clickable {
+        cursor: pointer;
+        width: 100%;
+        text-align: left;
+        border: none;
+        font-family: inherit;
+        display: block;
+        transition: opacity 0.15s ease;
+      }
+      .ddw-info-item--clickable:hover {
+        opacity: 0.75;
+      }
+      .ddw-info-chevron {
+        color: var(--ddw-text-muted);
+        font-size: 13px;
+      }
+
       .ddw-info-label {
         font-size: 11px;
         font-weight: 600;
@@ -1179,7 +1196,7 @@
           _currentData = data;
           clearTimeout(_initTimer);
 
-          if (view === 'list') {
+          if (view === 'list' || view === 'location' || view === 'group') {
             _listPage = 0;
             renderList(data);
           } else if (view === 'dashboard') renderDashboard(data);
@@ -1225,6 +1242,38 @@
                 hideNavLoading();
                 var fresh = result && result.structuredContent ? result.structuredContent : result;
                 renderView('list', fresh);
+              }).catch(function () {
+                hideNavLoading();
+                renderView(prev.view, prev.data);
+              });
+            } else {
+              hideNavLoading();
+              renderView(prev.view, prev.data);
+            }
+          } else if (prev.view === 'location' && prev.data && prev.data.locationId) {
+            showNavLoading();
+            var p3 = window.openai.callTool('_widget_list_devices', { locationId: prev.data.locationId });
+            if (p3 && typeof p3.then === 'function') {
+              p3.then(function (result) {
+                hideNavLoading();
+                var fresh = result && result.structuredContent ? result.structuredContent : result;
+                renderView('location', fresh);
+              }).catch(function () {
+                hideNavLoading();
+                renderView(prev.view, prev.data);
+              });
+            } else {
+              hideNavLoading();
+              renderView(prev.view, prev.data);
+            }
+          } else if (prev.view === 'group' && prev.data && prev.data.groupId) {
+            showNavLoading();
+            var p4 = window.openai.callTool('_widget_list_devices', { groupId: prev.data.groupId });
+            if (p4 && typeof p4.then === 'function') {
+              p4.then(function (result) {
+                hideNavLoading();
+                var fresh = result && result.structuredContent ? result.structuredContent : result;
+                renderView('group', fresh);
               }).catch(function () {
                 hideNavLoading();
                 renderView(prev.view, prev.data);
@@ -1726,6 +1775,13 @@
           }
           var devices = data.devices;
           var total = data.total || devices.length;
+          var _listView = data._view || 'list';
+          var _listTitle = t('all_devices');
+          if (_listView === 'location' && data.locationLabel) {
+            _listTitle = '\uD83D\uDCCD ' + data.locationLabel;
+          } else if (_listView === 'group' && data.groupLabel) {
+            _listTitle = '\uD83D\uDCC1 ' + data.groupLabel;
+          }
 
           /* client-side pagination */
           var totalPages = Math.ceil(devices.length / LIST_PAGE_SIZE);
@@ -1734,10 +1790,12 @@
           var pageDevices = devices.slice(start, start + LIST_PAGE_SIZE);
 
           var html = '<div class="ddw-card">';
-          html += '<div class="ddw-header">';
-          html += '<div class="ddw-title">' + esc(t('all_devices')) + '</div>';
+          html += '<div class="ddw-header"><div class="ddw-header-top">';
+          html += getBackButtonHtml();
+          html += '<div>';
+          html += '<div class="ddw-title">' + esc(_listTitle) + '</div>';
           html += '<div class="ddw-subtitle">' + total + ' ' + esc(t('devices_found')) + '</div>';
-          html += '</div>';
+          html += '</div></div></div>';
 
           if (devices.length === 0) {
             html += '<div class="ddw-empty">' + esc(t('no_devices')) + '</div>';
@@ -1839,19 +1897,23 @@
             html += '<div class="ddw-info-grid">';
             if (locationLabel) {
               html +=
-                '<div class="ddw-info-item"><div class="ddw-info-label">\uD83D\uDCCD ' +
+                '<button class="ddw-info-item ddw-info-item--clickable" data-action="goto_location" data-location-id="' +
+                esc(locationId) +
+                '"><div class="ddw-info-label">\uD83D\uDCCD ' +
                 esc(t('location')) +
                 '</div><div class="ddw-info-value">' +
                 esc(locationLabel) +
-                '</div></div>';
+                ' <span class="ddw-info-chevron">\u203A</span></div></button>';
             }
             if (groupLabel) {
               html +=
-                '<div class="ddw-info-item"><div class="ddw-info-label">\uD83D\uDCC1 ' +
+                '<button class="ddw-info-item ddw-info-item--clickable" data-action="goto_group" data-group-id="' +
+                esc(groupId) +
+                '"><div class="ddw-info-label">\uD83D\uDCC1 ' +
                 esc(t('group')) +
                 '</div><div class="ddw-info-value">' +
                 esc(groupLabel) +
-                '</div></div>';
+                ' <span class="ddw-info-chevron">\u203A</span></div></button>';
             }
             html += '</div>';
           }
@@ -1980,19 +2042,23 @@
             html += '<div class="ddw-info-grid">';
             if (locationLabel) {
               html +=
-                '<div class="ddw-info-item"><div class="ddw-info-label">\uD83D\uDCCD ' +
+                '<button class="ddw-info-item ddw-info-item--clickable" data-action="goto_location" data-location-id="' +
+                esc(locationId) +
+                '"><div class="ddw-info-label">\uD83D\uDCCD ' +
                 esc(t('location')) +
                 '</div><div class="ddw-info-value">' +
                 esc(locationLabel) +
-                '</div></div>';
+                ' <span class="ddw-info-chevron">\u203A</span></div></button>';
             }
             if (groupLabel) {
               html +=
-                '<div class="ddw-info-item"><div class="ddw-info-label">\uD83D\uDCC1 ' +
+                '<button class="ddw-info-item ddw-info-item--clickable" data-action="goto_group" data-group-id="' +
+                esc(groupId) +
+                '"><div class="ddw-info-label">\uD83D\uDCC1 ' +
                 esc(t('group')) +
                 '</div><div class="ddw-info-value">' +
                 esc(groupLabel) +
-                '</div></div>';
+                ' <span class="ddw-info-chevron">\u203A</span></div></button>';
             }
             html += '</div>';
           }
@@ -2322,6 +2388,20 @@
             if (!isNaN(gotoPage) && gotoPage !== _listPage) {
               _listPage = gotoPage;
               renderList(_currentData);
+            }
+            return;
+          }
+
+          /* Location / Group Info Badge → Location / Group View */
+          var infoBtn = target.closest('.ddw-info-item--clickable');
+          if (infoBtn) {
+            var infoAction = infoBtn.getAttribute('data-action');
+            if (infoAction === 'goto_location') {
+              var locId = infoBtn.getAttribute('data-location-id');
+              if (locId) callToolAndNavigate('_widget_list_devices', { locationId: locId }, 'location');
+            } else if (infoAction === 'goto_group') {
+              var grpId = infoBtn.getAttribute('data-group-id');
+              if (grpId) callToolAndNavigate('_widget_list_devices', { groupId: grpId }, 'group');
             }
             return;
           }

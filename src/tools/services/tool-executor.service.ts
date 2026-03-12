@@ -33,7 +33,6 @@ import {
   CONTROL_DEVICE_SIMPLE_TOOL,
   ControlDeviceSimpleParams,
 } from '../definitions/control-device-simple.tool';
-import { GET_DEVICE_DOCUMENTATION_TOOL } from '../definitions/get-device-documentation.tool';
 import { WIDGET_LIST_DEVICES_TOOL, WidgetListDevicesParams } from '../definitions/widget-list-devices.tool';
 import {
   WIDGET_GET_DEVICE_TOOL,
@@ -95,8 +94,6 @@ export class ToolExecutorService {
       this.executeWidgetGetDevice(p as WidgetGetDeviceParams, c),
     [WIDGET_CONTROL_DEVICE_TOOL.name]: (p, c) =>
       this.executeWidgetControlDevice(p as WidgetControlDeviceParams, c),
-    [GET_DEVICE_DOCUMENTATION_TOOL.name]: (p, _c) =>
-      Promise.resolve(this.executeGetDeviceDocumentation(p as { topic: string })),
   };
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -763,11 +760,16 @@ export class ToolExecutorService {
     try {
       const { userId, projectApiKey } = this.extractUserContext(context);
 
-      const devices = await this.iotApiService.listDevices(
+      const allDevices = await this.iotApiService.listDevices(
         projectApiKey,
         userId,
         params.locationId ?? undefined,
       );
+
+      // Filter by groupId client-side (API doesn't support groupId query param)
+      const devices = params.groupId
+        ? allDevices.filter((d) => d.groupId === params.groupId)
+        : allDevices;
 
       const slimDevices = devices.map((device) => {
         const typeInfo = resolveDeviceType(device);
@@ -783,7 +785,32 @@ export class ToolExecutorService {
         };
       });
 
-      const result = { _view: 'list', total: slimDevices.length, devices: slimDevices };
+      // Resolve context labels in parallel when a filter is active
+      const [locationLabel, groupLabel] = await Promise.all([
+        params.locationId
+          ? this.iotApiService
+              .getLocation(projectApiKey, userId, params.locationId)
+              .then((l) => l.label ?? null)
+              .catch(() => null)
+          : Promise.resolve(null),
+        params.groupId
+          ? this.iotApiService
+              .getGroup(projectApiKey, userId, params.groupId)
+              .then((g) => g.label ?? null)
+              .catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+      const _view = params.locationId ? 'location' : params.groupId ? 'group' : 'list';
+
+      const result = {
+        _view,
+        total: slimDevices.length,
+        devices: slimDevices,
+        ...(params.locationId && { locationId: params.locationId, locationLabel }),
+        ...(params.groupId && { groupId: params.groupId, groupLabel }),
+      };
+
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         structuredContent: result as Record<string, unknown>,
@@ -793,15 +820,4 @@ export class ToolExecutorService {
     }
   }
 
-  /** Return device documentation markdown (no auth, no API call) */
-  private executeGetDeviceDocumentation(params: { topic: string }): CallToolResult {
-    try {
-      const content = GET_DEVICE_DOCUMENTATION_TOOL.execute(params.topic);
-      return {
-        content: [{ type: 'text' as const, text: content }],
-      };
-    } catch (error) {
-      return this.errorResult(error, false);
-    }
-  }
 }

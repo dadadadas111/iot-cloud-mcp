@@ -1,5 +1,6 @@
 {
   "loading": "Loading device data…",
+  "back": "Back",
   "location": "Location",
   "group": "Group",
   "device_state": "Device State",
