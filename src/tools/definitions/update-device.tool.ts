@@ -59,6 +59,7 @@ export const UPDATE_DEVICE_TOOL = {
     description:
       'Update device properties. You can update label, description, location, or group. At least one optional field must be provided.',
     readOnlyHint: false,
+    destructiveHint: false,
     securitySchemes: {
       oauth2: {
         type: 'oauth2',

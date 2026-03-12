@@ -34,7 +34,15 @@ import {
   ControlDeviceSimpleParams,
 } from '../definitions/control-device-simple.tool';
 import { GET_DEVICE_DOCUMENTATION_TOOL } from '../definitions/get-device-documentation.tool';
-import { INTERACT_DEVICE_TOOL, InteractDeviceParams } from '../definitions/interact-device.tool';
+import { WIDGET_LIST_DEVICES_TOOL, WidgetListDevicesParams } from '../definitions/widget-list-devices.tool';
+import {
+  WIDGET_GET_DEVICE_TOOL,
+  WidgetGetDeviceParams,
+} from '../definitions/widget-get-device.tool';
+import {
+  WIDGET_CONTROL_DEVICE_TOOL,
+  WidgetControlDeviceParams,
+} from '../definitions/widget-control-device.tool';
 import { sanitizeErrorForClient } from '../../common/utils/error.utils';
 
 /** Context for tool execution containing request metadata */
@@ -82,7 +90,11 @@ export class ToolExecutorService {
     [CONTROL_DEVICE_TOOL.name]: (p, c) => this.executeControlDevice(p as ControlDeviceParams, c),
     [CONTROL_DEVICE_SIMPLE_TOOL.name]: (p, c) =>
       this.executeControlDeviceSimple(p as ControlDeviceSimpleParams, c),
-    [INTERACT_DEVICE_TOOL.name]: (p, c) => this.executeInteractDevice(p as InteractDeviceParams, c),
+    [WIDGET_LIST_DEVICES_TOOL.name]: (p, c) => this.executeWidgetListDevices(p as WidgetListDevicesParams, c),
+    [WIDGET_GET_DEVICE_TOOL.name]: (p, c) =>
+      this.executeWidgetGetDevice(p as WidgetGetDeviceParams, c),
+    [WIDGET_CONTROL_DEVICE_TOOL.name]: (p, c) =>
+      this.executeWidgetControlDevice(p as WidgetControlDeviceParams, c),
     [GET_DEVICE_DOCUMENTATION_TOOL.name]: (p, _c) =>
       Promise.resolve(this.executeGetDeviceDocumentation(p as { topic: string })),
   };
@@ -437,7 +449,6 @@ export class ToolExecutorService {
       const stateMap = this.extractStateMap(state);
 
       const enrichedDevice = {
-        _view: 'dashboard',
         ...device,
         ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
         ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
@@ -446,10 +457,10 @@ export class ToolExecutorService {
         state: stateMap,
       };
 
-      // Return both text content (backward compatible) and structuredContent (for ChatGPT widgets)
+      const result = { _view: 'dashboard', ...enrichedDevice };
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(enrichedDevice) }],
-        structuredContent: enrichedDevice as Record<string, unknown>,
+        structuredContent: result as Record<string, unknown>,
       };
     } catch (error) {
       return this.errorResult(error);
@@ -642,9 +653,13 @@ export class ToolExecutorService {
     }
   }
 
-  /** Fetch device details + state for the interactive control panel widget */
-  private async executeInteractDevice(
-    params: InteractDeviceParams,
+  /**
+   * Widget-only: fetch device details + state for in-place navigation.
+   * Same logic as executeGetDevice but without _view hint — the widget decides the view.
+   * Not visible to the model (visibility: ['app']).
+   */
+  private async executeWidgetGetDevice(
+    params: WidgetGetDeviceParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
     try {
@@ -652,7 +667,6 @@ export class ToolExecutorService {
 
       const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
 
-      // Fetch location label, group label, and device state in parallel
       const [location, group, state] = await Promise.all([
         device.locationId
           ? this.iotApiService
@@ -669,7 +683,56 @@ export class ToolExecutorService {
       const productDecoded = device.productId ? decodeProductId(device.productId) : null;
       const stateMap = this.extractStateMap(state);
 
-      const controlData = {
+      const enrichedDevice = {
+        _view: 'dashboard',
+        ...device,
+        ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
+        ...(productDecoded && { brand: productDecoded.brand, ownership: productDecoded.ownership }),
+        locationLabel: location?.label ?? null,
+        groupLabel: group?.label ?? null,
+        state: stateMap,
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(enrichedDevice) }],
+        structuredContent: enrichedDevice as Record<string, unknown>,
+      };
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  /**
+   * Widget-only: fetch device details + state for dashboard→control view transition.
+   * Same logic as executeWidgetGetDevice but adds _view: 'control' to structuredContent.
+   * Not visible to the model (visibility: ['app']).
+   */
+  private async executeWidgetControlDevice(
+    params: WidgetControlDeviceParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+
+      const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
+
+      const [location, group, state] = await Promise.all([
+        device.locationId
+          ? this.iotApiService
+              .getLocation(projectApiKey, userId, device.locationId)
+              .catch(() => null)
+          : Promise.resolve(null),
+        device.groupId
+          ? this.iotApiService.getGroup(projectApiKey, userId, device.groupId).catch(() => null)
+          : Promise.resolve(null),
+        this.iotApiService.getDeviceState(projectApiKey, params.uuid).catch(() => null),
+      ]);
+
+      const typeInfo = resolveDeviceType(device);
+      const productDecoded = device.productId ? decodeProductId(device.productId) : null;
+      const stateMap = this.extractStateMap(state);
+
+      const enrichedDevice = {
         _view: 'control',
         ...device,
         ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
@@ -680,8 +743,50 @@ export class ToolExecutorService {
       };
 
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(controlData) }],
-        structuredContent: controlData as Record<string, unknown>,
+        content: [{ type: 'text' as const, text: JSON.stringify(enrichedDevice) }],
+        structuredContent: enrichedDevice as Record<string, unknown>,
+      };
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  /**
+   * Widget-only: fetch device list for in-place list view refresh.
+   * Same data as list_devices but includes structuredContent for widget re-rendering.
+   * Not visible to the model (visibility: ['app']).
+   */
+  private async executeWidgetListDevices(
+    params: WidgetListDevicesParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+
+      const devices = await this.iotApiService.listDevices(
+        projectApiKey,
+        userId,
+        params.locationId ?? undefined,
+      );
+
+      const slimDevices = devices.map((device) => {
+        const typeInfo = resolveDeviceType(device);
+        return {
+          uuid: device.uuid,
+          label: device.label,
+          desc: device.desc,
+          mac: device.mac,
+          locationId: device.locationId,
+          groupId: device.groupId,
+          features: device.features,
+          ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
+        };
+      });
+
+      const result = { _view: 'list', total: slimDevices.length, devices: slimDevices };
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+        structuredContent: result as Record<string, unknown>,
       };
     } catch (error) {
       return this.errorResult(error);

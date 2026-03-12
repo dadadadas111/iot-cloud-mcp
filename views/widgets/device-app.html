@@ -38,6 +38,13 @@
         --ddw-toggle-hover: #f0f1f3;
         --ddw-loading-text: rgba(0, 0, 0, 0.45);
         --ddw-attr-chip-bg: #ffffff;
+        --ddw-slider-track: #d7deea;
+        --ddw-slider-thumb: #ffffff;
+        --ddw-toggle-knob: #ffffff;
+        --ddw-toggle-glow: rgba(72, 187, 120, 0.28);
+        --ddw-toggle-shadow: rgba(15, 23, 42, 0.18);
+        --ddw-hsv-preview-border: rgba(15, 23, 42, 0.08);
+        --ddw-seg-active-shadow: rgba(91, 124, 247, 0.22);
       }
 
       body {
@@ -369,41 +376,61 @@
 
       .ddw-power-dot {
         display: inline-block;
-        width: 8px;
-        height: 8px;
+        width: 10px;
+        height: 10px;
         border-radius: 50%;
-        margin-right: 4px;
+        margin-right: 6px;
         vertical-align: middle;
+        flex-shrink: 0;
       }
 
       .ddw-power-on {
         background: var(--ddw-power-on);
+        box-shadow: 0 0 6px rgba(72, 187, 120, 0.45);
       }
       .ddw-power-off {
         background: var(--ddw-power-off);
       }
       .ddw-power-label {
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 600;
         vertical-align: middle;
       }
 
       .ddw-attr-list {
         display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
+        flex-direction: column;
+        gap: 0;
       }
 
       .ddw-attr-chip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 10px 0;
+        font-size: 13px;
+        color: var(--ddw-text-chip);
+        border-bottom: 1px solid var(--ddw-border-faint);
+      }
+
+      .ddw-attr-chip:last-child {
+        border-bottom: none;
+      }
+
+      .ddw-attr-name {
+        color: var(--ddw-text-secondary);
+        font-weight: 500;
+        flex-shrink: 0;
+        min-width: 80px;
+      }
+
+      .ddw-attr-val {
+        font-weight: 600;
+        text-align: right;
         display: inline-flex;
         align-items: center;
-        gap: 5px;
-        padding: 4px 10px;
-        background: var(--ddw-attr-chip-bg);
-        border: 1px solid var(--ddw-border);
-        border-radius: 8px;
-        font-size: 12px;
-        color: var(--ddw-text-chip);
+        gap: 6px;
       }
 
       .ddw-attr-name {
@@ -418,7 +445,7 @@
       /* Brightness bar */
       .ddw-brightness-bar {
         display: inline-block;
-        width: 40px;
+        width: 56px;
         height: 6px;
         background: var(--ddw-bar-bg);
         border-radius: 3px;
@@ -431,6 +458,7 @@
         height: 100%;
         background: var(--ddw-bar-fill);
         border-radius: 3px;
+        transition: width 0.3s ease;
       }
 
       /* ── Technical details (collapsible) ───────────────── */
@@ -549,8 +577,8 @@
       /* Toggle switch */
       .ddw-toggle {
         position: relative;
-        width: 44px;
-        height: 24px;
+        width: 50px;
+        height: 28px;
         flex-shrink: 0;
       }
 
@@ -567,31 +595,55 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: #ccc;
-        border-radius: 12px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0)),
+          var(--ddw-power-off);
+        border-radius: 14px;
         cursor: pointer;
-        transition: background 0.2s ease;
+        box-shadow:
+          inset 0 1px 1px rgba(255, 255, 255, 0.22),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+        transition:
+          background 0.28s ease,
+          box-shadow 0.28s ease,
+          transform 0.28s ease;
       }
 
       .ddw-toggle-track::before {
         content: '';
         position: absolute;
-        top: 2px;
-        left: 2px;
-        width: 20px;
-        height: 20px;
-        background: #fff;
+        top: 3px;
+        left: 3px;
+        width: 22px;
+        height: 22px;
+        background: var(--ddw-toggle-knob);
         border-radius: 50%;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-        transition: transform 0.2s ease;
+        box-shadow:
+          0 2px 6px var(--ddw-toggle-shadow),
+          inset 0 1px 1px rgba(255, 255, 255, 0.85);
+        transition:
+          transform 0.36s cubic-bezier(0.34, 1.56, 0.64, 1),
+          box-shadow 0.2s ease;
       }
 
       .ddw-toggle input:checked + .ddw-toggle-track {
-        background: var(--ddw-accent);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0)),
+          var(--ddw-power-on);
+        box-shadow:
+          0 0 0 1px rgba(72, 187, 120, 0.16),
+          0 8px 18px var(--ddw-toggle-glow),
+          inset 0 1px 1px rgba(255, 255, 255, 0.18);
       }
 
       .ddw-toggle input:checked + .ddw-toggle-track::before {
-        transform: translateX(20px);
+        transform: translateX(22px);
+      }
+
+      .ddw-toggle:active .ddw-toggle-track::before {
+        box-shadow:
+          0 1px 3px var(--ddw-toggle-shadow),
+          inset 0 1px 1px rgba(255, 255, 255, 0.72);
       }
 
       .ddw-toggle-label {
@@ -603,7 +655,7 @@
 
       .ddw-toggle--readonly .ddw-toggle-track {
         cursor: default;
-        opacity: 0.65;
+        opacity: 0.78;
       }
 
       /* Slider */
@@ -612,39 +664,75 @@
         align-items: center;
         gap: 10px;
         flex: 1;
-        max-width: 240px;
+        max-width: 260px;
       }
 
       .ddw-slider {
         -webkit-appearance: none;
         appearance: none;
         width: 100%;
-        height: 4px;
-        border-radius: 2px;
-        background: var(--ddw-border);
+        height: 8px;
+        border-radius: 999px;
+        background: linear-gradient(
+          to right,
+          var(--ddw-accent) 0%,
+          var(--ddw-accent) 0%,
+          var(--ddw-slider-track) 0%,
+          var(--ddw-slider-track) 100%
+        );
         outline: none;
         flex: 1;
+        cursor: pointer;
+        transition: box-shadow 0.2s ease;
+      }
+
+      .ddw-slider::-webkit-slider-runnable-track {
+        height: 8px;
+        border-radius: 999px;
+        background: transparent;
+      }
+
+      .ddw-slider::-moz-range-track {
+        height: 8px;
+        border-radius: 999px;
+        background: transparent;
+        border: none;
+      }
+
+      .ddw-slider::-moz-range-progress {
+        height: 8px;
+        border-radius: 999px;
+        background: transparent;
+      }
+
+      .ddw-slider:focus {
+        box-shadow: 0 0 0 4px rgba(91, 124, 247, 0.12);
       }
 
       .ddw-slider::-webkit-slider-thumb {
         -webkit-appearance: none;
         appearance: none;
-        width: 18px;
-        height: 18px;
+        width: 22px;
+        height: 22px;
+        margin-top: -7px;
         border-radius: 50%;
-        background: #fff;
-        border: 2px solid var(--ddw-accent);
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+        background: var(--ddw-slider-thumb);
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        box-shadow:
+          0 6px 14px rgba(15, 23, 42, 0.18),
+          0 0 0 1px rgba(91, 124, 247, 0.18);
         cursor: pointer;
       }
 
       .ddw-slider::-moz-range-thumb {
-        width: 18px;
-        height: 18px;
+        width: 22px;
+        height: 22px;
         border-radius: 50%;
-        background: #fff;
-        border: 2px solid var(--ddw-accent);
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+        background: var(--ddw-slider-thumb);
+        border: 2px solid rgba(255, 255, 255, 0.85);
+        box-shadow:
+          0 6px 14px rgba(15, 23, 42, 0.18),
+          0 0 0 1px rgba(91, 124, 247, 0.18);
         cursor: pointer;
       }
 
@@ -662,23 +750,59 @@
         align-items: stretch;
       }
       .ddw-attr-row--hsv .ddw-attr-control {
-        flex-direction: column;
+        flex-direction: row;
         align-items: stretch;
-        gap: 6px;
+        gap: 14px;
       }
+      .ddw-hsv-sliders {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        flex: 1;
+        min-width: 0;
+        justify-content: center;
+      }
+      .ddw-hsv-preview {
+        position: relative;
+        width: 80px;
+        min-height: 80px;
+        border-radius: 14px;
+        border: 1px solid var(--ddw-hsv-preview-border);
+        overflow: hidden;
+        flex-shrink: 0;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.28),
+          0 4px 12px rgba(15, 23, 42, 0.08);
+      }
+
+      .ddw-hsv-preview::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0));
+        pointer-events: none;
+      }
+
       .ddw-hsv-channel {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
       }
       .ddw-hsv-label {
-        font-size: 12px;
+        font-size: 11px;
         color: var(--ddw-text-secondary);
-        min-width: 72px;
+        min-width: 14px;
         flex-shrink: 0;
+        font-weight: 700;
+        text-transform: uppercase;
       }
       .ddw-attr-row--hsv .ddw-slider-wrap {
         max-width: none;
+      }
+      .ddw-hsv-channel .ddw-slider-value {
+        min-width: 52px;
+        font-size: 11px;
+        color: var(--ddw-text-secondary);
       }
 
       /* Segmented buttons */
@@ -689,15 +813,21 @@
       }
 
       .ddw-seg-btn {
-        padding: 4px 10px;
-        border-radius: 10px;
+        min-height: 32px;
+        padding: 6px 12px;
+        border-radius: 12px;
         border: 1px solid var(--ddw-border);
-        background: var(--ddw-bg-surface);
+        background: linear-gradient(180deg, var(--ddw-bg-card), var(--ddw-bg-surface));
         color: var(--ddw-text-secondary);
         font-size: 11px;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.15s ease;
+        transition:
+          background 0.2s ease,
+          color 0.2s ease,
+          border-color 0.2s ease,
+          box-shadow 0.2s ease,
+          transform 0.2s ease;
         font-family: inherit;
       }
 
@@ -709,6 +839,12 @@
         background: var(--ddw-accent);
         color: #fff;
         border-color: var(--ddw-accent);
+        box-shadow: 0 6px 14px var(--ddw-seg-active-shadow);
+        transform: translateY(-1px);
+      }
+
+      .ddw-seg-btn:active {
+        transform: translateY(0);
       }
 
       .ddw-seg--readonly .ddw-seg-btn {
@@ -778,6 +914,91 @@
         color: var(--ddw-text-faint);
       }
 
+      /* ── Pagination ─────────────────────────────────── */
+      .ddw-list-paged {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .ddw-page-arrow {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 36px;
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--ddw-border);
+        border-radius: 8px;
+        font-size: 20px;
+        font-weight: 600;
+        cursor: pointer;
+        z-index: 2;
+        color: var(--ddw-text-secondary);
+        background: var(--ddw-bg-surface);
+        box-shadow: 0 1px 6px rgba(0,0,0,0.10);
+        transition: all 0.18s ease;
+        padding: 0;
+        font-family: inherit;
+      }
+
+      .ddw-page-arrow:hover {
+        color: var(--ddw-accent);
+        border-color: var(--ddw-accent);
+        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+      }
+
+      .ddw-page-arrow:active {
+        transform: translateY(-50%) scale(0.95);
+      }
+
+      .ddw-page-arrow:disabled {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .ddw-page-arrow--prev {
+        left: 4px;
+      }
+
+      .ddw-page-arrow--next {
+        right: 4px;
+      }
+
+      .ddw-page-indicator {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        padding: 8px 0 2px;
+      }
+
+      .ddw-page-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--ddw-border);
+        transition: all 0.2s ease;
+        cursor: pointer;
+      }
+
+      .ddw-page-dot.active {
+        background: var(--ddw-accent);
+        transform: scale(1.3);
+      }
+
+      .ddw-page-dot:hover:not(.active) {
+        background: var(--ddw-text-faint);
+        transform: scale(1.15);
+      }
+
+      .ddw-page-info {
+        font-size: 11px;
+        color: var(--ddw-text-faint);
+        margin-left: 8px;
+      }
+
       .ddw-control-btn {
         display: inline-flex;
         align-items: center;
@@ -832,17 +1053,31 @@
         --ddw-toggle-hover: #444444;
         --ddw-loading-text: rgba(255, 255, 255, 0.45);
         --ddw-attr-chip-bg: #3a3a3a;
+        --ddw-slider-track: #4e5867;
+        --ddw-slider-thumb: #f5f7fb;
+        --ddw-toggle-knob: #f8fafc;
+        --ddw-toggle-glow: rgba(72, 187, 120, 0.36);
+        --ddw-toggle-shadow: rgba(0, 0, 0, 0.45);
+        --ddw-hsv-preview-border: rgba(255, 255, 255, 0.12);
+        --ddw-seg-active-shadow: rgba(123, 156, 247, 0.3);
       }
 
       .ddw-dark .ddw-toggle-track {
-        background: #555;
+        box-shadow:
+          inset 0 1px 1px rgba(255, 255, 255, 0.12),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.08);
       }
-      .ddw-dark .ddw-slider::-webkit-slider-thumb {
-        background: #e0e0e0;
+
+      .ddw-dark .ddw-hsv-preview {
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.14),
+          0 10px 18px rgba(0, 0, 0, 0.22);
       }
-      .ddw-dark .ddw-slider::-moz-range-thumb {
-        background: #e0e0e0;
+
+      .ddw-dark .ddw-seg-btn {
+        background: linear-gradient(180deg, #3b3b3b, #343434);
       }
+
       .ddw-dark.ddw-nav-loading {
         background: rgba(45, 45, 45, 0.5);
       }
@@ -873,16 +1108,27 @@
           --ddw-toggle-hover: #444444;
           --ddw-loading-text: rgba(255, 255, 255, 0.45);
           --ddw-attr-chip-bg: #3a3a3a;
+          --ddw-slider-track: #4e5867;
+          --ddw-slider-thumb: #f5f7fb;
+          --ddw-toggle-knob: #f8fafc;
+          --ddw-toggle-glow: rgba(72, 187, 120, 0.36);
+          --ddw-toggle-shadow: rgba(0, 0, 0, 0.45);
+          --ddw-hsv-preview-border: rgba(255, 255, 255, 0.12);
+          --ddw-seg-active-shadow: rgba(123, 156, 247, 0.3);
         }
 
         :root:not(.ddw-light) .ddw-toggle-track {
-          background: #555;
+          box-shadow:
+            inset 0 1px 1px rgba(255, 255, 255, 0.12),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.08);
         }
-        :root:not(.ddw-light) .ddw-slider::-webkit-slider-thumb {
-          background: #e0e0e0;
+        :root:not(.ddw-light) .ddw-hsv-preview {
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.14),
+            0 10px 18px rgba(0, 0, 0, 0.22);
         }
-        :root:not(.ddw-light) .ddw-slider::-moz-range-thumb {
-          background: #e0e0e0;
+        :root:not(.ddw-light) .ddw-seg-btn {
+          background: linear-gradient(180deg, #3b3b3b, #343434);
         }
         :root:not(.ddw-light) .ddw-nav-loading {
           background: rgba(45, 45, 45, 0.5);
@@ -901,6 +1147,11 @@
       <div class="ddw-spinner"></div>
     </div>
     <script>
+      /* biome-ignore-all lint/correctness/noInnerDeclarations: legacy ES5 widget intentionally uses function-scoped vars */
+      /* biome-ignore-all lint/correctness/noSwitchDeclarations: legacy switch blocks rely on ES5-compatible var scoping */
+      /* biome-ignore-all lint/style/useTemplate: template literals are intentionally avoided for iframe compatibility */
+      /* biome-ignore-all lint/complexity/useArrowFunction: arrow functions are intentionally avoided for iframe compatibility */
+      /* biome-ignore-all lint/complexity/useOptionalChain: optional chaining is intentionally avoided for iframe compatibility */
       (function () {
         'use strict';
 
@@ -910,6 +1161,8 @@
         var _history = [];
         var _currentView = null;
         var _currentData = null;
+        var _listPage = 0;
+        var LIST_PAGE_SIZE = 10;
 
         function renderView(view, data) {
           if (!view) {
@@ -921,13 +1174,17 @@
           _currentView = view;
           _currentData = data;
 
-          if (view === 'list') renderList(data);
-          else if (view === 'dashboard') renderDashboard(data);
+          if (view === 'list') {
+            _listPage = 0;
+            renderList(data);
+          } else if (view === 'dashboard') renderDashboard(data);
           else if (view === 'control') renderControl(data);
         }
 
         function navigate(view, data) {
-          if (_currentView) { _history.push({ view: _currentView, data: _currentData }); }
+          if (_currentView) {
+            _history.push({ view: _currentView, data: _currentData });
+          }
           renderView(view, data);
         }
 
@@ -954,7 +1211,8 @@
               .callTool(tool, args)
               .then(function (result) {
                 hideNavLoading();
-                navigate(targetView, result);
+                var data = result && result.structuredContent ? result.structuredContent : result;
+                navigate(targetView, data);
               })
               .catch(function (err) {
                 hideNavLoading();
@@ -1205,17 +1463,14 @@
               var h = Math.round(vals[0] / 10);
               var s = Math.round(vals[1] / 10);
               var v = Math.round(vals[2] / 10);
-              var prev = 'hsl(' + h + ', ' + s + '%, ' + Math.max(v, 30) + '%)';
+              var prevColor = hsvToHslString(h, s, v);
+              var shadowColor = 'hsla(' + hsvToHsl(h, s, v).h + ', ' + hsvToHsl(h, s, v).s + '%, ' + hsvToHsl(h, s, v).l + '%, 0.35)';
               return (
-                '<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:' +
-                prev +
-                ';vertical-align:middle;margin-right:4px;border:1px solid rgba(0,0,0,0.1)"></span><span class="ddw-attr-val">H' +
-                h +
-                '\u00B0 S' +
-                s +
-                '% V' +
-                v +
-                '%</span>'
+                '<span class="ddw-attr-val">' +
+                '<span style="display:inline-block;width:18px;height:18px;border-radius:6px;background:' +
+                prevColor +
+                ';border:1px solid rgba(0,0,0,0.1);box-shadow:0 1px 4px ' + shadowColor + '"></span>' +
+                'H' + h + '\u00B0 S' + s + '% V' + v + '%</span>'
               );
             case '257':
               var parts = [];
@@ -1304,6 +1559,118 @@
           return elements.length > 0 ? elements : null;
         }
 
+        function clampValue(value, min, max) {
+          if (value < min) return min;
+          if (value > max) return max;
+          return value;
+        }
+
+        function buildSliderFill(value, min, max) {
+          var range = max - min;
+          var pct = range > 0 ? ((value - min) / range) * 100 : 0;
+          pct = clampValue(pct, 0, 100);
+          return (
+            'linear-gradient(to right, var(--ddw-accent) 0%, var(--ddw-accent) ' +
+            pct +
+            '%, var(--ddw-slider-track) ' +
+            pct +
+            '%, var(--ddw-slider-track) 100%)'
+          );
+        }
+
+        function setSliderFill(slider) {
+          if (!slider) return;
+          slider.style.background = buildSliderFill(
+            Number(slider.value),
+            Number(slider.min || 0),
+            Number(slider.max || 100),
+          );
+        }
+
+        function hsvToHsl(h, s, v) {
+          var sat = clampValue(s / 100, 0, 1);
+          var val = clampValue(v / 100, 0, 1);
+          var light = val * (1 - sat / 2);
+          var hslSat = 0;
+          if (light > 0 && light < 1) hslSat = (val - light) / Math.min(light, 1 - light);
+          return {
+            h: Math.round(clampValue(h, 0, 360)),
+            s: Math.round(clampValue(hslSat * 100, 0, 100)),
+            l: Math.round(clampValue(light * 100, 0, 100)),
+          };
+        }
+
+        function hsvToHslString(h, s, v) {
+          var hsl = hsvToHsl(h, s, v);
+          return 'hsl(' + hsl.h + ', ' + hsl.s + '%, ' + hsl.l + '%)';
+        }
+
+        function formatHsvValue(channel, value) {
+          if (channel === 'hsv_hue') return 'H: ' + Math.round(value / 10) + ' degrees';
+          if (channel === 'hsv_saturation') return 'S: ' + Math.round(value / 10) + '%';
+          return 'V: ' + Math.round(value / 10) + '%';
+        }
+
+        function updateHsvGroupVisuals(groupId) {
+          if (!groupId) return;
+          var hSlider = document.getElementById(groupId + '-hsv_hue');
+          var sSlider = document.getElementById(groupId + '-hsv_saturation');
+          var vSlider = document.getElementById(groupId + '-hsv_value');
+          if (!hSlider || !sSlider || !vSlider) return;
+
+          var h = Math.round(Number(hSlider.value || 0) / 10);
+          var s = Math.round(Number(sSlider.value || 0) / 10);
+          var v = Math.round(Number(vSlider.value || 0) / 10);
+          var preview = document.getElementById(groupId + '-preview');
+          var grayColor = hsvToHslString(h, 0, v);
+          var satColor = hsvToHslString(h, 100, v);
+          var valueColor = hsvToHslString(h, s, 100);
+          var previewColor = hsvToHslString(h, s, v);
+          var labels = [
+            [hSlider, 'hsv_hue'],
+            [sSlider, 'hsv_saturation'],
+            [vSlider, 'hsv_value'],
+          ];
+          var i;
+
+          hSlider.style.background =
+            'linear-gradient(to right, #ff4d4d 0%, #ffb84d 16%, #f8ff52 33%, #44d17a 50%, #30c7ff 66%, #5b6df8 83%, #ff4d4d 100%)';
+          sSlider.style.background =
+            'linear-gradient(to right, ' + grayColor + ' 0%, ' + satColor + ' 100%)';
+          vSlider.style.background =
+            'linear-gradient(to right, #0f1115 0%, ' + valueColor + ' 100%)';
+
+          if (preview) {
+            preview.style.background =
+              'linear-gradient(135deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 58%), ' +
+              previewColor;
+          }
+
+          for (i = 0; i < labels.length; i++) {
+            var slider = labels[i][0];
+            var valueEl = document.getElementById(slider.id + '-val');
+            if (valueEl)
+              valueEl.textContent = formatHsvValue(labels[i][1], Number(slider.value || 0));
+          }
+        }
+
+        function syncControlVisuals(scope) {
+          var rootEl = scope || document;
+          var sliders = rootEl.querySelectorAll('.ddw-slider[data-action]');
+          var hsvSliders = rootEl.querySelectorAll('.ddw-slider[data-hsv-group]');
+          var hsvGroups = {};
+          var i;
+
+          for (i = 0; i < sliders.length; i++) setSliderFill(sliders[i]);
+          for (i = 0; i < hsvSliders.length; i++) {
+            hsvGroups[hsvSliders[i].getAttribute('data-hsv-group')] = true;
+          }
+
+          for (i in hsvGroups) {
+            updateHsvGroupVisuals(i);
+          }
+        }
+
         /* ── Render: List View ─────────────────────────────── */
         function renderList(data) {
           if (!data || !data.devices) {
@@ -1316,6 +1683,12 @@
           var devices = data.devices;
           var total = data.total || devices.length;
 
+          /* client-side pagination */
+          var totalPages = Math.ceil(devices.length / LIST_PAGE_SIZE);
+          if (_listPage >= totalPages) _listPage = Math.max(0, totalPages - 1);
+          var start = _listPage * LIST_PAGE_SIZE;
+          var pageDevices = devices.slice(start, start + LIST_PAGE_SIZE);
+
           var html = '<div class="ddw-card">';
           html += '<div class="ddw-header">';
           html += '<div class="ddw-title">' + esc(t('all_devices')) + '</div>';
@@ -1325,9 +1698,18 @@
           if (devices.length === 0) {
             html += '<div class="ddw-empty">' + esc(t('no_devices')) + '</div>';
           } else {
+            /* wrap list + side arrows */
+            if (totalPages > 1) {
+              html += '<div class="ddw-list-paged">';
+              html +=
+                '<button class="ddw-page-arrow ddw-page-arrow--prev" data-action="page_prev"' +
+                (_listPage === 0 ? ' disabled' : '') +
+                '>&#8249;</button>';
+            }
+
             html += '<ul class="ddw-list">';
-            for (var i = 0; i < devices.length; i++) {
-              var d = devices[i];
+            for (var i = 0; i < pageDevices.length; i++) {
+              var d = pageDevices[i];
               var icon = getIcon(d.deviceType);
               var typeLabel = d.deviceType ? t('dt_' + d.deviceType) : '';
               html +=
@@ -1343,6 +1725,26 @@
               html += '</li>';
             }
             html += '</ul>';
+
+            if (totalPages > 1) {
+              html +=
+                '<button class="ddw-page-arrow ddw-page-arrow--next" data-action="page_next"' +
+                (_listPage >= totalPages - 1 ? ' disabled' : '') +
+                '>&#8250;</button>';
+              html += '</div>'; /* close ddw-list-paged */
+
+              /* dot indicators */
+              html += '<div class="ddw-page-indicator">';
+              for (var pi = 0; pi < totalPages; pi++) {
+                html +=
+                  '<span class="ddw-page-dot' +
+                  (pi === _listPage ? ' active' : '') +
+                  '" data-action="page_goto" data-page="' + pi + '"></span>';
+              }
+              html +=
+                '<span class="ddw-page-info">' + (_listPage + 1) + ' / ' + totalPages + '</span>';
+              html += '</div>';
+            }
           }
           html +=
             '<div class="ddw-footer"><span class="ddw-footer-text">' +
@@ -1393,7 +1795,7 @@
             html += '<div class="ddw-info-grid">';
             if (locationLabel) {
               html +=
-                '<div class="ddw-info-item"><div class="ddw-info-label">' +
+                '<div class="ddw-info-item"><div class="ddw-info-label">\uD83D\uDCCD ' +
                 esc(t('location')) +
                 '</div><div class="ddw-info-value">' +
                 esc(locationLabel) +
@@ -1401,7 +1803,7 @@
             }
             if (groupLabel) {
               html +=
-                '<div class="ddw-info-item"><div class="ddw-info-label">' +
+                '<div class="ddw-info-item"><div class="ddw-info-label">\uD83D\uDCC1 ' +
                 esc(t('group')) +
                 '</div><div class="ddw-info-value">' +
                 esc(groupLabel) +
@@ -1479,7 +1881,7 @@
           html += '<span class="ddw-footer-text">' + esc(t('footer')) + '</span>';
           if (uuid) {
             html +=
-              '<button class="ddw-control-btn" data-action="interact_device" data-uuid="' +
+              '<button class="ddw-control-btn" data-action="control_device" data-uuid="' +
               esc(uuid) +
               '">';
             html += '\uD83C\uDFAE ' + esc(t('control_device'));
@@ -1534,7 +1936,7 @@
             html += '<div class="ddw-info-grid">';
             if (locationLabel) {
               html +=
-                '<div class="ddw-info-item"><div class="ddw-info-label">' +
+                '<div class="ddw-info-item"><div class="ddw-info-label">\uD83D\uDCCD ' +
                 esc(t('location')) +
                 '</div><div class="ddw-info-value">' +
                 esc(locationLabel) +
@@ -1542,7 +1944,7 @@
             }
             if (groupLabel) {
               html +=
-                '<div class="ddw-info-item"><div class="ddw-info-label">' +
+                '<div class="ddw-info-item"><div class="ddw-info-label">\uD83D\uDCC1 ' +
                 esc(t('group')) +
                 '</div><div class="ddw-info-value">' +
                 esc(groupLabel) +
@@ -1675,17 +2077,18 @@
                   html += '</div>';
                 } else if (def.type === 'hsv') {
                   var hsvChannels = [
-                    { key: 'hsv_hue', idx: 1, min: 0, max: 3600 },
-                    { key: 'hsv_saturation', idx: 2, min: 0, max: 1000 },
-                    { key: 'hsv_value', idx: 3, min: 0, max: 1000 },
+                    { key: 'hsv_hue', shortLabel: 'H', idx: 1, min: 0, max: 3600 },
+                    { key: 'hsv_saturation', shortLabel: 'S', idx: 2, min: 0, max: 1000 },
+                    { key: 'hsv_value', shortLabel: 'V', idx: 3, min: 0, max: 1000 },
                   ];
                   var hsvGroupId = 'hsv-' + elId;
+                  html += '<div class="ddw-hsv-sliders">';
                   for (var ci = 0; ci < hsvChannels.length; ci++) {
                     var ch = hsvChannels[ci];
                     var chVal = attrData[ch.idx] != null ? attrData[ch.idx] : 0;
                     var chSliderId = hsvGroupId + '-' + ch.key;
                     html += '<div class="ddw-hsv-channel">';
-                    html += '<span class="ddw-hsv-label">' + esc(t(ch.key)) + '</span>';
+                    html += '<span class="ddw-hsv-label">' + esc(ch.shortLabel) + '</span>';
                     html += '<div class="ddw-slider-wrap">';
                     html +=
                       '<input type="range" class="ddw-slider" id="' +
@@ -1709,10 +2112,12 @@
                       '<span class="ddw-slider-value" id="' +
                       chSliderId +
                       '-val">' +
-                      chVal +
+                      esc(formatHsvValue(ch.key, chVal)) +
                       '</span>';
                     html += '</div></div>';
                   }
+                  html += '</div>';
+                  html += '<div class="ddw-hsv-preview" id="' + hsvGroupId + '-preview"></div>';
                 }
                 html += '</div></div>';
               }
@@ -1756,6 +2161,7 @@
             '</span></div>';
           html += '</div>';
           root.innerHTML = html;
+          syncControlVisuals(root);
         }
 
         /* ── Control Action Handlers ───────────────────────── */
@@ -1852,19 +2258,43 @@
             return;
           }
 
+          /* Pagination — side arrows + dot indicators */
+          var arrow = target.closest('.ddw-page-arrow');
+          if (arrow) {
+            var arrowAction = arrow.getAttribute('data-action');
+            if (arrowAction === 'page_prev' && _listPage > 0) {
+              _listPage--;
+              renderList(_currentData);
+            } else if (arrowAction === 'page_next') {
+              _listPage++;
+              renderList(_currentData);
+            }
+            return;
+          }
+
+          var dot = target.closest('.ddw-page-dot');
+          if (dot && dot.getAttribute('data-action') === 'page_goto') {
+            var gotoPage = Number(dot.getAttribute('data-page'));
+            if (!isNaN(gotoPage) && gotoPage !== _listPage) {
+              _listPage = gotoPage;
+              renderList(_currentData);
+            }
+            return;
+          }
+
           /* List Item -> Dashboard */
           var listItem = target.closest('.ddw-item');
           if (listItem && listItem.getAttribute('data-action') === 'get_device') {
             var uuid = listItem.getAttribute('data-uuid');
-            if (uuid) callToolAndNavigate('get_device', { uuid: uuid }, 'dashboard');
+            if (uuid) callToolAndNavigate('_widget_get_device', { uuid: uuid }, 'dashboard');
             return;
           }
 
           /* Control Button -> Control View */
           var controlBtn = target.closest('.ddw-control-btn');
-          if (controlBtn && controlBtn.getAttribute('data-action') === 'interact_device') {
+          if (controlBtn && controlBtn.getAttribute('data-action') === 'control_device') {
             var cUuid = controlBtn.getAttribute('data-uuid');
-            if (cUuid) callToolAndNavigate('interact_device', { uuid: cUuid }, 'control');
+            if (cUuid) callToolAndNavigate('_widget_control_device', { uuid: cUuid }, 'control');
             return;
           }
 
@@ -1910,6 +2340,7 @@
             var unit = target.getAttribute('data-unit') || '';
             var valEl = document.getElementById(target.id + '-val');
             if (valEl) valEl.textContent = (scale !== 1 ? Math.round(val * scale) : val) + unit;
+            setSliderFill(target);
             var row2 = target.closest('.ddw-attr-row');
             debouncedControl(target.id, uuid2, action, val, elId2, row2);
           }
@@ -1925,8 +2356,7 @@
             var hVal = hSlider ? Number(hSlider.value) : 0;
             var sVal = sSlider ? Number(sSlider.value) : 0;
             var vVal = vSlider ? Number(vSlider.value) : 0;
-            var valEl4 = document.getElementById(target.id + '-val');
-            if (valEl4) valEl4.textContent = String(Number(target.value));
+            updateHsvGroupVisuals(hsvGroup);
             var row4 = target.closest('.ddw-attr-row');
             debouncedRawControl(hsvGroup, uuid4, elId4, [31, hVal, sVal, vVal], row4);
           }
@@ -1940,12 +2370,50 @@
             var val = Number(target.value);
             var valEl = document.getElementById(target.id + '-val');
             if (valEl) valEl.textContent = (scale !== 1 ? Math.round(val * scale) : val) + unit;
+            setSliderFill(target);
           }
           if (target.type === 'range' && target.getAttribute('data-hsv-group')) {
-            var valEl5 = document.getElementById(target.id + '-val');
-            if (valEl5) valEl5.textContent = String(Number(target.value));
+            updateHsvGroupVisuals(target.getAttribute('data-hsv-group'));
           }
         });
+
+        /* ── Swipe Gesture for List Pagination ───────── */
+        var _swipeStartX = null;
+        var _swipeStartY = null;
+        var SWIPE_THRESHOLD = 50;
+
+        root.addEventListener('touchstart', function (e) {
+          if (_currentView !== 'list') return;
+          var touch = e.touches[0];
+          _swipeStartX = touch.clientX;
+          _swipeStartY = touch.clientY;
+        }, { passive: true });
+
+        root.addEventListener('touchend', function (e) {
+          if (_currentView !== 'list' || _swipeStartX === null) return;
+          var touch = e.changedTouches[0];
+          var dx = touch.clientX - _swipeStartX;
+          var dy = touch.clientY - _swipeStartY;
+          _swipeStartX = null;
+          _swipeStartY = null;
+
+          /* only trigger if horizontal swipe is dominant */
+          if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dy) > Math.abs(dx)) return;
+
+          var totalPages = _currentData && _currentData.devices
+            ? Math.ceil(_currentData.devices.length / LIST_PAGE_SIZE)
+            : 1;
+
+          if (dx < 0 && _listPage < totalPages - 1) {
+            /* swipe left → next page */
+            _listPage++;
+            renderList(_currentData);
+          } else if (dx > 0 && _listPage > 0) {
+            /* swipe right → prev page */
+            _listPage--;
+            renderList(_currentData);
+          }
+        }, { passive: true });
 
         /* ── Initialization & Data Bridge ──────────────────── */
         if (window.openai && window.openai.toolOutput) {

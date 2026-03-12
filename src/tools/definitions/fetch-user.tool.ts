@@ -33,6 +33,7 @@ export const FETCH_USER_TOOL = {
     name: 'fetchUser',
     description:
       "Fetch the authenticated user's data from the IoT API Server (userId extracted from token)",
+    readOnlyHint: true,
     securitySchemes: {
       oauth2: {
         type: 'oauth2',
