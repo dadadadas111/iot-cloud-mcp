@@ -47,7 +47,7 @@ Key Concepts:
 - UUID format: MongoDB _id (24 hex characters, no dashes)
 
 Getting Started:
-1. Call get_device_documentation tool for detailed reference guides
+1. Read device-attributes MCP resource for detailed attribute/command reference
 2. Use get_device_state to discover device capabilities and current values
 3. For common actions: control_device_simple (turn_on, set_brightness, etc.)
 4. For precise control: control_device with specific attribute elementIds

@@ -41,7 +41,7 @@ export type ControlDeviceParams = z.infer<typeof ControlDeviceParamsSchema>;
 export const CONTROL_DEVICE_TOOL = {
   name: 'control_device',
   description:
-    'Control IoT devices by UUID, element IDs, and commands. Elements are physical parts (e.g., 4-button switch has 4 elements). Command format: [attrId, value]. Common attrs: 1=ON_OFF (0/1), 28=BRIGHTNESS (0-1000), 29=KELVIN, 20=TEMP_SET (15-30°C), 17=MODE. Call get_device_documentation for full reference.',
+    'Control IoT devices by UUID, element IDs, and commands. Elements are physical parts (e.g., 4-button switch has 4 elements). Command format: [attrId, value]. Common attrs: 1=ON_OFF (0/1), 28=BRIGHTNESS (0-1000), 29=KELVIN, 20=TEMP_SET (15-30°C), 17=MODE. See device-attributes resource for full reference.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -65,7 +65,7 @@ export const CONTROL_DEVICE_TOOL = {
   metadata: {
     name: 'control_device',
     description:
-      'Control IoT devices by UUID, element IDs, and commands. Elements are physical parts (e.g., 4-button switch has 4 elements). Command format: [attrId, value]. Common attrs: 1=ON_OFF (0/1), 28=BRIGHTNESS (0-1000), 29=KELVIN, 20=TEMP_SET (15-30°C), 17=MODE. Call get_device_documentation for full reference.',
+      'Control IoT devices by UUID, element IDs, and commands. Elements are physical parts (e.g., 4-button switch has 4 elements). Command format: [attrId, value]. Common attrs: 1=ON_OFF (0/1), 28=BRIGHTNESS (0-1000), 29=KELVIN, 20=TEMP_SET (15-30°C), 17=MODE. See device-attributes resource for full reference.',
     examples: [
       {
         input: {
