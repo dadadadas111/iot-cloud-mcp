@@ -1191,7 +1191,40 @@
         function goBack() {
           if (_history.length === 0) return;
           var prev = _history.pop();
-          renderView(prev.view, prev.data);
+          if (!window.openai || typeof window.openai.callTool !== 'function') {
+            renderView(prev.view, prev.data);
+            return;
+          }
+          /* Refetch fresh data so state changes from control actions are reflected */
+          if (prev.view === 'dashboard' && prev.data && prev.data.uuid) {
+            showNavLoading();
+            window.openai
+              .callTool('_widget_get_device', { uuid: prev.data.uuid })
+              .then(function (result) {
+                hideNavLoading();
+                var fresh = result && result.structuredContent ? result.structuredContent : result;
+                renderView('dashboard', fresh);
+              })
+              .catch(function () {
+                hideNavLoading();
+                renderView(prev.view, prev.data);
+              });
+          } else if (prev.view === 'list') {
+            showNavLoading();
+            window.openai
+              .callTool('_widget_list_devices', {})
+              .then(function (result) {
+                hideNavLoading();
+                var fresh = result && result.structuredContent ? result.structuredContent : result;
+                renderView('list', fresh);
+              })
+              .catch(function () {
+                hideNavLoading();
+                renderView(prev.view, prev.data);
+              });
+          } else {
+            renderView(prev.view, prev.data);
+          }
         }
 
         function showNavLoading() {
