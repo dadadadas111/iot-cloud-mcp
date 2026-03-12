@@ -52,11 +52,15 @@ export const LIST_DEVICES_TOOL = {
   },
   schema: ListDevicesParamsSchema,
   _meta: {
-    ui: { resourceUri: 'ui://widget/device-app.html' },
+    ui: {
+      resourceUri: 'ui://widget/device-app.html',
+      visibility: ["model", "app"]
+    },
     'openai/outputTemplate': 'ui://widget/device-app.html',
     'openai/widgetAccessible': true,
     'openai/resultCanProduceWidget': true,
     'openai/toolInvocation/invoking': 'Loading devices...',
     'openai/toolInvocation/invoked': 'Devices loaded',
+    'openai/widgetDescription': 'Interactive device list is displayed as a widget. Do not describe it in text.',
   },
 };

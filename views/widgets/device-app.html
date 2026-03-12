@@ -1163,6 +1163,10 @@
         var _currentData = null;
         var _listPage = 0;
         var LIST_PAGE_SIZE = 10;
+        /* Timeout to show empty state if no data arrives within 8s */
+        var _initTimer = setTimeout(function () {
+          if (_currentView === null) renderView('list', { _view: 'list', total: 0, devices: [] });
+        }, 8000);
 
         function renderView(view, data) {
           if (!view) {
@@ -1173,6 +1177,7 @@
 
           _currentView = view;
           _currentData = data;
+          clearTimeout(_initTimer);
 
           if (view === 'list') {
             _listPage = 0;
@@ -1198,30 +1203,36 @@
           /* Refetch fresh data so state changes from control actions are reflected */
           if (prev.view === 'dashboard' && prev.data && prev.data.uuid) {
             showNavLoading();
-            window.openai
-              .callTool('_widget_get_device', { uuid: prev.data.uuid })
-              .then(function (result) {
+            var p1 = window.openai.callTool('_widget_get_device', { uuid: prev.data.uuid });
+            if (p1 && typeof p1.then === 'function') {
+              p1.then(function (result) {
                 hideNavLoading();
                 var fresh = result && result.structuredContent ? result.structuredContent : result;
                 renderView('dashboard', fresh);
-              })
-              .catch(function () {
+              }).catch(function () {
                 hideNavLoading();
                 renderView(prev.view, prev.data);
               });
+            } else {
+              hideNavLoading();
+              renderView(prev.view, prev.data);
+            }
           } else if (prev.view === 'list') {
             showNavLoading();
-            window.openai
-              .callTool('_widget_list_devices', {})
-              .then(function (result) {
+            var p2 = window.openai.callTool('_widget_list_devices', {});
+            if (p2 && typeof p2.then === 'function') {
+              p2.then(function (result) {
                 hideNavLoading();
                 var fresh = result && result.structuredContent ? result.structuredContent : result;
                 renderView('list', fresh);
-              })
-              .catch(function () {
+              }).catch(function () {
                 hideNavLoading();
                 renderView(prev.view, prev.data);
               });
+            } else {
+              hideNavLoading();
+              renderView(prev.view, prev.data);
+            }
           } else {
             renderView(prev.view, prev.data);
           }
@@ -2461,7 +2472,21 @@
             if (!msg || typeof msg !== 'object') return;
             if (msg.jsonrpc === '2.0' && msg.method === 'ui/notifications/tool-result') {
               var sc = msg.params && msg.params.structuredContent;
-              if (sc) renderView(null, sc);
+              if (sc) {
+                renderView(null, sc);
+              } else {
+                /* Fallback: try parsing content[0].text as JSON (non-ChatGPT clients) */
+                var contentArr = msg.params && msg.params.content;
+                var textItem = null;
+                if (Array.isArray(contentArr)) {
+                  for (var i = 0; i < contentArr.length; i++) {
+                    if (contentArr[i] && contentArr[i].type === 'text') { textItem = contentArr[i]; break; }
+                  }
+                }
+                if (textItem && textItem.text) {
+                  try { renderView(null, JSON.parse(textItem.text)); } catch (e) {}
+                }
+              }
             }
             if (msg.type === 'tool-result' && msg.structuredContent) {
               renderView(null, msg.structuredContent);
