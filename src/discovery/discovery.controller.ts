@@ -8,7 +8,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
  *
  * Supports both:
  * - Root discovery: /.well-known/oauth-authorization-server
- * - Path-aware discovery: /.well-known/oauth-authorization-server/auth/:projectApiKey
+ * - Path-aware discovery: /.well-known/oauth-authorization-server/auth/:alias
  */
 @ApiTags('OAuth Discovery')
 @Controller('.well-known')
@@ -50,22 +50,20 @@ export class DiscoveryController {
    * RFC 8414 Path-Aware Discovery for Multi-Tenant OAuth
    * This is the PRIMARY discovery endpoint MCP clients should use
    *
-   * Path format: /.well-known/oauth-authorization-server/auth/:projectApiKey
+   * Path format: /.well-known/oauth-authorization-server/auth/:alias
    */
-  @Get('oauth-authorization-server/auth/:projectApiKey')
+  @Get('oauth-authorization-server/auth/:alias')
   @ApiOperation({ summary: 'OAuth Authorization Server Metadata (Path-Aware)' })
-  @ApiParam({ name: 'projectApiKey', description: 'Project API key for tenant isolation' })
+  @ApiParam({ name: 'alias', description: 'Partner alias for tenant isolation' })
   @ApiResponse({
     status: 200,
     description: 'Tenant-specific Authorization Server Discovery Metadata (RFC 8414)',
   })
-  getPathAwareAuthServerMetadata(@Param('projectApiKey') projectApiKey: string) {
+  getPathAwareAuthServerMetadata(@Param('alias') alias: string) {
     const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
-    const issuer = `${baseUrl}/auth/${projectApiKey}`;
+    const issuer = `${baseUrl}/auth/${alias}`;
 
-    this.logger.log(
-      `Path-aware authorization server metadata requested for project: ${projectApiKey}`,
-    );
+    this.logger.log(`Path-aware authorization server metadata requested for alias: ${alias}`);
 
     return {
       issuer,
@@ -106,25 +104,23 @@ export class DiscoveryController {
   /**
    * RFC 8414 Path-Aware Discovery for Protected Resources
    *
-   * Path format: /.well-known/oauth-protected-resource/mcp/:projectApiKey
+   * Path format: /.well-known/oauth-protected-resource/mcp/:alias
    */
-  @Get('oauth-protected-resource/mcp/:projectApiKey')
+  @Get('oauth-protected-resource/mcp/:alias')
   @ApiOperation({ summary: 'OAuth Protected Resource Metadata (Path-Aware)' })
-  @ApiParam({ name: 'projectApiKey', description: 'Project API key for tenant isolation' })
+  @ApiParam({ name: 'alias', description: 'Partner alias for tenant isolation' })
   @ApiResponse({
     status: 200,
     description: 'Tenant-specific Protected Resource Discovery Metadata',
   })
-  getPathAwareProtectedResourceMetadata(@Param('projectApiKey') projectApiKey: string) {
+  getPathAwareProtectedResourceMetadata(@Param('alias') alias: string) {
     const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
 
-    this.logger.log(
-      `Path-aware protected resource metadata requested for project: ${projectApiKey}`,
-    );
+    this.logger.log(`Path-aware protected resource metadata requested for alias: ${alias}`);
 
     return {
-      resource: `${baseUrl}/mcp/${projectApiKey}`,
-      authorization_servers: [`${baseUrl}/auth/${projectApiKey}`],
+      resource: `${baseUrl}/mcp/${alias}`,
+      authorization_servers: [`${baseUrl}/auth/${alias}`],
       bearer_methods_supported: ['header'],
       scopes_supported: ['mcp.tools.read', 'mcp.tools.write'],
     };

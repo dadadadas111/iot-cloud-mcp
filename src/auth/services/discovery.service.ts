@@ -15,18 +15,18 @@ export class DiscoveryService {
    * Get protected resource metadata (RFC 8707)
    * Returns OAuth 2.0 Resource Server metadata
    *
-   * @param projectApiKey - Project API key
+   * @param alias - Partner alias (used as path segment in URL construction)
    * @returns Resource metadata object
    */
-  getProtectedResourceMetadata(projectApiKey: string): any {
+  getProtectedResourceMetadata(alias: string): any {
     const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
-    const resourceUrl = `${baseUrl}/mcp/${projectApiKey}`;
+    const resourceUrl = `${baseUrl}/mcp/${alias}`;
 
-    this.logger.log(`Generating protected resource metadata for ${projectApiKey}`);
+    this.logger.log(`Generating protected resource metadata for alias: ${alias}`);
 
     return {
       resource: resourceUrl,
-      authorization_servers: [`${baseUrl}/auth/${projectApiKey}`],
+      authorization_servers: [`${baseUrl}/auth/${alias}`],
       bearer_methods_supported: ['header', 'body'],
       resource_signing_alg_values_supported: ['RS256', 'HS256'],
       resource_documentation: `${baseUrl}/docs`,
@@ -39,14 +39,14 @@ export class DiscoveryService {
    * Get authorization server metadata (RFC 8414)
    * Returns OAuth 2.1 Authorization Server metadata
    *
-   * @param projectApiKey - Project API key
+   * @param alias - Partner alias (used as path segment in URL construction)
    * @returns Authorization server metadata object
    */
-  getAuthorizationServerMetadata(projectApiKey: string): any {
+  getAuthorizationServerMetadata(alias: string): any {
     const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
-    const issuer = `${baseUrl}/auth/${projectApiKey}`;
+    const issuer = `${baseUrl}/auth/${alias}`;
 
-    this.logger.log(`Generating authorization server metadata for ${projectApiKey}`);
+    this.logger.log(`Generating authorization server metadata for alias: ${alias}`);
 
     return {
       issuer,
