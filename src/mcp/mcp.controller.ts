@@ -18,6 +18,7 @@ import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
 import { decodeJwt } from '../common/utils/jwt.utils';
 import { ConfigService } from '@nestjs/config';
+import { AliasService } from '../alias/alias.service';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
@@ -47,7 +48,32 @@ export class McpController {
     private readonly sessionManager: SessionManagerService,
     private readonly serverFactory: McpServerFactory,
     private readonly configService: ConfigService,
+    private readonly aliasService: AliasService,
   ) {}
+
+  /**
+   * Resolves a partner alias to the actual project API key.
+   * Sends a 404 JSON-RPC error response and returns null when the alias is unknown.
+   */
+  private async resolveAlias(
+    alias: string,
+    body: unknown,
+    res: Response,
+  ): Promise<string | null> {
+    const apiKey = await this.aliasService.resolveAlias(alias);
+    if (!apiKey) {
+      res.status(HttpStatus.NOT_FOUND).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32004,
+          message: `Not Found: Unknown alias '${alias}'`,
+        },
+        id: (body as Record<string, unknown>)?.id || null,
+      });
+      return null;
+    }
+    return apiKey;
+  }
 
   /**
    * Validates Bearer token and returns AuthInfo + userId.
@@ -112,27 +138,32 @@ export class McpController {
   }
 
   /**
-   * POST /mcp/:projectApiKey
+   * POST /mcp/:alias
    * Handles MCP JSON-RPC 2.0 requests via StreamableHTTPServerTransport.
    * Creates a new transport + server on initialize requests, reuses existing for subsequent.
    */
-  @Post(':projectApiKey')
+  @Post(':alias')
   @ApiOperation({
     summary: 'Handle MCP protocol request',
     description: 'Processes MCP JSON-RPC 2.0 requests via Streamable HTTP transport',
   })
   @ApiResponse({ status: 200, description: 'MCP response (streamed via SSE or JSON)' })
   @ApiResponse({ status: 401, description: 'Unauthorized - missing or invalid Bearer token' })
+  @ApiResponse({ status: 404, description: 'Not Found - alias not registered' })
   async handleMcpPost(
-    @Param('projectApiKey') projectApiKey: string,
+    @Param('alias') alias: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('mcp-session-id') mcpSessionId: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     this.logger.log(
-      `MCP POST received - Project: ${projectApiKey}, Method: ${req.body?.method || 'unknown'}, SessionId: ${mcpSessionId || 'none'}`,
+      `MCP POST received - Alias: ${alias}, Method: ${req.body?.method || 'unknown'}, SessionId: ${mcpSessionId || 'none'}`,
     );
+
+    // Resolve alias → actual project API key
+    const projectApiKey = await this.resolveAlias(alias, req.body, res);
+    if (!projectApiKey) return;
 
     // Validate auth
     const authResult = this.validateAuth(authorization, projectApiKey, req.body, res);
@@ -211,25 +242,30 @@ export class McpController {
   }
 
   /**
-   * GET /mcp/:projectApiKey
+   * GET /mcp/:alias
    * SSE stream for server-initiated messages (notifications, etc.)
    */
-  @Get(':projectApiKey')
+  @Get(':alias')
   @ApiOperation({
     summary: 'MCP SSE stream',
     description: 'Server-Sent Events stream for server-initiated MCP messages',
   })
   @ApiResponse({ status: 200, description: 'SSE stream established' })
+  @ApiResponse({ status: 404, description: 'Not Found - alias not registered' })
   async handleMcpGet(
-    @Param('projectApiKey') projectApiKey: string,
+    @Param('alias') alias: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('mcp-session-id') mcpSessionId: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     this.logger.log(
-      `MCP GET received - Project: ${projectApiKey}, SessionId: ${mcpSessionId || 'none'}`,
+      `MCP GET received - Alias: ${alias}, SessionId: ${mcpSessionId || 'none'}`,
     );
+
+    // Resolve alias → actual project API key
+    const projectApiKey = await this.resolveAlias(alias, undefined, res);
+    if (!projectApiKey) return;
 
     // Validate auth
     const authResult = this.validateAuth(authorization, projectApiKey, undefined, res);
@@ -257,25 +293,30 @@ export class McpController {
   }
 
   /**
-   * DELETE /mcp/:projectApiKey
+   * DELETE /mcp/:alias
    * Terminates an MCP session.
    */
-  @Delete(':projectApiKey')
+  @Delete(':alias')
   @ApiOperation({
     summary: 'Terminate MCP session',
     description: 'Closes an active MCP session and cleans up resources',
   })
   @ApiResponse({ status: 200, description: 'Session terminated' })
+  @ApiResponse({ status: 404, description: 'Not Found - alias not registered' })
   async handleMcpDelete(
-    @Param('projectApiKey') projectApiKey: string,
+    @Param('alias') alias: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('mcp-session-id') mcpSessionId: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     this.logger.log(
-      `MCP DELETE received - Project: ${projectApiKey}, SessionId: ${mcpSessionId || 'none'}`,
+      `MCP DELETE received - Alias: ${alias}, SessionId: ${mcpSessionId || 'none'}`,
     );
+
+    // Resolve alias → actual project API key
+    const projectApiKey = await this.resolveAlias(alias, undefined, res);
+    if (!projectApiKey) return;
 
     // Validate auth
     const authResult = this.validateAuth(authorization, projectApiKey, undefined, res);

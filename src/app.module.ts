@@ -12,6 +12,7 @@ import { ToolsModule } from './tools/tools.module';
 import { McpModule } from './mcp/mcp.module';
 import { RedisModule } from './redis/redis.module';
 import { WidgetsModule } from './widgets/widgets.module';
+import { AliasModule } from './alias/alias.module';
 
 @Module({
   imports: [
@@ -47,6 +48,9 @@ import { WidgetsModule } from './widgets/widgets.module';
 
     // Redis (global)
     RedisModule,
+
+    // Alias lookup (external Redis — partner alias → project API key)
+    AliasModule,
 
     // Proxy to Old API
     ProxyModule,
