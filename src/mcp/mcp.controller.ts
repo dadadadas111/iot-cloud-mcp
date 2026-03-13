@@ -79,16 +79,16 @@ export class McpController {
    */
   private validateAuth(
     authorization: string | undefined,
-    projectApiKey: string,
+    alias: string,
     body: unknown,
     res: Response,
   ): { authInfo: AuthInfo; userId: string } | null {
     if (!authorization || !authorization.startsWith('Bearer ')) {
-      this.logger.warn(`Missing or invalid Authorization header for project: ${projectApiKey}`);
+      this.logger.warn(`Missing or invalid Authorization header for alias: ${alias}`);
       const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
       res.setHeader(
         'WWW-Authenticate',
-        `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${projectApiKey}"`,
+        `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${alias}"`,
       );
       res.status(HttpStatus.UNAUTHORIZED).json({
         jsonrpc: '2.0',
@@ -117,11 +117,11 @@ export class McpController {
       };
       return { authInfo, userId };
     } catch (error) {
-      this.logger.error(`JWT decode failed for project ${projectApiKey}: ${error.message}`);
+      this.logger.error(`JWT decode failed for alias ${alias}: ${error.message}`);
       const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
       res.setHeader(
         'WWW-Authenticate',
-        `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${projectApiKey}"`,
+        `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${alias}"`,
       );
       res.status(HttpStatus.UNAUTHORIZED).json({
         jsonrpc: '2.0',
@@ -166,7 +166,7 @@ export class McpController {
     const meta = await this.partnerMetaService.getAliasMeta(alias);
 
     // Validate auth
-    const authResult = this.validateAuth(authorization, projectApiKey, req.body, res);
+    const authResult = this.validateAuth(authorization, alias, req.body, res);
     if (!authResult) return;
     const { authInfo, userId } = authResult;
 
@@ -266,7 +266,7 @@ export class McpController {
     if (!projectApiKey) return;
 
     // Validate auth
-    const authResult = this.validateAuth(authorization, projectApiKey, undefined, res);
+    const authResult = this.validateAuth(authorization, alias, undefined, res);
     if (!authResult) return;
     const { authInfo } = authResult;
 
@@ -315,7 +315,7 @@ export class McpController {
     if (!projectApiKey) return;
 
     // Validate auth
-    const authResult = this.validateAuth(authorization, projectApiKey, undefined, res);
+    const authResult = this.validateAuth(authorization, alias, undefined, res);
     if (!authResult) return;
 
     if (!mcpSessionId || !this.transports.has(mcpSessionId)) {
