@@ -140,8 +140,26 @@ export class WidgetPreviewController {
       locationLabel: 'Living Room',
       total: 2,
       devices: [
-        { uuid: 'dev-001', label: 'Living Room Light', desc: 'Main ceiling LED', mac: 'AA:BB:CC:DD:EE:01', deviceType: 'LIGHT', deviceTypeId: 1, locationId: '507f1f77bcf86cd799439022', groupId: '507f1f77bcf86cd799439033' },
-        { uuid: 'dev-004', label: 'Living Room Fan', desc: 'Ceiling fan', mac: 'AA:BB:CC:DD:EE:04', deviceType: 'FAN', deviceTypeId: 7, locationId: '507f1f77bcf86cd799439022', groupId: null },
+        {
+          uuid: 'dev-001',
+          label: 'Living Room Light',
+          desc: 'Main ceiling LED',
+          mac: 'AA:BB:CC:DD:EE:01',
+          deviceType: 'LIGHT',
+          deviceTypeId: 1,
+          locationId: '507f1f77bcf86cd799439022',
+          groupId: '507f1f77bcf86cd799439033',
+        },
+        {
+          uuid: 'dev-004',
+          label: 'Living Room Fan',
+          desc: 'Ceiling fan',
+          mac: 'AA:BB:CC:DD:EE:04',
+          deviceType: 'FAN',
+          deviceTypeId: 7,
+          locationId: '507f1f77bcf86cd799439022',
+          groupId: null,
+        },
       ],
     };
     const groupData = {
@@ -150,8 +168,26 @@ export class WidgetPreviewController {
       groupLabel: 'Main Lights',
       total: 2,
       devices: [
-        { uuid: 'dev-001', label: 'Living Room Light', desc: 'Main ceiling LED', mac: 'AA:BB:CC:DD:EE:01', deviceType: 'LIGHT', deviceTypeId: 1, locationId: '507f1f77bcf86cd799439022', groupId: '507f1f77bcf86cd799439033' },
-        { uuid: 'dev-005', label: 'Kitchen Light', desc: 'Under-cabinet LED', mac: 'AA:BB:CC:DD:EE:05', deviceType: 'LIGHT', deviceTypeId: 1, locationId: '507f1f77bcf86cd799439055', groupId: '507f1f77bcf86cd799439033' },
+        {
+          uuid: 'dev-001',
+          label: 'Living Room Light',
+          desc: 'Main ceiling LED',
+          mac: 'AA:BB:CC:DD:EE:01',
+          deviceType: 'LIGHT',
+          deviceTypeId: 1,
+          locationId: '507f1f77bcf86cd799439022',
+          groupId: '507f1f77bcf86cd799439033',
+        },
+        {
+          uuid: 'dev-005',
+          label: 'Kitchen Light',
+          desc: 'Under-cabinet LED',
+          mac: 'AA:BB:CC:DD:EE:05',
+          deviceType: 'LIGHT',
+          deviceTypeId: 1,
+          locationId: '507f1f77bcf86cd799439055',
+          groupId: '507f1f77bcf86cd799439033',
+        },
       ],
     };
     const sampleDataMap: Record<string, unknown> = {

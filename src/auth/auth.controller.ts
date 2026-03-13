@@ -11,6 +11,7 @@ import {
   HttpStatus,
   Logger,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
@@ -20,55 +21,91 @@ import { AuthorizeQueryDto } from './dto/authorize.dto';
 import { TokenRequestDto } from './dto/token-request.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { generateLoginPage } from './templates/login-page.template';
+import { PartnerMetaService } from '../alias/partner-meta.service';
+import { AliasService } from '../alias/alias.service';
 
 /**
  * OAuth 2.1 Authorization Controller
- * Implements OAuth 2.1 authorization flow endpoints
+ * Implements OAuth 2.1 authorization flow endpoints.
+ *
+ * Route param is :alias (the partner alias from the subdomain).
+ * AliasService resolves alias → real projectApiKey for IoT API calls.
+ * PartnerMetaService resolves alias → branding for login page rendering.
  */
 @ApiTags('OAuth')
-@Controller('auth/:projectApiKey')
+@Controller('auth/:alias')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
   constructor(
     private readonly oauthService: OAuthService,
     private readonly discoveryService: DiscoveryService,
+    private readonly partnerMetaService: PartnerMetaService,
+    private readonly aliasService: AliasService,
   ) {}
 
   /**
+   * Resolves a partner alias to the actual project API key.
+   * Sends a 404 JSON response and returns null when the alias is unknown.
+   * Use for handlers that inject @Res() directly.
+   */
+  private async resolveAlias(alias: string, body: unknown, res: Response): Promise<string | null> {
+    const apiKey = await this.aliasService.resolveAlias(alias);
+    if (!apiKey) {
+      res.status(HttpStatus.NOT_FOUND).json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32004,
+          message: `Not Found: Unknown alias '${alias}'`,
+        },
+        id: (body as Record<string, unknown>)?.id || null,
+      });
+      return null;
+    }
+    return apiKey;
+  }
+
+  /**
    * OAuth 2.1 Authorization Endpoint
-   * Renders login page with OAuth parameters
+   * Renders login page with OAuth parameters and partner branding.
    */
   @Get('authorize')
   @ApiOperation({ summary: 'OAuth 2.1 authorization endpoint' })
-  @ApiParam({ name: 'projectApiKey', description: 'Project API key' })
+  @ApiParam({ name: 'alias', description: 'Partner alias' })
   @ApiResponse({ status: 200, description: 'Login page rendered' })
-  @ApiResponse({ status: 400, description: 'Invalid request parameters' })
+  @ApiResponse({ status: 404, description: 'Unknown alias' })
   async authorize(
-    @Param('projectApiKey') projectApiKey: string,
+    @Param('alias') alias: string,
     @Query() query: AuthorizeQueryDto,
     @Res() res: Response,
   ): Promise<void> {
-    this.logger.log(`Authorization request for project ${projectApiKey}`);
+    this.logger.log(`Authorization request for alias: ${alias}`);
     this.logger.debug(`  redirect_uri: ${query.redirect_uri}`);
     this.logger.debug(`  response_type: ${query.response_type}`);
 
-    // Generate and return login page
-    const html = generateLoginPage(projectApiKey, query);
+    // Validate alias exists (we need the real key to confirm, even if not used here)
+    const projectApiKey = await this.resolveAlias(alias, undefined, res);
+    if (!projectApiKey) return;
+
+    const meta = await this.partnerMetaService.getAliasMeta(alias);
+
+    // Generate login page — pass alias as the key for form action URL (/auth/{alias}/login)
+    const html = generateLoginPage(alias, query, meta ?? undefined);
     res.status(HttpStatus.OK).contentType('text/html').send(html);
   }
 
   /**
    * OAuth Login Form Handler
-   * Processes login form submission and redirects with authorization code
+   * Processes login form submission and redirects with authorization code.
    */
   @Post('login')
   @ApiOperation({ summary: 'Process login form and generate authorization code' })
-  @ApiParam({ name: 'projectApiKey', description: 'Project API key' })
+  @ApiParam({ name: 'alias', description: 'Partner alias' })
   @ApiResponse({ status: 302, description: 'Redirect to callback with code' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiResponse({ status: 404, description: 'Unknown alias' })
   async login(
-    @Param('projectApiKey') projectApiKey: string,
+    @Param('alias') alias: string,
     @Body()
     body: {
       email: string;
@@ -83,8 +120,15 @@ export class AuthController {
     },
     @Res() res: Response,
   ): Promise<void> {
-    this.logger.log(`Login attempt for project ${projectApiKey}`);
+    this.logger.log(`Login attempt for alias: ${alias}`);
     this.logger.debug(`  Redirect URI from form: ${body.redirect_uri}`);
+
+    // Resolve alias → real project API key (required for IoT API authentication calls)
+    const projectApiKey = await this.resolveAlias(alias, body, res);
+    if (!projectApiKey) return;
+
+    const meta = await this.partnerMetaService.getAliasMeta(alias);
+
     try {
       // Authenticate user and generate authorization code
       const authCode = await this.oauthService.handleLogin(
@@ -109,7 +153,7 @@ export class AuthController {
     } catch (err) {
       this.logger.warn(`Login failed for ${body.email}: ${err.message}`);
 
-      // Re-render login page with error message instead of returning JSON
+      // Re-render login page with error — pass alias for form action URL
       const oauthParams = {
         client_id: body.client_id,
         redirect_uri: body.redirect_uri,
@@ -121,18 +165,22 @@ export class AuthController {
         resource: body.resource,
       };
 
-      const html = generateLoginPage(projectApiKey, oauthParams, err.message || 'Login failed');
+      const html = generateLoginPage(
+        alias,
+        oauthParams,
+        meta ?? undefined,
+        err.message || 'Login failed',
+      );
       res.status(HttpStatus.UNAUTHORIZED).contentType('text/html').send(html);
     }
   }
 
   /**
    * CORS Preflight Handler for Token Endpoint
-   * Explicitly handles OPTIONS requests for token endpoint
    */
   @Options('token')
   @ApiOperation({ summary: 'CORS preflight for token endpoint' })
-  @ApiParam({ name: 'projectApiKey', description: 'Project API key' })
+  @ApiParam({ name: 'alias', description: 'Partner alias' })
   tokenOptions(@Res() res: Response): void {
     this.logger.log('CORS preflight request received for token endpoint');
     res.header('Access-Control-Allow-Origin', '*');
@@ -145,22 +193,24 @@ export class AuthController {
     res.header('Access-Control-Max-Age', '86400');
     res.status(HttpStatus.NO_CONTENT).send();
   }
+
   /**
    * OAuth 2.1 Token Endpoint
-   * Exchanges authorization code or refresh token for access token
+   * Exchanges authorization code or refresh token for access token.
    */
   @Post('token')
   @ApiOperation({ summary: 'OAuth 2.1 token endpoint' })
-  @ApiParam({ name: 'projectApiKey', description: 'Project API key' })
+  @ApiParam({ name: 'alias', description: 'Partner alias' })
   @ApiResponse({ status: 200, description: 'Token issued', type: TokenResponseDto })
   @ApiResponse({ status: 400, description: 'Invalid request' })
   @ApiResponse({ status: 401, description: 'Invalid code or refresh token' })
+  @ApiResponse({ status: 404, description: 'Unknown alias' })
   async token(
-    @Param('projectApiKey') projectApiKey: string,
+    @Param('alias') alias: string,
     @Body() body: TokenRequestDto,
     @Headers() headers: Record<string, string>,
   ): Promise<TokenResponseDto> {
-    this.logger.log(`Token request for project ${projectApiKey}, grant_type: ${body.grant_type}`);
+    this.logger.log(`Token request for alias: ${alias}, grant_type: ${body.grant_type}`);
     this.logger.debug(
       `Token request headers: ${JSON.stringify({
         authorization: headers.authorization || headers.Authorization ? '[PRESENT]' : 'MISSING',
@@ -172,6 +222,12 @@ export class AuthController {
     this.logger.debug(
       `Token request grant_type=${body.grant_type}, client_id=${body.client_id || 'none'}`,
     );
+
+    // Resolve alias → real project API key
+    const projectApiKey = await this.aliasService.resolveAlias(alias);
+    if (!projectApiKey) {
+      throw new NotFoundException(`Unknown alias '${alias}'`);
+    }
 
     // Parse Basic Auth header if present (ChatGPT MCP client pattern)
     let clientId: string | undefined;
@@ -227,10 +283,10 @@ export class AuthController {
    */
   @Post('register')
   @ApiOperation({ summary: 'Static client registration (PoC)' })
-  @ApiParam({ name: 'projectApiKey', description: 'Project API key' })
+  @ApiParam({ name: 'alias', description: 'Partner alias' })
   @ApiResponse({ status: 200, description: 'Client registered' })
-  async register(@Param('projectApiKey') projectApiKey: string): Promise<any> {
-    this.logger.log(`Client registration request for project ${projectApiKey}`);
+  async register(@Param('alias') alias: string): Promise<any> {
+    this.logger.log(`Client registration request for alias: ${alias}`);
 
     // Return static client_id (PoC)
     return {
@@ -244,25 +300,29 @@ export class AuthController {
 
   /**
    * Authorization Server Metadata (RFC 8414)
+   * Returns metadata with alias-based endpoint URLs.
    */
   @Get('.well-known/oauth-authorization-server')
   @ApiOperation({ summary: 'OAuth 2.1 authorization server metadata' })
-  @ApiParam({ name: 'projectApiKey', description: 'Project API key' })
+  @ApiParam({ name: 'alias', description: 'Partner alias' })
   @ApiResponse({ status: 200, description: 'Server metadata' })
-  getAuthServerMetadata(@Param('projectApiKey') projectApiKey: string): any {
-    this.logger.log(`Metadata request for project ${projectApiKey}`);
-    return this.discoveryService.getAuthorizationServerMetadata(projectApiKey);
+  getAuthServerMetadata(@Param('alias') alias: string): any {
+    this.logger.log(`Auth server metadata request for alias: ${alias}`);
+    // Pass alias — discovery service builds URLs like /auth/{alias}/authorize
+    return this.discoveryService.getAuthorizationServerMetadata(alias);
   }
 
   /**
    * Protected Resource Metadata (RFC 8707)
+   * Returns metadata with alias-based MCP resource URL.
    */
   @Get('.well-known/oauth-protected-resource')
   @ApiOperation({ summary: 'OAuth 2.1 protected resource metadata' })
-  @ApiParam({ name: 'projectApiKey', description: 'Project API key' })
+  @ApiParam({ name: 'alias', description: 'Partner alias' })
   @ApiResponse({ status: 200, description: 'Resource metadata' })
-  getResourceMetadata(@Param('projectApiKey') projectApiKey: string): any {
-    this.logger.log(`Resource metadata request for project ${projectApiKey}`);
-    return this.discoveryService.getProtectedResourceMetadata(projectApiKey);
+  getResourceMetadata(@Param('alias') alias: string): any {
+    this.logger.log(`Resource metadata request for alias: ${alias}`);
+    // Pass alias — discovery service builds resource URL as /mcp/{alias}
+    return this.discoveryService.getProtectedResourceMetadata(alias);
   }
 }

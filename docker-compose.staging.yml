@@ -39,6 +39,13 @@ services:
       # MCP Session
       MCP_SESSION_TTL: ${MCP_SESSION_TTL:-3600}
 
+      # Alias Redis (External - partner alias → API key lookup)
+      ALIAS_REDIS_HOST: ${ALIAS_REDIS_HOST}
+      ALIAS_REDIS_PORT: ${ALIAS_REDIS_PORT:-6379}
+      ALIAS_REDIS_PASSWORD: ${ALIAS_REDIS_PASSWORD:-}
+      ALIAS_REDIS_DB: ${ALIAS_REDIS_DB:-0}
+      ALIAS_REDIS_KEY_PREFIX: ${ALIAS_REDIS_KEY_PREFIX:-alias-staging}
+
     depends_on:
       - redis-staging
     networks:

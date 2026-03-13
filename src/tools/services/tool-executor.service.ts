@@ -33,7 +33,10 @@ import {
   CONTROL_DEVICE_SIMPLE_TOOL,
   ControlDeviceSimpleParams,
 } from '../definitions/control-device-simple.tool';
-import { WIDGET_LIST_DEVICES_TOOL, WidgetListDevicesParams } from '../definitions/widget-list-devices.tool';
+import {
+  WIDGET_LIST_DEVICES_TOOL,
+  WidgetListDevicesParams,
+} from '../definitions/widget-list-devices.tool';
 import {
   WIDGET_GET_DEVICE_TOOL,
   WidgetGetDeviceParams,
@@ -89,7 +92,8 @@ export class ToolExecutorService {
     [CONTROL_DEVICE_TOOL.name]: (p, c) => this.executeControlDevice(p as ControlDeviceParams, c),
     [CONTROL_DEVICE_SIMPLE_TOOL.name]: (p, c) =>
       this.executeControlDeviceSimple(p as ControlDeviceSimpleParams, c),
-    [WIDGET_LIST_DEVICES_TOOL.name]: (p, c) => this.executeWidgetListDevices(p as WidgetListDevicesParams, c),
+    [WIDGET_LIST_DEVICES_TOOL.name]: (p, c) =>
+      this.executeWidgetListDevices(p as WidgetListDevicesParams, c),
     [WIDGET_GET_DEVICE_TOOL.name]: (p, c) =>
       this.executeWidgetGetDevice(p as WidgetGetDeviceParams, c),
     [WIDGET_CONTROL_DEVICE_TOOL.name]: (p, c) =>
@@ -819,5 +823,4 @@ export class ToolExecutorService {
       return this.errorResult(error);
     }
   }
-
 }

@@ -12,6 +12,7 @@ import { STATE_GUIDE_RESOURCE } from '../definitions/state-guide.resource';
 import { OVERVIEW_RESOURCE } from '../definitions/overview.resource';
 import { DEVICE_APP_WIDGET } from '../../widgets/definitions/device-app.widget';
 import { WidgetService } from '../../widgets/services/widget.service';
+import { AliasMeta } from '../../alias/partner-meta.service';
 
 /**
  * Service responsible for registering MCP resources with the MCP server
@@ -28,7 +29,7 @@ export class ResourceRegistryService {
    *
    * @param mcpServer - McpServer instance
    */
-  registerResources(mcpServer: McpServer): void {
+  registerResources(mcpServer: McpServer, meta?: AliasMeta): void {
     this.logger.log('Registering MCP resources');
 
     // Register device attributes reference
@@ -135,7 +136,6 @@ export class ResourceRegistryService {
       },
     );
 
-
     // Register unified device app widget (ChatGPT interactive SPA)
     // Single HTML that renders list, dashboard, and control views based on _view hint
     mcpServer.registerResource(
@@ -147,7 +147,7 @@ export class ResourceRegistryService {
       },
       async () => {
         this.logger.log('🔍 [RESOURCE ACCESS] device-app widget resource read requested');
-        const html = await this.widgetService.readStaticHtml('device-app');
+        const html = await this.widgetService.readStaticHtml('device-app', meta);
         this.logger.log(
           `✅ [RESOURCE ACCESS] device-app widget resource read successful (${html.length} chars)`,
         );

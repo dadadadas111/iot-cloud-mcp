@@ -1,0 +1,12 @@
+{
+  "partnerId": "partner-001",
+  "brandName": "Acme IoT",
+  "mcpServerName": "Acme Smart Home",
+  "domain": "acme.com",
+  "loginTitle": "Sign in to Acme",
+  "loginSubtitle": "Control your smart home",
+  "loginLogo": "https://acme.com/logo.png",
+  "loginAccentColor": "#FF6B00",
+  "widgetFooterText": "Powered by Acme IoT",
+  "widgetLogoUrl": "https://acme.com/logo-small.png"
+}
