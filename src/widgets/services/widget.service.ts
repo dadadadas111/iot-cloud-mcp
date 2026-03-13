@@ -10,6 +10,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import * as Handlebars from 'handlebars';
 import { readFile, readdir } from 'fs/promises';
 import { join } from 'path';
+import { AliasMeta } from '../../alias/partner-meta.service';
 
 /** Data passed to widget preview templates */
 export interface WidgetData {
@@ -49,7 +50,7 @@ export class WidgetService {
    * @param widgetName - Name of the widget file (without .html extension)
    * @returns HTML string with locale data injected
    */
-  async readStaticHtml(widgetName: string): Promise<string> {
+  async readStaticHtml(widgetName: string, meta?: AliasMeta): Promise<string> {
     const filePath = join(this.viewsPath, `${widgetName}.html`);
 
     try {
@@ -57,9 +58,29 @@ export class WidgetService {
 
       // Inject i18n locale data before the first <script> tag
       const locales = await this.loadLocales();
-      if (Object.keys(locales).length > 0) {
-        const localeScript = `<script>window.__I18N__=${JSON.stringify(locales)}</script>\n`;
-        html = html.replace('<script>', localeScript + '<script>');
+      const workingLocales: Record<string, Record<string, string>> = {};
+      for (const lang of Object.keys(locales)) {
+        workingLocales[lang] = { ...locales[lang] };
+      }
+
+      const footerText = meta?.widgetFooterText ?? meta?.brandName ?? null;
+      if (footerText) {
+        for (const lang of Object.keys(workingLocales)) {
+          workingLocales[lang].footer = footerText;
+        }
+      }
+
+      const partner = {
+        footerText: meta?.widgetFooterText ?? meta?.brandName ?? null,
+        logoUrl: meta?.widgetLogoUrl ?? null,
+      };
+      const partnerScript = `<script>window.__PARTNER__=${JSON.stringify(partner)}</script>\n`;
+
+      if (Object.keys(workingLocales).length > 0) {
+        const localeScript = `<script>window.__I18N__=${JSON.stringify(workingLocales)}</script>\n`;
+        html = html.replace('<script>', localeScript + partnerScript + '<script>');
+      } else {
+        html = html.replace('<script>', partnerScript + '<script>');
       }
 
       return html;

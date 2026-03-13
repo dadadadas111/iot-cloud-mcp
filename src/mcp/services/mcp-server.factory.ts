@@ -1,8 +1,29 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ToolRegistryService } from '../../tools/services/tool-registry.service';
 import { ResourceRegistryService } from '../../resources/services/resource-registry.service';
+import { AliasMeta } from '../../alias/partner-meta.service';
+
+function buildInstructions(meta?: AliasMeta): string {
+  const brand = meta?.brandName ?? 'IoT Cloud';
+  const domain = meta?.domain ?? 'IoT';
+
+  return `${brand} MCP Server - ${domain} device control
+
+Key Concepts:
+- Device: ${domain} hardware (light, switch, AC, lock, gate) identified by UUID
+- Element: Physical control point (e.g., 4-button switch has 4 elements)
+- Attribute: Controllable property (brightness, color, temperature, etc.)
+- UUID format: MongoDB _id (24 hex characters, no dashes)
+
+Getting Started:
+1. Read device-attributes MCP resource for detailed attribute/command reference
+2. Use get_device_state to discover device capabilities and current values
+3. For common actions: control_device_simple (turn_on, set_brightness, etc.)
+4. For precise control: control_device with specific attribute elementIds
+
+All device control operations require only: uuid, elementIds (or action), and command/value.`;
+}
 
 /**
  * McpServerFactory
@@ -16,7 +37,6 @@ export class McpServerFactory {
   constructor(
     private readonly toolRegistry: ToolRegistryService,
     private readonly resourceRegistry: ResourceRegistryService,
-    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -24,13 +44,18 @@ export class McpServerFactory {
    * @param projectApiKey - Project API key (used for server naming)
    * @returns Configured MCP Server instance
    */
-  createServer(projectApiKey: string): McpServer {
+  createServer(projectApiKey: string, meta?: AliasMeta): McpServer {
     this.logger.log(`Creating MCP server for project: ${projectApiKey}`);
+
+    const serverName =
+      meta?.mcpServerName ??
+      (meta?.brandName ? meta.brandName.toLowerCase().replace(/\s+/g, '-') : undefined) ??
+      `mcp-gateway-${projectApiKey}`;
 
     // Create server with name and capabilities
     const server = new McpServer(
       {
-        name: `mcp-gateway-${projectApiKey}`,
+        name: serverName,
         version: '1.0.0',
       },
       {
@@ -38,21 +63,7 @@ export class McpServerFactory {
           tools: {},
           resources: {},
         },
-        instructions: `IoT Device Control MCP Server
-
-Key Concepts:
-- Device: IoT hardware (light, switch, AC, lock, gate) identified by UUID
-- Element: Physical control point (e.g., 4-button switch has 4 elements)
-- Attribute: Controllable property (brightness, color, temperature, etc.)
-- UUID format: MongoDB _id (24 hex characters, no dashes)
-
-Getting Started:
-1. Read device-attributes MCP resource for detailed attribute/command reference
-2. Use get_device_state to discover device capabilities and current values
-3. For common actions: control_device_simple (turn_on, set_brightness, etc.)
-4. For precise control: control_device with specific attribute elementIds
-
-All device control operations require only: uuid, elementIds (or action), and command/value.`,
+        instructions: buildInstructions(meta),
       },
     );
 
@@ -60,7 +71,7 @@ All device control operations require only: uuid, elementIds (or action), and co
     this.toolRegistry.registerTools(server, projectApiKey);
 
     // Register all available resources
-    this.resourceRegistry.registerResources(server);
+    this.resourceRegistry.registerResources(server, meta);
 
     this.logger.log(`MCP server created and tools registered for project: ${projectApiKey}`);
 
@@ -73,9 +84,9 @@ All device control operations require only: uuid, elementIds (or action), and co
    * @param projectApiKey - Project API key
    * @returns Configured MCP Server instance
    */
-  getOrCreateServer(projectApiKey: string): McpServer {
+  getOrCreateServer(projectApiKey: string, meta?: AliasMeta): McpServer {
     // For PoC: always create new server per session
     // Future: implement caching/pooling if needed
-    return this.createServer(projectApiKey);
+    return this.createServer(projectApiKey, meta);
   }
 }

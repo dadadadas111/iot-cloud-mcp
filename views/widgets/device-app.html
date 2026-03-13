@@ -954,7 +954,7 @@
         z-index: 2;
         color: var(--ddw-text-secondary);
         background: var(--ddw-bg-surface);
-        box-shadow: 0 1px 6px rgba(0,0,0,0.10);
+        box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
         transition: all 0.18s ease;
         padding: 0;
         font-family: inherit;
@@ -963,7 +963,7 @@
       .ddw-page-arrow:hover {
         color: var(--ddw-accent);
         border-color: var(--ddw-accent);
-        box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
       }
 
       .ddw-page-arrow:active {
@@ -1252,7 +1252,9 @@
             }
           } else if (prev.view === 'location' && prev.data && prev.data.locationId) {
             showNavLoading();
-            var p3 = window.openai.callTool('_widget_list_devices', { locationId: prev.data.locationId });
+            var p3 = window.openai.callTool('_widget_list_devices', {
+              locationId: prev.data.locationId,
+            });
             if (p3 && typeof p3.then === 'function') {
               p3.then(function (result) {
                 hideNavLoading();
@@ -1557,13 +1559,28 @@
               var s = Math.round(vals[1] / 10);
               var v = Math.round(vals[2] / 10);
               var prevColor = hsvToHslString(h, s, v);
-              var shadowColor = 'hsla(' + hsvToHsl(h, s, v).h + ', ' + hsvToHsl(h, s, v).s + '%, ' + hsvToHsl(h, s, v).l + '%, 0.35)';
+              var shadowColor =
+                'hsla(' +
+                hsvToHsl(h, s, v).h +
+                ', ' +
+                hsvToHsl(h, s, v).s +
+                '%, ' +
+                hsvToHsl(h, s, v).l +
+                '%, 0.35)';
               return (
                 '<span class="ddw-attr-val">' +
                 '<span style="display:inline-block;width:18px;height:18px;border-radius:6px;background:' +
                 prevColor +
-                ';border:1px solid rgba(0,0,0,0.1);box-shadow:0 1px 4px ' + shadowColor + '"></span>' +
-                'H' + h + '\u00B0 S' + s + '% V' + v + '%</span>'
+                ';border:1px solid rgba(0,0,0,0.1);box-shadow:0 1px 4px ' +
+                shadowColor +
+                '"></span>' +
+                'H' +
+                h +
+                '\u00B0 S' +
+                s +
+                '% V' +
+                v +
+                '%</span>'
               );
             case '257':
               var parts = [];
@@ -1841,17 +1858,27 @@
                 html +=
                   '<span class="ddw-page-dot' +
                   (pi === _listPage ? ' active' : '') +
-                  '" data-action="page_goto" data-page="' + pi + '"></span>';
+                  '" data-action="page_goto" data-page="' +
+                  pi +
+                  '"></span>';
               }
               html +=
                 '<span class="ddw-page-info">' + (_listPage + 1) + ' / ' + totalPages + '</span>';
               html += '</div>';
             }
           }
+          var partnerLogo =
+            window.__PARTNER__ && window.__PARTNER__.logoUrl
+              ? '<img src="' +
+                esc(window.__PARTNER__.logoUrl) +
+                '" alt="" style="max-height:20px;opacity:0.7;">'
+              : '';
           html +=
             '<div class="ddw-footer"><span class="ddw-footer-text">' +
             esc(t('footer')) +
-            '</span></div>';
+            '</span>' +
+            partnerLogo +
+            '</div>';
           html += '</div>';
           root.innerHTML = html;
         }
@@ -1983,8 +2010,15 @@
           html += '</div>'; // body
 
           /* Footer */
+          var partnerLogo2 =
+            window.__PARTNER__ && window.__PARTNER__.logoUrl
+              ? '<img src="' +
+                esc(window.__PARTNER__.logoUrl) +
+                '" alt="" style="max-height:20px;opacity:0.7;">'
+              : '';
           html += '<div class="ddw-footer">';
           html += '<span class="ddw-footer-text">' + esc(t('footer')) + '</span>';
+          html += partnerLogo2;
           if (uuid) {
             html +=
               '<button class="ddw-control-btn" data-action="control_device" data-uuid="' +
@@ -2265,10 +2299,18 @@
           }
           html += '</div>'; // body
 
+          var partnerLogo3 =
+            window.__PARTNER__ && window.__PARTNER__.logoUrl
+              ? '<img src="' +
+                esc(window.__PARTNER__.logoUrl) +
+                '" alt="" style="max-height:20px;opacity:0.7;">'
+              : '';
           html +=
             '<div class="ddw-footer"><span class="ddw-footer-text">' +
             esc(t('footer')) +
-            '</span></div>';
+            '</span>' +
+            partnerLogo3 +
+            '</div>';
           html += '</div>';
           root.innerHTML = html;
           syncControlVisuals(root);
@@ -2398,7 +2440,8 @@
             var infoAction = infoBtn.getAttribute('data-action');
             if (infoAction === 'goto_location') {
               var locId = infoBtn.getAttribute('data-location-id');
-              if (locId) callToolAndNavigate('_widget_list_devices', { locationId: locId }, 'location');
+              if (locId)
+                callToolAndNavigate('_widget_list_devices', { locationId: locId }, 'location');
             } else if (infoAction === 'goto_group') {
               var grpId = infoBtn.getAttribute('data-group-id');
               if (grpId) callToolAndNavigate('_widget_list_devices', { groupId: grpId }, 'group');
@@ -2506,38 +2549,47 @@
         var _swipeStartY = null;
         var SWIPE_THRESHOLD = 50;
 
-        root.addEventListener('touchstart', function (e) {
-          if (_currentView !== 'list') return;
-          var touch = e.touches[0];
-          _swipeStartX = touch.clientX;
-          _swipeStartY = touch.clientY;
-        }, { passive: true });
+        root.addEventListener(
+          'touchstart',
+          function (e) {
+            if (_currentView !== 'list') return;
+            var touch = e.touches[0];
+            _swipeStartX = touch.clientX;
+            _swipeStartY = touch.clientY;
+          },
+          { passive: true },
+        );
 
-        root.addEventListener('touchend', function (e) {
-          if (_currentView !== 'list' || _swipeStartX === null) return;
-          var touch = e.changedTouches[0];
-          var dx = touch.clientX - _swipeStartX;
-          var dy = touch.clientY - _swipeStartY;
-          _swipeStartX = null;
-          _swipeStartY = null;
+        root.addEventListener(
+          'touchend',
+          function (e) {
+            if (_currentView !== 'list' || _swipeStartX === null) return;
+            var touch = e.changedTouches[0];
+            var dx = touch.clientX - _swipeStartX;
+            var dy = touch.clientY - _swipeStartY;
+            _swipeStartX = null;
+            _swipeStartY = null;
 
-          /* only trigger if horizontal swipe is dominant */
-          if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dy) > Math.abs(dx)) return;
+            /* only trigger if horizontal swipe is dominant */
+            if (Math.abs(dx) < SWIPE_THRESHOLD || Math.abs(dy) > Math.abs(dx)) return;
 
-          var totalPages = _currentData && _currentData.devices
-            ? Math.ceil(_currentData.devices.length / LIST_PAGE_SIZE)
-            : 1;
+            var totalPages =
+              _currentData && _currentData.devices
+                ? Math.ceil(_currentData.devices.length / LIST_PAGE_SIZE)
+                : 1;
 
-          if (dx < 0 && _listPage < totalPages - 1) {
-            /* swipe left → next page */
-            _listPage++;
-            renderList(_currentData);
-          } else if (dx > 0 && _listPage > 0) {
-            /* swipe right → prev page */
-            _listPage--;
-            renderList(_currentData);
-          }
-        }, { passive: true });
+            if (dx < 0 && _listPage < totalPages - 1) {
+              /* swipe left → next page */
+              _listPage++;
+              renderList(_currentData);
+            } else if (dx > 0 && _listPage > 0) {
+              /* swipe right → prev page */
+              _listPage--;
+              renderList(_currentData);
+            }
+          },
+          { passive: true },
+        );
 
         /* ── Initialization & Data Bridge ──────────────────── */
         if (window.openai && window.openai.toolOutput) {
@@ -2560,11 +2612,16 @@
                 var textItem = null;
                 if (Array.isArray(contentArr)) {
                   for (var i = 0; i < contentArr.length; i++) {
-                    if (contentArr[i] && contentArr[i].type === 'text') { textItem = contentArr[i]; break; }
+                    if (contentArr[i] && contentArr[i].type === 'text') {
+                      textItem = contentArr[i];
+                      break;
+                    }
                   }
                 }
                 if (textItem && textItem.text) {
-                  try { renderView(null, JSON.parse(textItem.text)); } catch (e) {}
+                  try {
+                    renderView(null, JSON.parse(textItem.text));
+                  } catch (e) {}
                 }
               }
             }

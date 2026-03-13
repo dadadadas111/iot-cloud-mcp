@@ -20,6 +20,7 @@ import { AuthorizeQueryDto } from './dto/authorize.dto';
 import { TokenRequestDto } from './dto/token-request.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
 import { generateLoginPage } from './templates/login-page.template';
+import { PartnerMetaService } from '../alias/partner-meta.service';
 
 /**
  * OAuth 2.1 Authorization Controller
@@ -33,6 +34,7 @@ export class AuthController {
   constructor(
     private readonly oauthService: OAuthService,
     private readonly discoveryService: DiscoveryService,
+    private readonly partnerMetaService: PartnerMetaService,
   ) {}
 
   /**
@@ -53,8 +55,10 @@ export class AuthController {
     this.logger.debug(`  redirect_uri: ${query.redirect_uri}`);
     this.logger.debug(`  response_type: ${query.response_type}`);
 
+    const meta = await this.partnerMetaService.getAliasMeta(projectApiKey);
+
     // Generate and return login page
-    const html = generateLoginPage(projectApiKey, query);
+    const html = generateLoginPage(projectApiKey, query, meta ?? undefined);
     res.status(HttpStatus.OK).contentType('text/html').send(html);
   }
 
@@ -85,6 +89,8 @@ export class AuthController {
   ): Promise<void> {
     this.logger.log(`Login attempt for project ${projectApiKey}`);
     this.logger.debug(`  Redirect URI from form: ${body.redirect_uri}`);
+    const meta = await this.partnerMetaService.getAliasMeta(projectApiKey);
+
     try {
       // Authenticate user and generate authorization code
       const authCode = await this.oauthService.handleLogin(
@@ -121,7 +127,12 @@ export class AuthController {
         resource: body.resource,
       };
 
-      const html = generateLoginPage(projectApiKey, oauthParams, err.message || 'Login failed');
+      const html = generateLoginPage(
+        projectApiKey,
+        oauthParams,
+        meta ?? undefined,
+        err.message || 'Login failed',
+      );
       res.status(HttpStatus.UNAUTHORIZED).contentType('text/html').send(html);
     }
   }

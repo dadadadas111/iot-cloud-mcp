@@ -56,13 +56,14 @@ export const GET_DEVICE_TOOL = {
   _meta: {
     ui: {
       resourceUri: 'ui://widget/device-app.html',
-      visibility: ["model", "app"]
+      visibility: ['model', 'app'],
     },
     'openai/outputTemplate': 'ui://widget/device-app.html',
     'openai/widgetAccessible': true,
     'openai/resultCanProduceWidget': true,
     'openai/toolInvocation/invoking': 'Loading device details...',
     'openai/toolInvocation/invoked': 'Device loaded',
-    'openai/widgetDescription': 'Interactive device dashboard is displayed as a widget. Do not describe it in text.',
+    'openai/widgetDescription':
+      'Interactive device dashboard is displayed as a widget. Do not describe it in text.',
   },
 };

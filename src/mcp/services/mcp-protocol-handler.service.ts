@@ -52,7 +52,12 @@ export class McpProtocolHandlerService {
    */
   async handleRequest(
     request: McpRequest,
-    context: { authorization?: string; projectApiKey: string; mcpServer?: any },
+    context: {
+      authorization?: string;
+      projectApiKey: string;
+      mcpServer?: any;
+      serverName?: string;
+    },
   ): Promise<McpResponse> {
     const { method, id, params } = request;
 
@@ -63,7 +68,7 @@ export class McpProtocolHandlerService {
 
       switch (method) {
         case 'initialize':
-          result = await this.handleInitialize(params);
+          result = await this.handleInitialize(params, context);
           break;
 
         case 'tools/list':
@@ -122,7 +127,7 @@ export class McpProtocolHandlerService {
    * @param params - Initialize parameters from client
    * @returns Initialize result with server info
    */
-  private async handleInitialize(_params: any): Promise<any> {
+  private async handleInitialize(_params: any, context: { serverName?: string }): Promise<any> {
     this.logger.log('Client initialize request received');
 
     return {
@@ -136,7 +141,7 @@ export class McpProtocolHandlerService {
         },
       },
       serverInfo: {
-        name: 'iot-cloud-mcp-gateway',
+        name: context.serverName ?? 'mcp-gateway',
         version: '1.0.0',
       },
     };

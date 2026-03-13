@@ -20,7 +20,8 @@ export type WidgetGetDeviceParams = z.infer<typeof WidgetGetDeviceParamsSchema>;
 
 export const WIDGET_GET_DEVICE_TOOL = {
   name: '_widget_get_device',
-  description: 'INTERNAL WIDGET USE ONLY — do NOT call this tool. Use get_device instead. This tool exists exclusively for the device-app ChatGPT widget to navigate between list/dashboard/control views in-place via callTool() without spawning a new widget message. It is invisible to the AI model (visibility: app-only).',
+  description:
+    'INTERNAL WIDGET USE ONLY — do NOT call this tool. Use get_device instead. This tool exists exclusively for the device-app ChatGPT widget to navigate between list/dashboard/control views in-place via callTool() without spawning a new widget message. It is invisible to the AI model (visibility: app-only).',
   inputSchema: {
     type: 'object' as const,
     properties: {

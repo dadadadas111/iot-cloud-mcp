@@ -1,3 +1,5 @@
+import { AliasMeta } from '../../alias/partner-meta.service';
+
 /**
  * Generates OAuth 2.1 login page HTML
  * Simple form with email/password and hidden OAuth parameters
@@ -18,20 +20,31 @@ export function generateLoginPage(
     response_type?: string;
     resource?: string;
   },
+  meta?: AliasMeta,
   error?: string,
 ): string {
+  const title = meta?.loginTitle ?? meta?.brandName ?? 'IoT Cloud';
+  const logo = meta?.loginLogo ?? '🔐';
+  const subtitle = meta?.loginSubtitle ?? 'Sign in to continue';
+  const accent = meta?.loginAccentColor ?? '#667eea';
+  const accentDark = meta?.loginAccentColor ?? '#764ba2';
+
+  const logoHtml = logo.startsWith('https://')
+    ? `<img src="${logo}" alt="${title}" style="max-height:48px;margin-bottom:8px;">`
+    : `<span style="font-size:36px;">${logo}</span>`;
+
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In - IoT Cloud</title>
+    <title>Sign In - ${title}</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, ${accent} 0%, ${accentDark} 100%);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -51,7 +64,7 @@ export function generateLoginPage(
             margin-bottom: 30px;
         }
         .logo h1 {
-            color: #667eea;
+            color: ${accent};
             font-size: 28px;
             font-weight: 700;
         }
@@ -75,12 +88,12 @@ export function generateLoginPage(
         }
         .form-group input:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: ${accent};
         }
         .submit-btn {
             width: 100%;
             padding: 14px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, ${accent} 0%, ${accentDark} 100%);
             color: white;
             border: none;
             border-radius: 6px;
@@ -112,8 +125,8 @@ export function generateLoginPage(
 <body>
     <div class="login-container">
         <div class="logo">
-            <h1>🔐 IoT Cloud</h1>
-            <p style="color: #666; margin-top: 8px;">Sign in to continue</p>
+            <div>${logoHtml}</div><h1>${title}</h1>
+            <p style="color: #666; margin-top: 8px;">${subtitle}</p>
         </div>
         
         ${error ? `<div style="background:#ffe6e6;border:1px solid #ffb3b3;color:#8a1f1f;padding:12px;border-radius:6px;margin-bottom:16px;">${error}</div>` : ''}

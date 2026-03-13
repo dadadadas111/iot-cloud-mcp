@@ -19,6 +19,7 @@ import { McpServerFactory } from './services/mcp-server.factory';
 import { decodeJwt } from '../common/utils/jwt.utils';
 import { ConfigService } from '@nestjs/config';
 import { AliasService } from '../alias/alias.service';
+import { PartnerMetaService } from '../alias/partner-meta.service';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
@@ -49,17 +50,14 @@ export class McpController {
     private readonly serverFactory: McpServerFactory,
     private readonly configService: ConfigService,
     private readonly aliasService: AliasService,
+    private readonly partnerMetaService: PartnerMetaService,
   ) {}
 
   /**
    * Resolves a partner alias to the actual project API key.
    * Sends a 404 JSON-RPC error response and returns null when the alias is unknown.
    */
-  private async resolveAlias(
-    alias: string,
-    body: unknown,
-    res: Response,
-  ): Promise<string | null> {
+  private async resolveAlias(alias: string, body: unknown, res: Response): Promise<string | null> {
     const apiKey = await this.aliasService.resolveAlias(alias);
     if (!apiKey) {
       res.status(HttpStatus.NOT_FOUND).json({
@@ -165,6 +163,8 @@ export class McpController {
     const projectApiKey = await this.resolveAlias(alias, req.body, res);
     if (!projectApiKey) return;
 
+    const meta = await this.partnerMetaService.getAliasMeta(alias);
+
     // Validate auth
     const authResult = this.validateAuth(authorization, projectApiKey, req.body, res);
     if (!authResult) return;
@@ -197,14 +197,14 @@ export class McpController {
           this.sessionProjectMap.set(sessionId, projectApiKey);
 
           // Persist session to Redis
-          const server = this.serverFactory.createServer(projectApiKey);
+          const server = this.serverFactory.createServer(projectApiKey, meta ?? undefined);
           await this.sessionManager.createSession(projectApiKey, userId, server, sessionId);
           this.logger.log(`Session initialized - SessionId: ${sessionId}, UserId: ${userId}`);
         },
       });
 
       // Connect McpServer to the transport
-      const server = this.serverFactory.createServer(projectApiKey);
+      const server = this.serverFactory.createServer(projectApiKey, meta ?? undefined);
       await server.connect(transport);
 
       // Handle transport close — cleanup maps
@@ -259,9 +259,7 @@ export class McpController {
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    this.logger.log(
-      `MCP GET received - Alias: ${alias}, SessionId: ${mcpSessionId || 'none'}`,
-    );
+    this.logger.log(`MCP GET received - Alias: ${alias}, SessionId: ${mcpSessionId || 'none'}`);
 
     // Resolve alias → actual project API key
     const projectApiKey = await this.resolveAlias(alias, undefined, res);
@@ -310,9 +308,7 @@ export class McpController {
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
-    this.logger.log(
-      `MCP DELETE received - Alias: ${alias}, SessionId: ${mcpSessionId || 'none'}`,
-    );
+    this.logger.log(`MCP DELETE received - Alias: ${alias}, SessionId: ${mcpSessionId || 'none'}`);
 
     // Resolve alias → actual project API key
     const projectApiKey = await this.resolveAlias(alias, undefined, res);

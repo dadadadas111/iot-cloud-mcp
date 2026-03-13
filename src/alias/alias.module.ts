@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { ALIAS_REDIS_CLIENT } from './alias.constants';
 import { AliasService } from './alias.service';
+import { PartnerMetaService } from './partner-meta.service';
 
 const logger = new Logger('AliasRedisModule');
 
@@ -58,8 +59,9 @@ const logger = new Logger('AliasRedisModule');
       inject: [ConfigService],
     },
     AliasService,
+    PartnerMetaService,
   ],
-  exports: [AliasService],
+  exports: [AliasService, PartnerMetaService],
 })
 export class AliasModule implements OnModuleDestroy {
   constructor(
