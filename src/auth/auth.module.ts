@@ -12,6 +12,6 @@ import { ProxyModule } from '../proxy/proxy.module';
   imports: [ProxyModule],
   controllers: [AuthController],
   providers: [OAuthService, DiscoveryService],
-  exports: [OAuthService],
+  exports: [OAuthService, DiscoveryService],
 })
 export class AuthModule {}
