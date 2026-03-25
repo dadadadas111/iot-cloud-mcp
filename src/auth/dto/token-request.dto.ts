@@ -53,6 +53,13 @@ export class TokenRequestDto {
   @IsOptional()
   client_id?: string;
 
+  @ApiPropertyOptional({
+    description: 'Client secret (for client_secret_post authentication)',
+  })
+  @IsString()
+  @IsOptional()
+  client_secret?: string;
+
   @IsString()
   @IsOptional()
   resource?: string;

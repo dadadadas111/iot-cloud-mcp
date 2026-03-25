@@ -9,17 +9,25 @@ import {
   Res,
   Headers,
   HttpStatus,
+  HttpCode,
   Logger,
   BadRequestException,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { OAuthService } from './services/oauth.service';
 import { DiscoveryService } from './services/discovery.service';
+import { ClientRegistrationService } from './services/client-registration.service';
 import { AuthorizeQueryDto } from './dto/authorize.dto';
 import { TokenRequestDto } from './dto/token-request.dto';
 import { TokenResponseDto } from './dto/token-response.dto';
+import {
+  ClientRegistrationRequestDto,
+  ClientRegistrationResponse,
+} from './dto/client-registration.dto';
 import { generateLoginPage } from './templates/login-page.template';
 import { PartnerMetaService } from '../alias/partner-meta.service';
 import { AliasService } from '../alias/alias.service';
@@ -40,8 +48,10 @@ export class AuthController {
   constructor(
     private readonly oauthService: OAuthService,
     private readonly discoveryService: DiscoveryService,
+    private readonly clientRegistrationService: ClientRegistrationService,
     private readonly partnerMetaService: PartnerMetaService,
     private readonly aliasService: AliasService,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -229,33 +239,59 @@ export class AuthController {
       throw new NotFoundException(`Unknown alias '${alias}'`);
     }
 
-    // Parse Basic Auth header if present (ChatGPT MCP client pattern)
-    let clientId: string | undefined;
-    let _clientSecret: string | undefined;
+    let clientId: string | undefined = body.client_id;
+    let clientSecret: string | undefined;
+
     const authHeader = headers.authorization || headers.Authorization;
     if (authHeader && authHeader.startsWith('Basic ')) {
       try {
         const base64Credentials = authHeader.substring(6);
         const credentials = Buffer.from(base64Credentials, 'base64').toString('utf-8');
-        const [id, secret] = credentials.split(':');
-        clientId = id;
-        _clientSecret = secret;
+        const colonIndex = credentials.indexOf(':');
+        if (colonIndex !== -1) {
+          clientId = decodeURIComponent(credentials.substring(0, colonIndex));
+          clientSecret = decodeURIComponent(credentials.substring(colonIndex + 1));
+        }
         this.logger.debug(`Basic Auth parsed: client_id=${clientId}`);
       } catch (error) {
         this.logger.warn(`Failed to parse Basic Auth header: ${error.message}`);
       }
     }
 
-    // Handle authorization_code grant
+    if (body.client_secret) {
+      clientSecret = body.client_secret;
+    }
+
+    const requireRegistration =
+      this.configService.get<string>('REQUIRE_CLIENT_REGISTRATION', 'false') === 'true';
+
+    if (clientId) {
+      const client = await this.clientRegistrationService.authenticateClient(
+        alias,
+        clientId,
+        clientSecret,
+      );
+
+      if (!client && requireRegistration) {
+        throw new UnauthorizedException('Invalid client credentials');
+      }
+
+      if (
+        client &&
+        body.redirect_uri &&
+        !this.clientRegistrationService.validateRedirectUri(client, body.redirect_uri)
+      ) {
+        throw new BadRequestException('redirect_uri does not match registered URIs');
+      }
+    } else if (requireRegistration) {
+      throw new BadRequestException('client_id is required');
+    }
+
     if (body.grant_type === 'authorization_code') {
       if (!body.code) {
         throw new BadRequestException('code is required for authorization_code grant');
       }
 
-      // PKCE `code_verifier` and `redirect_uri` are optional for this implementation
-      // because the underlying IoT API performs the actual token exchange and
-      // does not require those parameters. Accept requests from clients that
-      // don't implement PKCE (e.g., some OAuth clients) to improve compatibility.
       return this.oauthService.exchangeCode(
         projectApiKey,
         body.code,
@@ -265,7 +301,6 @@ export class AuthController {
       );
     }
 
-    // Handle refresh_token grant
     if (body.grant_type === 'refresh_token') {
       if (!body.refresh_token) {
         throw new BadRequestException('refresh_token is required for refresh_token grant');
@@ -277,25 +312,25 @@ export class AuthController {
     throw new BadRequestException('Unsupported grant_type');
   }
 
-  /**
-   * Static Client Registration
-   * Returns static client_id (PoC - no actual registration)
-   */
   @Post('register')
-  @ApiOperation({ summary: 'Static client registration (PoC)' })
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'OAuth 2.0 Dynamic Client Registration (RFC 7591)' })
   @ApiParam({ name: 'alias', description: 'Partner alias' })
-  @ApiResponse({ status: 200, description: 'Client registered' })
-  async register(@Param('alias') alias: string): Promise<any> {
+  @ApiResponse({ status: 201, description: 'Client registered' })
+  @ApiResponse({ status: 400, description: 'Invalid client metadata' })
+  @ApiResponse({ status: 404, description: 'Unknown alias' })
+  async register(
+    @Param('alias') alias: string,
+    @Body() body: ClientRegistrationRequestDto,
+  ): Promise<ClientRegistrationResponse> {
     this.logger.log(`Client registration request for alias: ${alias}`);
 
-    // Return static client_id (PoC)
-    return {
-      client_id: 'web-client-static',
-      client_id_issued_at: Math.floor(Date.now() / 1000),
-      grant_types: ['authorization_code', 'refresh_token'],
-      response_types: ['code'],
-      token_endpoint_auth_method: 'none',
-    };
+    const projectApiKey = await this.aliasService.resolveAlias(alias);
+    if (!projectApiKey) {
+      throw new NotFoundException(`Unknown alias '${alias}'`);
+    }
+
+    return this.clientRegistrationService.registerClient(alias, body);
   }
 
   /**
