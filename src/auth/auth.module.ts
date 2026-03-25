@@ -2,14 +2,16 @@ import { Module } from '@nestjs/common';
 import { AuthController } from './auth.controller';
 import { OAuthService } from './services/oauth.service';
 import { DiscoveryService } from './services/discovery.service';
-import { ClientRepository } from './services/client.repository';
-import { ClientRegistrationService } from './services/client-registration.service';
 import { ProxyModule } from '../proxy/proxy.module';
 
+/**
+ * OAuth 2.1 Authentication Module
+ * Implements OAuth 2.1 authorization flow with Old API orchestration
+ */
 @Module({
   imports: [ProxyModule],
   controllers: [AuthController],
-  providers: [OAuthService, DiscoveryService, ClientRepository, ClientRegistrationService],
-  exports: [OAuthService, DiscoveryService, ClientRegistrationService],
+  providers: [OAuthService, DiscoveryService],
+  exports: [OAuthService, DiscoveryService],
 })
 export class AuthModule {}
