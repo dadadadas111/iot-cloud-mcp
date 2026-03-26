@@ -128,6 +128,19 @@ export class ToolExecutorService {
     };
   }
 
+  private requireValue(value: number | null | undefined, action: string): number {
+    if (value == null) {
+      throw new BadRequestException(`value is required for ${action} action`);
+    }
+    return value;
+  }
+
+  private validateRange(value: number, min: number, max: number, label: string): void {
+    if (value < min || value > max) {
+      throw new BadRequestException(`${label} must be ${min}-${max}. Got: ${value}`);
+    }
+  }
+
   /** Wrap error as MCP CallToolResult with sanitized message */
   private errorResult(error: unknown, includeAuthHint = true): CallToolResult {
     const errorMessage = sanitizeErrorForClient(error);
@@ -606,32 +619,36 @@ export class ToolExecutorService {
         case 'turn_off':
           command = [1, 0];
           break;
-        case 'set_brightness':
-          if (params.value == null) {
-            throw new Error('value is required for set_brightness action');
-          }
-          command = [28, params.value];
+        case 'set_brightness': {
+          const v = this.requireValue(params.value, 'set_brightness');
+          this.validateRange(v, 0, 100, 'Brightness (percent)');
+          command = [28, Math.round(v * 10)];
           break;
-        case 'set_kelvin':
-          if (params.value == null) {
-            throw new Error('value is required for set_kelvin action');
-          }
-          command = [29, params.value];
+        }
+        case 'set_kelvin': {
+          const v = this.requireValue(params.value, 'set_kelvin');
+          this.validateRange(v, 0, 65000, 'Color temperature (Kelvin)');
+          command = [29, Math.round(v)];
           break;
-        case 'set_temperature':
-          if (params.value == null) {
-            throw new Error('value is required for set_temperature action');
-          }
-          command = [20, params.value];
+        }
+        case 'set_temperature': {
+          const v = this.requireValue(params.value, 'set_temperature');
+          this.validateRange(v, 15, 30, 'Temperature (°C)');
+          command = [20, Math.round(v)];
           break;
-        case 'set_mode':
-          if (params.value == null) {
-            throw new Error('value is required for set_mode action');
+        }
+        case 'set_mode': {
+          const v = this.requireValue(params.value, 'set_mode');
+          if (!Number.isInteger(v) || v < 0 || v > 4) {
+            throw new BadRequestException(
+              `Invalid mode: ${v}. Valid modes: 0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN`,
+            );
           }
-          command = [17, params.value];
+          command = [17, v];
           break;
+        }
         default:
-          throw new Error(`Unknown action: ${params.action}`);
+          throw new BadRequestException(`Unknown action: ${params.action}`);
       }
 
       // Use specified elementId or all device elementIds
