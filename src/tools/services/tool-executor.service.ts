@@ -45,6 +45,10 @@ import {
   WIDGET_CONTROL_DEVICE_TOOL,
   WidgetControlDeviceParams,
 } from '../definitions/widget-control-device.tool';
+import {
+  INTERACTIVE_DEVICE_TOOL,
+  InteractiveDeviceParams,
+} from '../definitions/interactive-device.tool';
 import { sanitizeErrorForClient } from '../../common/utils/error.utils';
 
 /** Context for tool execution containing request metadata */
@@ -98,6 +102,8 @@ export class ToolExecutorService {
       this.executeWidgetGetDevice(p as WidgetGetDeviceParams, c),
     [WIDGET_CONTROL_DEVICE_TOOL.name]: (p, c) =>
       this.executeWidgetControlDevice(p as WidgetControlDeviceParams, c),
+    [INTERACTIVE_DEVICE_TOOL.name]: (p, c) =>
+      this.executeWidgetControlDevice(p as InteractiveDeviceParams, c),
   };
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
