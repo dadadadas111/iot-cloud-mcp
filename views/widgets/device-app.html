@@ -1276,11 +1276,9 @@
                   return r && r.structuredContent ? r.structuredContent : r;
                 });
               }
-              return _send('ui/callServerTool', { name: name, arguments: args || {} }).then(
-                function (r) {
-                  return r && r.structuredContent ? r.structuredContent : r;
-                },
-              );
+              return _send('tools/call', { name: name, arguments: args || {} }).then(function (r) {
+                return r && r.structuredContent ? r.structuredContent : r;
+              });
             },
           };
         })();
