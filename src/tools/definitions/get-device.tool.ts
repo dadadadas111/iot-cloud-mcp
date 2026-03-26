@@ -58,6 +58,7 @@ export const GET_DEVICE_TOOL = {
       resourceUri: 'ui://widget/device-app.html',
       visibility: ['model', 'app'],
     },
+    'ui/resourceUri': 'ui://widget/device-app.html',
     'openai/outputTemplate': 'ui://widget/device-app.html',
     'openai/widgetAccessible': true,
     'openai/resultCanProduceWidget': true,
