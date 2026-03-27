@@ -20,6 +20,9 @@ import {
   IotGroup,
   IotLocationStateEntry,
   IotControlPayload,
+  IotSmart,
+  IotSmartCmd,
+  IotSmartActivateResponse,
 } from '../dto/iot-api-response.dto';
 
 /**
@@ -557,6 +560,99 @@ export class IotApiService {
       return response.data;
     } catch (error) {
       this.logDetailedError('Control device', error);
+      throw error;
+    }
+  }
+
+  // ─── Smart (Scene/Automation) ──────────────────────────────────────────────
+
+  async listSmarts(projectApiKey: string, userId: string): Promise<IotSmart[]> {
+    try {
+      logProxyCall('Listing smarts', { userId });
+
+      const endpoint = `${this.baseUrl}/iot-core/smart/${userId}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<IotSmart[]>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Smarts listed successfully', { count: response.data?.length || 0 });
+      return response.data;
+    } catch (error) {
+      this.logDetailedError('List smarts', error);
+      throw error;
+    }
+  }
+
+  async getSmart(projectApiKey: string, userId: string, uuid: string): Promise<IotSmart> {
+    try {
+      logProxyCall('Getting smart', { userId, uuid });
+
+      const endpoint = `${this.baseUrl}/iot-core/smart/${userId}/${uuid}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<IotSmart>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Smart fetched successfully', { uuid });
+      return response.data;
+    } catch (error) {
+      this.logDetailedError('Get smart', error);
+      throw error;
+    }
+  }
+
+  async activateSmart(
+    projectApiKey: string,
+    smid: number,
+    locId: string,
+  ): Promise<IotSmartActivateResponse> {
+    try {
+      logProxyCall('Activating smart', { smid, locId });
+
+      const endpoint = `${this.baseUrl}/iot-core/smart/active`;
+
+      const response = await firstValueFrom(
+        this.httpService.post<IotSmartActivateResponse>(
+          endpoint,
+          { smid, locId },
+          { headers: this.getHeaders(projectApiKey) },
+        ),
+      );
+
+      logProxyCall('Smart activated successfully', { smid });
+      return response.data;
+    } catch (error) {
+      this.logDetailedError('Activate smart', error);
+      throw error;
+    }
+  }
+
+  async listSmartCmds(
+    projectApiKey: string,
+    userId: string,
+    smartId?: string,
+  ): Promise<IotSmartCmd[]> {
+    try {
+      logProxyCall('Listing smart commands', { userId, smartId });
+
+      const params = smartId ? `?smartId=${smartId}` : '';
+      const endpoint = `${this.baseUrl}/iot-core/smartcmd/${userId}${params}`;
+
+      const response = await firstValueFrom(
+        this.httpService.get<IotSmartCmd[]>(endpoint, {
+          headers: this.getHeaders(projectApiKey),
+        }),
+      );
+
+      logProxyCall('Smart commands listed successfully', { count: response.data?.length || 0 });
+      return response.data;
+    } catch (error) {
+      this.logDetailedError('List smart commands', error);
       throw error;
     }
   }

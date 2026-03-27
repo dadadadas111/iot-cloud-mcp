@@ -25,6 +25,10 @@ import { WIDGET_LIST_DEVICES_TOOL } from '../definitions/widget-list-devices.too
 import { WIDGET_GET_DEVICE_TOOL } from '../definitions/widget-get-device.tool';
 import { WIDGET_CONTROL_DEVICE_TOOL } from '../definitions/widget-control-device.tool';
 import { INTERACTIVE_DEVICE_TOOL } from '../definitions/interactive-device.tool';
+import { LIST_SMARTS_TOOL } from '../definitions/list-smarts.tool';
+import { GET_SMART_TOOL } from '../definitions/get-smart.tool';
+import { ACTIVATE_SMART_TOOL } from '../definitions/activate-smart.tool';
+import { LIST_SMART_CMDS_TOOL } from '../definitions/list-smart-cmds.tool';
 
 /** All tool definitions in registration order */
 const ALL_TOOL_DEFINITIONS = [
@@ -46,6 +50,10 @@ const ALL_TOOL_DEFINITIONS = [
   WIDGET_GET_DEVICE_TOOL,
   WIDGET_CONTROL_DEVICE_TOOL,
   INTERACTIVE_DEVICE_TOOL,
+  LIST_SMARTS_TOOL,
+  GET_SMART_TOOL,
+  ACTIVATE_SMART_TOOL,
+  LIST_SMART_CMDS_TOOL,
 ] as const;
 
 /**

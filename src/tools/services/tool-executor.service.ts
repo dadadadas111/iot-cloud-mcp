@@ -49,6 +49,10 @@ import {
   INTERACTIVE_DEVICE_TOOL,
   InteractiveDeviceParams,
 } from '../definitions/interactive-device.tool';
+import { LIST_SMARTS_TOOL, ListSmartsParams } from '../definitions/list-smarts.tool';
+import { GET_SMART_TOOL, GetSmartParams } from '../definitions/get-smart.tool';
+import { ACTIVATE_SMART_TOOL, ActivateSmartParams } from '../definitions/activate-smart.tool';
+import { LIST_SMART_CMDS_TOOL, ListSmartCmdsParams } from '../definitions/list-smart-cmds.tool';
 import { sanitizeErrorForClient } from '../../common/utils/error.utils';
 
 /** Context for tool execution containing request metadata */
@@ -104,6 +108,10 @@ export class ToolExecutorService {
       this.executeWidgetControlDevice(p as WidgetControlDeviceParams, c),
     [INTERACTIVE_DEVICE_TOOL.name]: (p, c) =>
       this.executeWidgetControlDevice(p as InteractiveDeviceParams, c),
+    [LIST_SMARTS_TOOL.name]: (p, c) => this.executeListSmarts(p as ListSmartsParams, c),
+    [GET_SMART_TOOL.name]: (p, c) => this.executeGetSmart(p as GetSmartParams, c),
+    [ACTIVATE_SMART_TOOL.name]: (p, c) => this.executeActivateSmart(p as ActivateSmartParams, c),
+    [LIST_SMART_CMDS_TOOL.name]: (p, c) => this.executeListSmartCmds(p as ListSmartCmdsParams, c),
   };
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -842,6 +850,94 @@ export class ToolExecutorService {
         content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         structuredContent: result as Record<string, unknown>,
       };
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  // ─── Smart (Scene/Automation) Handlers ────────────────────────────────────────
+
+  private async executeListSmarts(
+    _params: ListSmartsParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const smarts = await this.iotApiService.listSmarts(projectApiKey, userId);
+
+      const slimSmarts = smarts.map((smart) => ({
+        uuid: smart.uuid,
+        label: smart.label,
+        smid: smart.smid,
+        locId: smart.locId,
+        fav: smart.fav,
+      }));
+
+      return this.successResult({ total: slimSmarts.length, smarts: slimSmarts });
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  private async executeGetSmart(
+    params: GetSmartParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const smart = await this.iotApiService.getSmart(projectApiKey, userId, params.uuid);
+
+      return this.successResult({
+        uuid: smart.uuid,
+        label: smart.label,
+        smid: smart.smid,
+        locId: smart.locId,
+        fav: smart.fav,
+      });
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  private async executeActivateSmart(
+    params: ActivateSmartParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { projectApiKey } = this.extractUserContext(context);
+      const result = await this.iotApiService.activateSmart(
+        projectApiKey,
+        params.smid,
+        params.locId,
+      );
+
+      return this.successResult(result);
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  private async executeListSmartCmds(
+    params: ListSmartCmdsParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const cmds = await this.iotApiService.listSmartCmds(
+        projectApiKey,
+        userId,
+        params.smartId ?? undefined,
+      );
+
+      const slimCmds = cmds.map((cmd) => ({
+        uuid: cmd.uuid,
+        smartId: cmd.smartId,
+        targetId: cmd.targetId,
+        target: cmd.target,
+        cmds: cmd.cmds,
+      }));
+
+      return this.successResult({ total: slimCmds.length, commands: slimCmds });
     } catch (error) {
       return this.errorResult(error);
     }

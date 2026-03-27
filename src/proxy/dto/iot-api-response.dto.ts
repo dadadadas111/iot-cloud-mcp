@@ -155,3 +155,41 @@ export interface IotControlPayload {
   rootUuid: string;
   protocolCtl: number;
 }
+
+// ─── Smart (Scene/Automation) Types ───────────────────────────────────────────
+
+/**
+ * Smart (scene/automation) from IoT API (/iot-core/smart/{userId})
+ * Pre-configured automation rule bundling device commands under a single activatable action
+ */
+export interface IotSmart {
+  uuid: string;
+  label: string;
+  smid: number;
+  type: number;
+  subType: number;
+  locId: string;
+  fav: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Smart command from IoT API (/iot-core/smartcmd/{userId})
+ * Individual device command within a smart
+ */
+export interface IotSmartCmd {
+  uuid: string;
+  smartId: string;
+  targetId: string;
+  target: number;
+  cmds: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/**
+ * Activate smart response from IoT API (POST /iot-core/smart/active)
+ */
+export interface IotSmartActivateResponse {
+  success: boolean;
+  message: string;
+}
