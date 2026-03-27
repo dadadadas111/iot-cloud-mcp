@@ -5,9 +5,10 @@
  */
 
 import { IotDevice, IotLocation, IotGroup } from '../../proxy/dto/iot-api-response.dto';
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, forwardRef } from '@nestjs/common';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
+import { SchedulerService } from '../../scheduler/scheduler.service';
 import { decodeJwt, extractBearerToken, getUserIdFromToken } from '../../common/utils/jwt.utils';
 import { decodeProductId, resolveDeviceType } from '../../common/utils/product.utils';
 import { FETCH_USER_TOOL, FetchUserParams } from '../definitions/fetch-user.tool';
@@ -53,12 +54,21 @@ import { LIST_SMARTS_TOOL, ListSmartsParams } from '../definitions/list-smarts.t
 import { GET_SMART_TOOL, GetSmartParams } from '../definitions/get-smart.tool';
 import { ACTIVATE_SMART_TOOL, ActivateSmartParams } from '../definitions/activate-smart.tool';
 import { LIST_SMART_CMDS_TOOL, ListSmartCmdsParams } from '../definitions/list-smart-cmds.tool';
+import {
+  LIST_SCHEDULED_JOBS_TOOL,
+  ListScheduledJobsParams,
+} from '../definitions/list-scheduled-jobs.tool';
+import {
+  CANCEL_SCHEDULED_JOB_TOOL,
+  CancelScheduledJobParams,
+} from '../definitions/cancel-scheduled-job.tool';
 import { sanitizeErrorForClient } from '../../common/utils/error.utils';
 
 /** Context for tool execution containing request metadata */
 interface ToolContext {
   authorization?: string;
   projectApiKey?: string;
+  userId?: string;
   meta?: Record<string, unknown>;
 }
 
@@ -75,7 +85,11 @@ class AuthRequiredError extends Error {
  */
 @Injectable()
 export class ToolExecutorService {
-  constructor(private iotApiService: IotApiService) {}
+  constructor(
+    private iotApiService: IotApiService,
+    @Inject(forwardRef(() => SchedulerService))
+    private schedulerService: SchedulerService,
+  ) {}
 
   /** Tool name → handler map for O(1) dispatch */
   private readonly toolHandlers: Record<
@@ -112,12 +126,18 @@ export class ToolExecutorService {
     [GET_SMART_TOOL.name]: (p, c) => this.executeGetSmart(p as GetSmartParams, c),
     [ACTIVATE_SMART_TOOL.name]: (p, c) => this.executeActivateSmart(p as ActivateSmartParams, c),
     [LIST_SMART_CMDS_TOOL.name]: (p, c) => this.executeListSmartCmds(p as ListSmartCmdsParams, c),
+    [LIST_SCHEDULED_JOBS_TOOL.name]: (p, c) =>
+      this.executeListScheduledJobs(p as ListScheduledJobsParams, c),
+    [CANCEL_SCHEDULED_JOB_TOOL.name]: (p, c) =>
+      this.executeCancelScheduledJob(p as CancelScheduledJobParams, c),
   };
-
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   /** Extract userId from JWT in authorization header. Throws AuthRequiredError if missing. */
   private extractUserContext(context: ToolContext): { userId: string; projectApiKey: string } {
+    if (context.userId) {
+      return { userId: context.userId, projectApiKey: context.projectApiKey || 'unknown' };
+    }
     if (!context.authorization) {
       throw new AuthRequiredError();
     }
@@ -241,7 +261,24 @@ export class ToolExecutorService {
     if (!handler) {
       throw new BadRequestException(`Unknown tool: ${toolName}`);
     }
-    return handler(params, context);
+
+    const { delay, executeAt, ...toolParams } = params as Record<string, unknown> & {
+      delay?: number;
+      executeAt?: string;
+    };
+
+    if (delay !== undefined || executeAt !== undefined) {
+      return this.schedulerService.schedule({
+        toolName,
+        params: toolParams,
+        delay,
+        executeAt,
+        authorization: context.authorization || '',
+        projectApiKey: context.projectApiKey || 'unknown',
+      });
+    }
+
+    return handler(toolParams, context);
   }
 
   // ─── Tool Handlers ──────────────────────────────────────────────────────────
@@ -938,6 +975,34 @@ export class ToolExecutorService {
       }));
 
       return this.successResult({ total: slimCmds.length, commands: slimCmds });
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  // ─── Scheduler Management Handlers ──────────────────────────────────────────
+
+  private async executeListScheduledJobs(
+    _params: ListScheduledJobsParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const jobs = await this.schedulerService.listJobs(userId, projectApiKey);
+      return this.successResult({ total: jobs.length, jobs });
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  private async executeCancelScheduledJob(
+    params: CancelScheduledJobParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const result = await this.schedulerService.cancelJob(params.jobId, userId, projectApiKey);
+      return this.successResult(result);
     } catch (error) {
       return this.errorResult(error);
     }

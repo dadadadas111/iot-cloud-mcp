@@ -32,7 +32,16 @@ Smarts (Scenes/Automations):
   3. If multiple matches: prefer fav: true smarts, or ask the user which one.
   4. If no match: show available smarts so the user can pick.
 - To preview what a smart will do before activating: call list_smart_cmds with smartId, then cross-reference targetId with known devices.
-- You cannot create or edit smarts — direct the user to the ${brand} app for that.`;
+- You cannot create or edit smarts — direct the user to the ${brand} app for that.
+
+Scheduling:
+- Any action tool (control_device, control_device_simple, activate_smart, etc.) can be scheduled for later execution.
+- Add delay (seconds) for relative timing: "5 phút nữa" → delay: 300
+- Add executeAt (ISO 8601 with timezone) for absolute timing: "10h sáng mai" → executeAt: "2026-03-28T10:00:00+07:00"
+- Cannot use both delay and executeAt on the same call.
+- Scheduled tools return a jobId. Use list_scheduled_jobs to check status, cancel_scheduled_job to cancel.
+- Maximum schedule horizon: 7 days. Jobs persist across server restarts.
+- Read-only tools (list_*, get_*) cannot be scheduled — only action/mutation tools.`;
 }
 
 /**
