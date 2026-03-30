@@ -27,6 +27,8 @@ import { LIST_SMART_CMDS_TOOL } from '../definitions/list-smart-cmds.tool';
 import { LIST_SCHEDULED_JOBS_TOOL } from '../definitions/list-scheduled-jobs.tool';
 import { CANCEL_SCHEDULED_JOB_TOOL } from '../definitions/cancel-scheduled-job.tool';
 
+type ToolDefinition = (typeof ALL_TOOL_DEFINITIONS)[number];
+
 const ALL_TOOL_DEFINITIONS = [
   FETCH_USER_TOOL,
   SEARCH_TOOL,
@@ -56,6 +58,24 @@ const ALL_TOOL_DEFINITIONS = [
 
 const NON_SCHEDULABLE_TOOLS = new Set(['cancel_scheduled_job']);
 
+function getToolAnnotations(tool: ToolDefinition) {
+  const metadata = tool.metadata as {
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+
+  return {
+    ...(metadata.readOnlyHint !== undefined ? { readOnlyHint: metadata.readOnlyHint } : {}),
+    ...(metadata.destructiveHint !== undefined
+      ? { destructiveHint: metadata.destructiveHint }
+      : {}),
+    ...(metadata.idempotentHint !== undefined ? { idempotentHint: metadata.idempotentHint } : {}),
+    ...(metadata.openWorldHint !== undefined ? { openWorldHint: metadata.openWorldHint } : {}),
+  };
+}
+
 @Injectable()
 export class ToolRegistryService {
   constructor(private toolExecutor: ToolExecutorService) {}
@@ -72,6 +92,7 @@ export class ToolRegistryService {
         {
           description: tool.metadata.description,
           inputSchema: schema,
+          annotations: getToolAnnotations(tool),
           ...('_meta' in tool && tool._meta ? { _meta: tool._meta } : {}),
         },
         async (params: Record<string, unknown>, extra) => {

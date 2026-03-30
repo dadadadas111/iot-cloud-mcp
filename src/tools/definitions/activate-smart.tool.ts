@@ -10,7 +10,7 @@ export type ActivateSmartParams = z.infer<typeof ActivateSmartParamsSchema>;
 export const ACTIVATE_SMART_TOOL = {
   name: 'activate_smart',
   description:
-    'Activate a smart (scene/automation). Sends MQTT commands to all devices in the smart. Fire-and-forget, no undo. Use list_smarts first to find smid and locId.',
+    'Activate a user-created smart (scene/automation) by smid and locId. This runs the preconfigured actions in that smart. Use list_smarts first to find the correct smart.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -28,7 +28,7 @@ export const ACTIVATE_SMART_TOOL = {
   metadata: {
     name: 'activate_smart',
     description:
-      'Activate a smart (scene/automation). Sends MQTT commands to all devices in the smart. Fire-and-forget, no undo. Use list_smarts first to find smid and locId.',
+      'Activate a user-created smart (scene/automation) by smid and locId. This runs the preconfigured actions in that smart. Use list_smarts first to find the correct smart.',
     readOnlyHint: false,
     securitySchemes: {
       oauth2: {
