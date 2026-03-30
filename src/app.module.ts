@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { HttpModule } from '@nestjs/axios';
+import { BullModule } from '@nestjs/bullmq';
 import { HealthController } from './health.controller';
 import { CommonModule } from './common/common.module';
 import { ProxyModule } from './proxy/proxy.module';
@@ -13,6 +14,7 @@ import { McpModule } from './mcp/mcp.module';
 import { RedisModule } from './redis/redis.module';
 import { WidgetsModule } from './widgets/widgets.module';
 import { AliasModule } from './alias/alias.module';
+import { SchedulerModule } from './scheduler/scheduler.module';
 
 @Module({
   imports: [
@@ -43,6 +45,20 @@ import { AliasModule } from './alias/alias.module';
       maxRedirects: 5,
     }),
 
+    // BullMQ (job queue for scheduled tool execution)
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: {
+          host: config.get<string>('REDIS_HOST', 'localhost'),
+          port: config.get<number>('REDIS_PORT', 6379),
+          password: config.get<string>('REDIS_PASSWORD') || undefined,
+          db: config.get<number>('REDIS_DB', 0),
+        },
+      }),
+    }),
+
     // Shared utilities
     CommonModule,
 
@@ -69,6 +85,9 @@ import { AliasModule } from './alias/alias.module';
 
     // MCP Protocol
     McpModule,
+
+    // Tool Scheduler (delayed/scheduled tool execution)
+    SchedulerModule,
   ],
   controllers: [HealthController],
   providers: [

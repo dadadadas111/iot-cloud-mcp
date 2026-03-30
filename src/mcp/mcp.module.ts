@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { McpController } from './mcp.controller';
+import { McpAuthController } from './mcp-auth.controller';
 import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
 import { RedisSessionRepository } from './services/redis-session.repository';
@@ -27,7 +28,7 @@ import { CommonModule } from '../common/common.module';
     AuthModule, // For JWT validation
     CommonModule, // For shared utilities and decorators
   ],
-  controllers: [McpController],
+  controllers: [McpAuthController, McpController],
   providers: [SessionManagerService, McpServerFactory, RedisSessionRepository],
   exports: [SessionManagerService, McpServerFactory, RedisSessionRepository],
 })

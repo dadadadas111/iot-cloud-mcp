@@ -1180,6 +1180,108 @@
         var _currentData = null;
         var _listPage = 0;
         var LIST_PAGE_SIZE = 10;
+        /* ── Cross-client MCP Apps Bridge ────────────────── */
+        var _bridge = (function () {
+          var _id = 0;
+          var _pending = {};
+          var _handlers = {};
+          var _hostCtx = null;
+          var _connected = false;
+
+          window.addEventListener('message', function (event) {
+            var msg = event.data;
+            if (!msg || typeof msg !== 'object') return;
+            if (msg.jsonrpc === '2.0' && msg.id != null && _pending[msg.id]) {
+              var cb = _pending[msg.id];
+              delete _pending[msg.id];
+              if (msg.error) cb.reject(msg.error);
+              else cb.resolve(msg.result);
+              return;
+            }
+            if (msg.jsonrpc === '2.0' && msg.method) {
+              var p = msg.params || {};
+              if (msg.method === 'ui/notifications/tool-result') {
+                var d =
+                  p.structuredContent ||
+                  (p.content && p.content[0] && p.content[0].text
+                    ? (function () {
+                        try {
+                          return JSON.parse(p.content[0].text);
+                        } catch (e) {
+                          return null;
+                        }
+                      })()
+                    : null);
+                if (d && _handlers.ontoolresult) _handlers.ontoolresult(d);
+              } else if (msg.method === 'ui/notifications/host-context-changed') {
+                _hostCtx = p;
+                if (_handlers.onhostcontextchanged) _handlers.onhostcontextchanged(p);
+              }
+              return;
+            }
+            if (msg.type === 'tool-result') {
+              var d2 = msg.structuredContent || msg;
+              if (_handlers.ontoolresult) _handlers.ontoolresult(d2);
+            }
+          });
+
+          function _send(method, params) {
+            var id = ++_id;
+            return new Promise(function (resolve, reject) {
+              _pending[id] = { resolve: resolve, reject: reject };
+              window.parent.postMessage(
+                { jsonrpc: '2.0', method: method, params: params || {}, id: id },
+                '*',
+              );
+            });
+          }
+
+          return {
+            on: function (evt, fn) {
+              _handlers[evt] = fn;
+            },
+            hostContext: function () {
+              return _hostCtx;
+            },
+            isConnected: function () {
+              return _connected;
+            },
+
+            connect: function () {
+              if (window === window.parent) {
+                return Promise.resolve(null);
+              }
+              return _send('ui/initialize', {
+                appName: 'device-app',
+                appVersion: '1.0.0',
+                capabilities: {},
+              })
+                .then(function (result) {
+                  _connected = true;
+                  _hostCtx = result && result.hostContext ? result.hostContext : {};
+                  window.parent.postMessage(
+                    { jsonrpc: '2.0', method: 'ui/notifications/initialized' },
+                    '*',
+                  );
+                  return _hostCtx;
+                })
+                .catch(function () {
+                  return null;
+                });
+            },
+
+            callServerTool: function (name, args) {
+              if (!_connected && window.openai && typeof window.openai.callTool === 'function') {
+                return window.openai.callTool(name, args).then(function (r) {
+                  return r && r.structuredContent ? r.structuredContent : r;
+                });
+              }
+              return _send('tools/call', { name: name, arguments: args || {} }).then(function (r) {
+                return r && r.structuredContent ? r.structuredContent : r;
+              });
+            },
+          };
+        })();
         /* Timeout to show empty state if no data arrives within 8s */
         var _initTimer = setTimeout(function () {
           if (_currentView === null) renderView('list', { _view: 'list', total: 0, devices: [] });
@@ -1213,77 +1315,54 @@
         function goBack() {
           if (_history.length === 0) return;
           var prev = _history.pop();
-          if (!window.openai || typeof window.openai.callTool !== 'function') {
-            renderView(prev.view, prev.data);
-            return;
-          }
-          /* Refetch fresh data so state changes from control actions are reflected */
           if (prev.view === 'dashboard' && prev.data && prev.data.uuid) {
             showNavLoading();
-            var p1 = window.openai.callTool('_widget_get_device', { uuid: prev.data.uuid });
-            if (p1 && typeof p1.then === 'function') {
-              p1.then(function (result) {
+            _bridge
+              .callServerTool('_widget_get_device', { uuid: prev.data.uuid })
+              .then(function (data) {
                 hideNavLoading();
-                var fresh = result && result.structuredContent ? result.structuredContent : result;
-                renderView('dashboard', fresh);
-              }).catch(function () {
+                renderView('dashboard', data);
+              })
+              .catch(function () {
                 hideNavLoading();
                 renderView(prev.view, prev.data);
               });
-            } else {
-              hideNavLoading();
-              renderView(prev.view, prev.data);
-            }
           } else if (prev.view === 'list') {
             showNavLoading();
-            var p2 = window.openai.callTool('_widget_list_devices', {});
-            if (p2 && typeof p2.then === 'function') {
-              p2.then(function (result) {
+            _bridge
+              .callServerTool('_widget_list_devices', {})
+              .then(function (data) {
                 hideNavLoading();
-                var fresh = result && result.structuredContent ? result.structuredContent : result;
-                renderView('list', fresh);
-              }).catch(function () {
+                renderView('list', data);
+              })
+              .catch(function () {
                 hideNavLoading();
                 renderView(prev.view, prev.data);
               });
-            } else {
-              hideNavLoading();
-              renderView(prev.view, prev.data);
-            }
           } else if (prev.view === 'location' && prev.data && prev.data.locationId) {
             showNavLoading();
-            var p3 = window.openai.callTool('_widget_list_devices', {
-              locationId: prev.data.locationId,
-            });
-            if (p3 && typeof p3.then === 'function') {
-              p3.then(function (result) {
+            _bridge
+              .callServerTool('_widget_list_devices', { locationId: prev.data.locationId })
+              .then(function (data) {
                 hideNavLoading();
-                var fresh = result && result.structuredContent ? result.structuredContent : result;
-                renderView('location', fresh);
-              }).catch(function () {
+                renderView('location', data);
+              })
+              .catch(function () {
                 hideNavLoading();
                 renderView(prev.view, prev.data);
               });
-            } else {
-              hideNavLoading();
-              renderView(prev.view, prev.data);
-            }
           } else if (prev.view === 'group' && prev.data && prev.data.groupId) {
             showNavLoading();
-            var p4 = window.openai.callTool('_widget_list_devices', { groupId: prev.data.groupId });
-            if (p4 && typeof p4.then === 'function') {
-              p4.then(function (result) {
+            _bridge
+              .callServerTool('_widget_list_devices', { groupId: prev.data.groupId })
+              .then(function (data) {
                 hideNavLoading();
-                var fresh = result && result.structuredContent ? result.structuredContent : result;
-                renderView('group', fresh);
-              }).catch(function () {
+                renderView('group', data);
+              })
+              .catch(function () {
                 hideNavLoading();
                 renderView(prev.view, prev.data);
               });
-            } else {
-              hideNavLoading();
-              renderView(prev.view, prev.data);
-            }
           } else {
             renderView(prev.view, prev.data);
           }
@@ -1300,22 +1379,17 @@
         }
 
         function callToolAndNavigate(tool, args, targetView) {
-          if (window.openai && typeof window.openai.callTool === 'function') {
-            showNavLoading();
-            window.openai
-              .callTool(tool, args)
-              .then(function (result) {
-                hideNavLoading();
-                var data = result && result.structuredContent ? result.structuredContent : result;
-                navigate(targetView, data);
-              })
-              .catch(function (err) {
-                hideNavLoading();
-                console.error('[DDW] callTool failed', err);
-              });
-          } else {
-            console.log('[DDW] [Preview] callTool', tool, args, '->', targetView);
-          }
+          showNavLoading();
+          _bridge
+            .callServerTool(tool, args)
+            .then(function (data) {
+              hideNavLoading();
+              navigate(targetView, data);
+            })
+            .catch(function (err) {
+              hideNavLoading();
+              console.error('[DDW] callServerTool failed', err);
+            });
         }
 
         function getBackButtonHtml() {
@@ -1354,17 +1428,12 @@
             if (nav) nav.classList.remove('ddw-dark');
           }
         }
+        _bridge.on('onhostcontextchanged', function (ctx) {
+          if (ctx && ctx.theme) applyTheme(ctx.theme);
+        });
         if (window.openai && window.openai.theme) {
           applyTheme(window.openai.theme);
         }
-        window.addEventListener(
-          'openai:set_globals',
-          function (event) {
-            var globals = event.detail && event.detail.globals;
-            if (globals && globals.theme) applyTheme(globals.theme);
-          },
-          { passive: true },
-        );
 
         /* ── Device Icons ──────────────────────────────────── */
         var DEVICE_ICONS = {
@@ -2322,55 +2391,28 @@
           var args = { uuid: uuid, action: action, elementId: elementId };
           if (value != null) args.value = value;
 
-          if (window.openai && typeof window.openai.callTool === 'function') {
-            try {
-              var p = window.openai.callTool('control_device_simple', args);
-              if (p && typeof p.then === 'function') {
-                p.then(function () {
-                  if (rowEl) rowEl.classList.remove('ddw-sending');
-                }).catch(function () {
-                  if (rowEl) rowEl.classList.remove('ddw-sending');
-                });
-              } else {
-                setTimeout(function () {
-                  if (rowEl) rowEl.classList.remove('ddw-sending');
-                }, 1500);
-              }
-            } catch (e) {
+          _bridge
+            .callServerTool('control_device_simple', args)
+            .then(function () {
               if (rowEl) rowEl.classList.remove('ddw-sending');
-            }
-          } else {
-            setTimeout(function () {
+            })
+            .catch(function () {
               if (rowEl) rowEl.classList.remove('ddw-sending');
-            }, 800);
-          }
+            });
         }
 
         function sendRawControl(uuid, elementId, command, rowEl) {
           if (rowEl) rowEl.classList.add('ddw-sending');
           var args = { uuid: uuid, elementIds: [elementId], command: command };
-          if (window.openai && typeof window.openai.callTool === 'function') {
-            try {
-              var p = window.openai.callTool('control_device', args);
-              if (p && typeof p.then === 'function') {
-                p.then(function () {
-                  if (rowEl) rowEl.classList.remove('ddw-sending');
-                }).catch(function () {
-                  if (rowEl) rowEl.classList.remove('ddw-sending');
-                });
-              } else {
-                setTimeout(function () {
-                  if (rowEl) rowEl.classList.remove('ddw-sending');
-                }, 1500);
-              }
-            } catch (e) {
+
+          _bridge
+            .callServerTool('control_device', args)
+            .then(function () {
               if (rowEl) rowEl.classList.remove('ddw-sending');
-            }
-          } else {
-            setTimeout(function () {
+            })
+            .catch(function () {
               if (rowEl) rowEl.classList.remove('ddw-sending');
-            }, 800);
-          }
+            });
         }
 
         var _sliderTimers = {};
@@ -2592,51 +2634,30 @@
         );
 
         /* ── Initialization & Data Bridge ──────────────────── */
-        if (window.openai && window.openai.toolOutput) {
-          renderView(null, window.openai.toolOutput);
-        }
+        _bridge.on('ontoolresult', function (data) {
+          renderView(null, data);
+        });
 
-        window.addEventListener(
-          'message',
-          function (event) {
-            if (event.source !== window.parent) return;
-            var msg = event.data;
-            if (!msg || typeof msg !== 'object') return;
-            if (msg.jsonrpc === '2.0' && msg.method === 'ui/notifications/tool-result') {
-              var sc = msg.params && msg.params.structuredContent;
-              if (sc) {
-                renderView(null, sc);
-              } else {
-                /* Fallback: try parsing content[0].text as JSON (non-ChatGPT clients) */
-                var contentArr = msg.params && msg.params.content;
-                var textItem = null;
-                if (Array.isArray(contentArr)) {
-                  for (var i = 0; i < contentArr.length; i++) {
-                    if (contentArr[i] && contentArr[i].type === 'text') {
-                      textItem = contentArr[i];
-                      break;
-                    }
-                  }
-                }
-                if (textItem && textItem.text) {
-                  try {
-                    renderView(null, JSON.parse(textItem.text));
-                  } catch (e) {}
-                }
-              }
-            }
-            if (msg.type === 'tool-result' && msg.structuredContent) {
-              renderView(null, msg.structuredContent);
-            }
-          },
-          { passive: true },
-        );
+        _bridge.connect().then(function (ctx) {
+          if (ctx && ctx.theme) applyTheme(ctx.theme);
+          if (ctx && ctx.locale) {
+            document.documentElement.lang = ctx.locale;
+          }
+        });
+
+        /* Legacy ChatGPT: read toolOutput if bridge didn't connect */
+        setTimeout(function () {
+          if (!_bridge.isConnected() && window.openai && window.openai.toolOutput) {
+            renderView(null, window.openai.toolOutput);
+          }
+        }, 200);
 
         window.addEventListener(
           'openai:set_globals',
           function (event) {
             var globals = event.detail && event.detail.globals;
             if (globals && globals.toolOutput) renderView(null, globals.toolOutput);
+            if (globals && globals.theme) applyTheme(globals.theme);
           },
           { passive: true },
         );

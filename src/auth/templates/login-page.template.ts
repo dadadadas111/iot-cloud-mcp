@@ -22,6 +22,7 @@ export function generateLoginPage(
   },
   meta?: AliasMeta,
   error?: string,
+  loginActionUrl?: string,
 ): string {
   const title = meta?.loginTitle ?? meta?.brandName ?? 'IoT Cloud';
   const logo = meta?.loginLogo ?? '🔐';
@@ -130,7 +131,7 @@ export function generateLoginPage(
         </div>
         
         ${error ? `<div style="background:#ffe6e6;border:1px solid #ffb3b3;color:#8a1f1f;padding:12px;border-radius:6px;margin-bottom:16px;">${error}</div>` : ''}
-        <form method="POST" action="/auth/${projectApiKey}/login">
+        <form method="POST" action="${loginActionUrl ?? `/auth/${projectApiKey}/login`}">
             <div class="form-group">
                 <label for="email">Email</label>
                 <input 

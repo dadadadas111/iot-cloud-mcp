@@ -5,9 +5,10 @@
  */
 
 import { IotDevice, IotLocation, IotGroup } from '../../proxy/dto/iot-api-response.dto';
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, forwardRef } from '@nestjs/common';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
+import { SchedulerService } from '../../scheduler/scheduler.service';
 import { decodeJwt, extractBearerToken, getUserIdFromToken } from '../../common/utils/jwt.utils';
 import { decodeProductId, resolveDeviceType } from '../../common/utils/product.utils';
 import { FETCH_USER_TOOL, FetchUserParams } from '../definitions/fetch-user.tool';
@@ -45,12 +46,29 @@ import {
   WIDGET_CONTROL_DEVICE_TOOL,
   WidgetControlDeviceParams,
 } from '../definitions/widget-control-device.tool';
+import {
+  INTERACTIVE_DEVICE_TOOL,
+  InteractiveDeviceParams,
+} from '../definitions/interactive-device.tool';
+import { LIST_SMARTS_TOOL, ListSmartsParams } from '../definitions/list-smarts.tool';
+import { GET_SMART_TOOL, GetSmartParams } from '../definitions/get-smart.tool';
+import { ACTIVATE_SMART_TOOL, ActivateSmartParams } from '../definitions/activate-smart.tool';
+import { LIST_SMART_CMDS_TOOL, ListSmartCmdsParams } from '../definitions/list-smart-cmds.tool';
+import {
+  LIST_SCHEDULED_JOBS_TOOL,
+  ListScheduledJobsParams,
+} from '../definitions/list-scheduled-jobs.tool';
+import {
+  CANCEL_SCHEDULED_JOB_TOOL,
+  CancelScheduledJobParams,
+} from '../definitions/cancel-scheduled-job.tool';
 import { sanitizeErrorForClient } from '../../common/utils/error.utils';
 
 /** Context for tool execution containing request metadata */
 interface ToolContext {
   authorization?: string;
   projectApiKey?: string;
+  userId?: string;
   meta?: Record<string, unknown>;
 }
 
@@ -67,7 +85,11 @@ class AuthRequiredError extends Error {
  */
 @Injectable()
 export class ToolExecutorService {
-  constructor(private iotApiService: IotApiService) {}
+  constructor(
+    private iotApiService: IotApiService,
+    @Inject(forwardRef(() => SchedulerService))
+    private schedulerService: SchedulerService,
+  ) {}
 
   /** Tool name → handler map for O(1) dispatch */
   private readonly toolHandlers: Record<
@@ -98,12 +120,24 @@ export class ToolExecutorService {
       this.executeWidgetGetDevice(p as WidgetGetDeviceParams, c),
     [WIDGET_CONTROL_DEVICE_TOOL.name]: (p, c) =>
       this.executeWidgetControlDevice(p as WidgetControlDeviceParams, c),
+    [INTERACTIVE_DEVICE_TOOL.name]: (p, c) =>
+      this.executeWidgetControlDevice(p as InteractiveDeviceParams, c),
+    [LIST_SMARTS_TOOL.name]: (p, c) => this.executeListSmarts(p as ListSmartsParams, c),
+    [GET_SMART_TOOL.name]: (p, c) => this.executeGetSmart(p as GetSmartParams, c),
+    [ACTIVATE_SMART_TOOL.name]: (p, c) => this.executeActivateSmart(p as ActivateSmartParams, c),
+    [LIST_SMART_CMDS_TOOL.name]: (p, c) => this.executeListSmartCmds(p as ListSmartCmdsParams, c),
+    [LIST_SCHEDULED_JOBS_TOOL.name]: (p, c) =>
+      this.executeListScheduledJobs(p as ListScheduledJobsParams, c),
+    [CANCEL_SCHEDULED_JOB_TOOL.name]: (p, c) =>
+      this.executeCancelScheduledJob(p as CancelScheduledJobParams, c),
   };
-
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
   /** Extract userId from JWT in authorization header. Throws AuthRequiredError if missing. */
   private extractUserContext(context: ToolContext): { userId: string; projectApiKey: string } {
+    if (context.userId) {
+      return { userId: context.userId, projectApiKey: context.projectApiKey || 'unknown' };
+    }
     if (!context.authorization) {
       throw new AuthRequiredError();
     }
@@ -126,6 +160,19 @@ export class ToolExecutorService {
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(data) }],
     };
+  }
+
+  private requireValue(value: number | null | undefined, action: string): number {
+    if (value == null) {
+      throw new BadRequestException(`value is required for ${action} action`);
+    }
+    return value;
+  }
+
+  private validateRange(value: number, min: number, max: number, label: string): void {
+    if (value < min || value > max) {
+      throw new BadRequestException(`${label} must be ${min}-${max}. Got: ${value}`);
+    }
   }
 
   /** Wrap error as MCP CallToolResult with sanitized message */
@@ -214,7 +261,24 @@ export class ToolExecutorService {
     if (!handler) {
       throw new BadRequestException(`Unknown tool: ${toolName}`);
     }
-    return handler(params, context);
+
+    const { delay, executeAt, ...toolParams } = params as Record<string, unknown> & {
+      delay?: number;
+      executeAt?: string;
+    };
+
+    if (delay !== undefined || executeAt !== undefined) {
+      return this.schedulerService.schedule({
+        toolName,
+        params: toolParams,
+        delay,
+        executeAt,
+        authorization: context.authorization || '',
+        projectApiKey: context.projectApiKey || 'unknown',
+      });
+    }
+
+    return handler(toolParams, context);
   }
 
   // ─── Tool Handlers ──────────────────────────────────────────────────────────
@@ -606,32 +670,36 @@ export class ToolExecutorService {
         case 'turn_off':
           command = [1, 0];
           break;
-        case 'set_brightness':
-          if (params.value == null) {
-            throw new Error('value is required for set_brightness action');
-          }
-          command = [28, params.value];
+        case 'set_brightness': {
+          const v = this.requireValue(params.value, 'set_brightness');
+          this.validateRange(v, 0, 100, 'Brightness (percent)');
+          command = [28, Math.round(v * 10)];
           break;
-        case 'set_kelvin':
-          if (params.value == null) {
-            throw new Error('value is required for set_kelvin action');
-          }
-          command = [29, params.value];
+        }
+        case 'set_kelvin': {
+          const v = this.requireValue(params.value, 'set_kelvin');
+          this.validateRange(v, 0, 65000, 'Color temperature (Kelvin)');
+          command = [29, Math.round(v)];
           break;
-        case 'set_temperature':
-          if (params.value == null) {
-            throw new Error('value is required for set_temperature action');
-          }
-          command = [20, params.value];
+        }
+        case 'set_temperature': {
+          const v = this.requireValue(params.value, 'set_temperature');
+          this.validateRange(v, 15, 30, 'Temperature (°C)');
+          command = [20, Math.round(v)];
           break;
-        case 'set_mode':
-          if (params.value == null) {
-            throw new Error('value is required for set_mode action');
+        }
+        case 'set_mode': {
+          const v = this.requireValue(params.value, 'set_mode');
+          if (!Number.isInteger(v) || v < 0 || v > 4) {
+            throw new BadRequestException(
+              `Invalid mode: ${v}. Valid modes: 0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN`,
+            );
           }
-          command = [17, params.value];
+          command = [17, v];
           break;
+        }
         default:
-          throw new Error(`Unknown action: ${params.action}`);
+          throw new BadRequestException(`Unknown action: ${params.action}`);
       }
 
       // Use specified elementId or all device elementIds
@@ -819,6 +887,122 @@ export class ToolExecutorService {
         content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         structuredContent: result as Record<string, unknown>,
       };
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  // ─── Smart (Scene/Automation) Handlers ────────────────────────────────────────
+
+  private async executeListSmarts(
+    _params: ListSmartsParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const smarts = await this.iotApiService.listSmarts(projectApiKey, userId);
+
+      const slimSmarts = smarts.map((smart) => ({
+        uuid: smart.uuid,
+        label: smart.label,
+        smid: smart.smid,
+        locId: smart.locId,
+        fav: smart.fav,
+      }));
+
+      return this.successResult({ total: slimSmarts.length, smarts: slimSmarts });
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  private async executeGetSmart(
+    params: GetSmartParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const smart = await this.iotApiService.getSmart(projectApiKey, userId, params.uuid);
+
+      return this.successResult({
+        uuid: smart.uuid,
+        label: smart.label,
+        smid: smart.smid,
+        locId: smart.locId,
+        fav: smart.fav,
+      });
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  private async executeActivateSmart(
+    params: ActivateSmartParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { projectApiKey } = this.extractUserContext(context);
+      const result = await this.iotApiService.activateSmart(
+        projectApiKey,
+        params.smid,
+        params.locId,
+      );
+
+      return this.successResult(result);
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  private async executeListSmartCmds(
+    params: ListSmartCmdsParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const cmds = await this.iotApiService.listSmartCmds(
+        projectApiKey,
+        userId,
+        params.smartId ?? undefined,
+      );
+
+      const slimCmds = cmds.map((cmd) => ({
+        uuid: cmd.uuid,
+        smartId: cmd.smartId,
+        targetId: cmd.targetId,
+        target: cmd.target,
+        cmds: cmd.cmds,
+      }));
+
+      return this.successResult({ total: slimCmds.length, commands: slimCmds });
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  // ─── Scheduler Management Handlers ──────────────────────────────────────────
+
+  private async executeListScheduledJobs(
+    _params: ListScheduledJobsParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const jobs = await this.schedulerService.listJobs(userId, projectApiKey);
+      return this.successResult({ total: jobs.length, jobs });
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  private async executeCancelScheduledJob(
+    params: CancelScheduledJobParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+      const result = await this.schedulerService.cancelJob(params.jobId, userId, projectApiKey);
+      return this.successResult(result);
     } catch (error) {
       return this.errorResult(error);
     }

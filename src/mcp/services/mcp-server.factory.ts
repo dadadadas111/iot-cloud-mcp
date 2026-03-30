@@ -22,7 +22,26 @@ Getting Started:
 3. For common actions: control_device_simple (turn_on, set_brightness, etc.)
 4. For precise control: control_device with specific attribute elementIds
 
-All device control operations require only: uuid, elementIds (or action), and command/value.`;
+All device control operations require only: uuid, elementIds (or action), and command/value.
+
+Smarts (Scenes/Automations):
+- A Smart is a user-created automation that bundles multiple device commands into one action (e.g., "Good Night" turns off lights + sets AC + locks doors).
+- When user expresses an intent that could match a scene ("I'm going to sleep", "I'm leaving", "movie time", "I'm home"):
+  1. Call list_smarts to find matching smarts by label. Match loosely — "I'm going to sleep" should match "Good Night", "Sleep Mode", "Bedtime", etc.
+  2. If one clear match: activate_smart with its smid and locId.
+  3. If multiple matches: prefer fav: true smarts, or ask the user which one.
+  4. If no match: show available smarts so the user can pick.
+- To preview what a smart will do before activating: call list_smart_cmds with smartId, then cross-reference targetId with known devices.
+- You cannot create or edit smarts — direct the user to the ${brand} app for that.
+
+Scheduling:
+- Any action tool (control_device, control_device_simple, activate_smart, etc.) can be scheduled for later execution.
+- Add delay (seconds) for relative timing: "5 phút nữa" → delay: 300
+- Add executeAt (ISO 8601 with timezone) for absolute timing: "10h sáng mai" → executeAt: "2026-03-28T10:00:00+07:00"
+- Cannot use both delay and executeAt on the same call.
+- Scheduled tools return a jobId. Use list_scheduled_jobs to check status, cancel_scheduled_job to cancel.
+- Maximum schedule horizon: 7 days. Jobs persist across server restarts.
+- Read-only tools (list_*, get_*) cannot be scheduled — only action/mutation tools.`;
 }
 
 /**

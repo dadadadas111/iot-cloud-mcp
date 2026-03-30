@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { buildSubdomainUrl } from '../../common/utils/url.utils';
 
 /**
  * OAuth 2.1 Discovery Service
@@ -83,6 +84,39 @@ export class DiscoveryService {
       ui_locales_supported: ['en-US'],
       op_policy_uri: `${baseUrl}/policy`,
       op_tos_uri: `${baseUrl}/terms`,
+    };
+  }
+
+  getSubdomainResourceMetadata(alias: string): any {
+    const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
+    const subdomainUrl = buildSubdomainUrl(baseUrl, alias);
+
+    this.logger.log(`Generating subdomain resource metadata for alias: ${alias}`);
+
+    return {
+      resource: subdomainUrl,
+      authorization_servers: [subdomainUrl],
+      bearer_methods_supported: ['header'],
+      scopes_supported: ['mcp.tools.read', 'mcp.tools.write'],
+    };
+  }
+
+  getSubdomainAuthServerMetadata(alias: string): any {
+    const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
+    const subdomainUrl = buildSubdomainUrl(baseUrl, alias);
+
+    this.logger.log(`Generating subdomain auth server metadata for alias: ${alias}`);
+
+    return {
+      issuer: subdomainUrl,
+      authorization_endpoint: `${subdomainUrl}/authorize`,
+      token_endpoint: `${subdomainUrl}/token`,
+      registration_endpoint: `${subdomainUrl}/register`,
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'refresh_token'],
+      token_endpoint_auth_methods_supported: ['none', 'client_secret_basic', 'client_secret_post'],
+      code_challenge_methods_supported: ['S256'],
+      scopes_supported: ['mcp.tools.read', 'mcp.tools.write'],
     };
   }
 }

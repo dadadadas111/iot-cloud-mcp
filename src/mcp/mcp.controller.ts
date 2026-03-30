@@ -17,6 +17,7 @@ import { randomUUID } from 'crypto';
 import { SessionManagerService } from './services/session-manager.service';
 import { McpServerFactory } from './services/mcp-server.factory';
 import { decodeJwt } from '../common/utils/jwt.utils';
+import { buildSubdomainUrl } from '../common/utils/url.utils';
 import { ConfigService } from '@nestjs/config';
 import { AliasService } from '../alias/alias.service';
 import { PartnerMetaService } from '../alias/partner-meta.service';
@@ -86,9 +87,10 @@ export class McpController {
     if (!authorization || !authorization.startsWith('Bearer ')) {
       this.logger.warn(`Missing or invalid Authorization header for alias: ${alias}`);
       const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
+      const subdomainUrl = buildSubdomainUrl(baseUrl, alias);
       res.setHeader(
         'WWW-Authenticate',
-        `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${alias}"`,
+        `Bearer realm="MCP Gateway", resource_metadata="${subdomainUrl}/.well-known/oauth-protected-resource"`,
       );
       res.status(HttpStatus.UNAUTHORIZED).json({
         jsonrpc: '2.0',
@@ -119,9 +121,10 @@ export class McpController {
     } catch (error) {
       this.logger.error(`JWT decode failed for alias ${alias}: ${error.message}`);
       const baseUrl = this.configService.get<string>('BASE_URL', 'http://localhost:3001');
+      const subdomainUrl = buildSubdomainUrl(baseUrl, alias);
       res.setHeader(
         'WWW-Authenticate',
-        `Bearer realm="MCP Gateway", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp/${alias}"`,
+        `Bearer realm="MCP Gateway", resource_metadata="${subdomainUrl}/.well-known/oauth-protected-resource"`,
       );
       res.status(HttpStatus.UNAUTHORIZED).json({
         jsonrpc: '2.0',
