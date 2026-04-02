@@ -98,6 +98,10 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
+## TODOs
+
+- **Device attribute reference tool**: `docs/ai-resources/` resources (state-guide, control-guide, device-attributes) are becoming stale as we abstract raw attrIds behind human-readable keys. Consider a dedicated `get_device_control_reference` tool that returns a structured, always-current mapping of state keys → valid control values + ranges (e.g., `power: "on"|"off"`, `brightness: 0-100`, `mode: "AUTO"|"COOL"|...`). Called on-demand when the AI is confused about valid values or encounters a control error — not as a mandatory pre-flight. The tool content should be auto-derived from the same maps used in `device-state.utils.ts` and `device-control.utils.ts`.
+
 ## Notes
 
 - **CI/CD**: Push to master → build Docker + deploy prod (`mcp.dash.id.vn:3001`). PR/branch → staging (`mcp-stag.dash.id.vn:3002`). VPS: `160.187.247.2`
