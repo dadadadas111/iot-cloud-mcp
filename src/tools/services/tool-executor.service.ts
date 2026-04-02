@@ -301,6 +301,9 @@ export class ToolExecutorService {
         case '29':
           result.kelvin = values[0];
           break;
+        case '31':
+          result.color = { h: values[0] / 10, s: values[1] / 10, v: values[2] / 10 };
+          break;
         default:
           result[`attr_${attrId}`] = values.length === 1 ? values[0] : values;
           break;
@@ -764,6 +767,16 @@ export class ToolExecutorService {
             );
           }
           command = [17, v];
+          break;
+        }
+        case 'set_color_hsv': {
+          const hue = this.requireValue(params.h, 'set_color_hsv hue');
+          const sat = this.requireValue(params.s, 'set_color_hsv saturation');
+          const val = this.requireValue(params.v, 'set_color_hsv value');
+          this.validateRange(hue, 0, 360, 'Hue (degrees)');
+          this.validateRange(sat, 0, 100, 'Saturation (percent)');
+          this.validateRange(val, 0, 100, 'Value (percent)');
+          command = [31, Math.round(hue * 10), Math.round(sat * 10), Math.round(val * 10)];
           break;
         }
         default:
