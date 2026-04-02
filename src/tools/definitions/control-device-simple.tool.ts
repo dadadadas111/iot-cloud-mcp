@@ -38,6 +38,7 @@ export type ControlDeviceSimpleParams = z.infer<typeof ControlDeviceSimpleParams
 export const CONTROL_DEVICE_SIMPLE_TOOL = {
   name: 'control_device_simple',
   description:
+    'IMPORTANT: Always call get_device_state (or get_device) first to read current state before issuing control commands. Controlling a device without knowing its current state may cause unintended behavior. ' +
     'Simplified device control with action names. DESTRUCTIVE. Actions: turn_on/off, set_brightness (0-100%), set_kelvin (0-65000K), set_temperature (15-30°C), set_mode (0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN). If elementId omitted, controls all elements. Async via MQTT: wait 2-3s before checking state.',
   inputSchema: {
     type: 'object' as const,
@@ -74,6 +75,7 @@ export const CONTROL_DEVICE_SIMPLE_TOOL = {
   metadata: {
     name: 'control_device_simple',
     description:
+      'IMPORTANT: Always call get_device_state (or get_device) first to read current state before issuing control commands. Controlling a device without knowing its current state may cause unintended behavior. ' +
       'Simplified device control with action names. DESTRUCTIVE. Actions: turn_on/off, set_brightness (0-100%), set_kelvin (0-65000K), set_temperature (15-30°C), set_mode (0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN). If elementId omitted, controls all elements. Async via MQTT: wait 2-3s before checking state.',
     readOnlyHint: false,
     destructiveHint: true,
