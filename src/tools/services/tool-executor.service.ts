@@ -6,6 +6,8 @@
 
 import { IotDevice, IotLocation, IotGroup } from '../../proxy/dto/iot-api-response.dto';
 import { Injectable, Inject, BadRequestException, forwardRef } from '@nestjs/common';
+import { extractStateMap, translateDeviceState } from '../utils/device-state.utils';
+import { buildControlCommands } from '../utils/device-control.utils';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
 import { SchedulerService } from '../../scheduler/scheduler.service';
@@ -113,7 +115,7 @@ export class ToolExecutorService {
       this.executeGetDeviceStateByMac(p as GetDeviceStateByMacParams, c),
     [CONTROL_DEVICE_TOOL.name]: (p, c) => this.executeControlDevice(p as ControlDeviceParams, c),
     [CONTROL_DEVICE_SIMPLE_TOOL.name]: (p, c) =>
-      this.executeControlDeviceSimple(p as ControlDeviceSimpleParams, c),
+      this.executeControlDeviceSimple(p as unknown as ControlDeviceSimpleParams, c),
     [WIDGET_LIST_DEVICES_TOOL.name]: (p, c) =>
       this.executeWidgetListDevices(p as WidgetListDevicesParams, c),
     [WIDGET_GET_DEVICE_TOOL.name]: (p, c) =>
@@ -162,19 +164,6 @@ export class ToolExecutorService {
     };
   }
 
-  private requireValue(value: number | null | undefined, action: string): number {
-    if (value == null) {
-      throw new BadRequestException(`value is required for ${action} action`);
-    }
-    return value;
-  }
-
-  private validateRange(value: number, min: number, max: number, label: string): void {
-    if (value < min || value > max) {
-      throw new BadRequestException(`${label} must be ${min}-${max}. Got: ${value}`);
-    }
-  }
-
   /** Wrap error as MCP CallToolResult with sanitized message */
   private errorResult(error: unknown, includeAuthHint = true): CallToolResult {
     const errorMessage = sanitizeErrorForClient(error);
@@ -185,132 +174,6 @@ export class ToolExecutorService {
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
     };
-  }
-
-  /**
-   * Extract flat element→attribute state map from the getDeviceState API response.
-   *
-   * The API returns a nested structure:
-   *   { state: { DEVICE_ID: { ELEMENT_ID: { ATTR_ID: [attrId, val, ...] } } }, mac, ... }
-   *
-   * This normalizes it to the flat element→attribute map:
-   *   { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
-   */
-  private extractStateMap(rawState: unknown): Record<string, unknown> | null {
-    if (!rawState || typeof rawState !== 'object') return null;
-
-    // Handle array wrapper: [{ state: {...} }]
-    if (Array.isArray(rawState)) {
-      const first = rawState[0] as Record<string, unknown> | undefined;
-      if (first?.state && typeof first.state === 'object') {
-        return this.extractStateMap(first);
-      }
-      return null;
-    }
-
-    let record = rawState as Record<string, unknown>;
-
-    // Unwrap .state key: { state: { ... }, mac, devId, ... } → { ... }
-    if (
-      'state' in record &&
-      record.state &&
-      typeof record.state === 'object' &&
-      !Array.isArray(record.state)
-    ) {
-      record = record.state as Record<string, unknown>;
-    }
-
-    // Now record is either:
-    // A) element→attribute map: { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
-    //    where inner-most values are ARRAYS
-    // B) deviceId→elements wrapper: { "devUuid": { "1": { "1": [1,1] }, ... } }
-    //    where inner-most values at this depth are still OBJECTS
-    //
-    // Detect which by checking: are the leaf values at depth-2 arrays?
-    const keys = Object.keys(record);
-    if (keys.length === 0) return null;
-
-    const firstVal = record[keys[0]];
-    if (!firstVal || typeof firstVal !== 'object' || Array.isArray(firstVal)) {
-      return record; // Unexpected shape, return as-is
-    }
-
-    // Check if firstVal's values are arrays (= this IS the element→attribute map)
-    const inner = firstVal as Record<string, unknown>;
-    const innerKeys = Object.keys(inner);
-    if (innerKeys.length > 0 && Array.isArray(inner[innerKeys[0]])) {
-      return record; // Confirmed: element→attribute map
-    }
-
-    // Inner values are objects → device ID wrapper. Unwrap by taking first device's state.
-    return firstVal as Record<string, unknown>;
-  }
-
-  /** Translate extractStateMap() output into human-readable keys (power, brightness, mode, etc.) */
-  private translateDeviceState(stateMap: Record<string, unknown>): Record<string, unknown> {
-    const elements = Object.entries(stateMap).filter(
-      ([, val]) => val && typeof val === 'object' && !Array.isArray(val),
-    );
-
-    if (elements.length === 0) return {};
-
-    if (elements.length === 1) {
-      return this.translateElementAttrs(elements[0][1] as Record<string, unknown>);
-    }
-
-    const translated: Record<string, Record<string, unknown>> = {};
-    for (const [elementId, elementVal] of elements) {
-      translated[elementId] = this.translateElementAttrs(elementVal as Record<string, unknown>);
-    }
-    return { elementCount: elements.length, elements: translated };
-  }
-
-  private translateElementAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
-    const MODE_NAMES: Record<number, string> = {
-      0: 'AUTO',
-      1: 'COOL',
-      2: 'DRY',
-      3: 'HEAT',
-      4: 'FAN',
-    };
-    const result: Record<string, unknown> = {};
-
-    for (const [attrId, attrVal] of Object.entries(attrs)) {
-      let values: number[];
-      if (Array.isArray(attrVal) && attrVal.length > 1) {
-        values = attrVal.slice(1);
-      } else if (typeof attrVal === 'number') {
-        values = [attrVal];
-      } else {
-        continue;
-      }
-
-      switch (attrId) {
-        case '1':
-          result.power = values[0] === 1 ? 'on' : 'off';
-          break;
-        case '17':
-          result.mode = MODE_NAMES[values[0]] ?? `mode_${values[0]}`;
-          break;
-        case '20':
-          result.temperature = values[0];
-          break;
-        case '28':
-          result.brightness = Math.round(values[0] / 10);
-          break;
-        case '29':
-          result.kelvin = values[0];
-          break;
-        case '31':
-          result.color = { h: values[0] / 10, s: values[1] / 10, v: values[2] / 10 };
-          break;
-        default:
-          result[`attr_${attrId}`] = values.length === 1 ? values[0] : values;
-          break;
-      }
-    }
-
-    return result;
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────
@@ -578,7 +441,7 @@ export class ToolExecutorService {
 
       // Normalize state to flat element→attribute map { "1": { "1": [1,1] }, ... }
       // The getDeviceState API may return wrapped: { state: {...}, mac, devId, ... }
-      const stateMap = this.extractStateMap(state);
+      const stateMap = extractStateMap(state);
 
       const enrichedDevice = {
         ...device,
@@ -640,8 +503,8 @@ export class ToolExecutorService {
     try {
       const projectApiKey = this.requireAuthHeader(context);
       const state = await this.iotApiService.getDeviceState(projectApiKey, params.uuid);
-      const stateMap = this.extractStateMap(state);
-      const translated = stateMap ? this.translateDeviceState(stateMap) : {};
+      const stateMap = extractStateMap(state);
+      const translated = stateMap ? translateDeviceState(stateMap) : {};
       return this.successResult({ uuid: params.uuid, ...translated });
     } catch (error) {
       return this.errorResult(error);
@@ -685,8 +548,8 @@ export class ToolExecutorService {
         params.locationUuid,
         params.macAddress,
       );
-      const stateMap = this.extractStateMap(state);
-      const translated = stateMap ? this.translateDeviceState(stateMap) : {};
+      const stateMap = extractStateMap(state);
+      const translated = stateMap ? translateDeviceState(stateMap) : {};
       return this.successResult({ macAddress: params.macAddress, ...translated });
     } catch (error) {
       return this.errorResult(error);
@@ -721,7 +584,7 @@ export class ToolExecutorService {
     }
   }
 
-  /** Control device using simplified action names */
+  /** Control device by setting one or more attributes (property-bag matching state output keys) */
   private async executeControlDeviceSimple(
     params: ControlDeviceSimpleParams,
     context: ToolContext,
@@ -729,75 +592,34 @@ export class ToolExecutorService {
     try {
       const { userId, projectApiKey } = this.extractUserContext(context);
 
-      // Fetch device details first to get required control fields
-      const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
+      const { uuid, elementId, ...attrs } = params;
+      const commands = buildControlCommands(attrs);
 
-      // Map simplified action to command array
-      let command: number[];
-      switch (params.action) {
-        case 'turn_on':
-          command = [1, 1];
-          break;
-        case 'turn_off':
-          command = [1, 0];
-          break;
-        case 'set_brightness': {
-          const v = this.requireValue(params.value, 'set_brightness');
-          this.validateRange(v, 0, 100, 'Brightness (percent)');
-          command = [28, Math.round(v * 10)];
-          break;
-        }
-        case 'set_kelvin': {
-          const v = this.requireValue(params.value, 'set_kelvin');
-          this.validateRange(v, 0, 65000, 'Color temperature (Kelvin)');
-          command = [29, Math.round(v)];
-          break;
-        }
-        case 'set_temperature': {
-          const v = this.requireValue(params.value, 'set_temperature');
-          this.validateRange(v, 15, 30, 'Temperature (°C)');
-          command = [20, Math.round(v)];
-          break;
-        }
-        case 'set_mode': {
-          const v = this.requireValue(params.value, 'set_mode');
-          if (!Number.isInteger(v) || v < 0 || v > 4) {
-            throw new BadRequestException(
-              `Invalid mode: ${v}. Valid modes: 0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN`,
-            );
-          }
-          command = [17, v];
-          break;
-        }
-        case 'set_color_hsv': {
-          const hue = this.requireValue(params.h, 'set_color_hsv hue');
-          const sat = this.requireValue(params.s, 'set_color_hsv saturation');
-          const val = this.requireValue(params.v, 'set_color_hsv value');
-          this.validateRange(hue, 0, 360, 'Hue (degrees)');
-          this.validateRange(sat, 0, 100, 'Saturation (percent)');
-          this.validateRange(val, 0, 100, 'Value (percent)');
-          command = [31, Math.round(hue * 10), Math.round(sat * 10), Math.round(val * 10)];
-          break;
-        }
-        default:
-          throw new BadRequestException(`Unknown action: ${params.action}`);
+      if (commands.length === 0) {
+        throw new BadRequestException(
+          'At least one attribute must be specified: power, brightness, kelvin, temperature, mode, or color.',
+        );
       }
 
-      // Use specified elementId or all device elementIds
-      const elementIds = params.elementId != null ? [params.elementId] : device.elementIds;
-
-      const controlPayload = {
+      const device = await this.iotApiService.getDevice(projectApiKey, userId, uuid);
+      const elementIds = elementId != null ? [elementId] : device.elementIds;
+      const basePayload = {
         eid: device.eid,
         elementIds,
-        command,
         endpoint: device.endpoint,
         partnerId: device.partnerId,
-        rootUuid: device.rootUuid ? device.rootUuid : device.uuid,
+        rootUuid: device.rootUuid ?? device.uuid,
         protocolCtl: device.protocolCtl,
       };
 
-      const result = await this.iotApiService.controlDevice(projectApiKey, controlPayload);
-      return this.successResult(result);
+      const results: unknown[] = [];
+      for (const command of commands) {
+        results.push(
+          await this.iotApiService.controlDevice(projectApiKey, { ...basePayload, command }),
+        );
+      }
+
+      return this.successResult(results.length === 1 ? results[0] : results);
     } catch (error) {
       return this.errorResult(error);
     }
@@ -831,7 +653,7 @@ export class ToolExecutorService {
 
       const typeInfo = resolveDeviceType(device);
       const productDecoded = device.productId ? decodeProductId(device.productId) : null;
-      const stateMap = this.extractStateMap(state);
+      const stateMap = extractStateMap(state);
 
       const enrichedDevice = {
         _view: 'dashboard',
@@ -880,7 +702,7 @@ export class ToolExecutorService {
 
       const typeInfo = resolveDeviceType(device);
       const productDecoded = device.productId ? decodeProductId(device.productId) : null;
-      const stateMap = this.extractStateMap(state);
+      const stateMap = extractStateMap(state);
 
       const enrichedDevice = {
         _view: 'control',

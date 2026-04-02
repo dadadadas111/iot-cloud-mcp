@@ -1,106 +1,87 @@
-/**
- * control_device_simple Tool Definition
- * Control device using simplified actions - DESTRUCTIVE OPERATION
- */
-
 import { z } from 'zod';
+import type { ControlAttrs } from '../utils/device-control.utils';
 
-/**
- * control_device_simple tool parameters
- */
-const ControlDeviceSimpleParamsSchema = z.object({
-  uuid: z.string().describe('Device UUID'),
-  action: z
-    .enum([
-      'turn_on',
-      'turn_off',
-      'set_brightness',
-      'set_kelvin',
-      'set_temperature',
-      'set_mode',
-      'set_color_hsv',
-    ])
-    .describe(
-      'Action to perform. Options: turn_on, turn_off, set_brightness (0-100%), set_kelvin (0-65000K), set_temperature (15-30°C), set_mode (0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN), set_color_hsv (h 0-360, s 0-100, v 0-100)',
-    ),
-  value: z
-    .number()
-    .nullish()
-    .describe(
-      'Value for set_* actions. Ranges: set_brightness 0-100 (percent), set_kelvin 0-65000, set_temperature 15-30, set_mode 0-4. Not used for turn_on/turn_off or set_color_hsv.',
-    ),
-  h: z.number().nullish().describe('Hue for set_color_hsv (0-360 degrees)'),
-  s: z.number().nullish().describe('Saturation for set_color_hsv (0-100 percent)'),
-  v: z.number().nullish().describe('Value/brightness for set_color_hsv (0-100 percent)'),
-  elementId: z
-    .number()
-    .nullish()
-    .describe('Optional specific element ID to control. If omitted, controls all elements'),
+const HsvSchema = z.object({
+  h: z.number().min(0).max(360).describe('Hue 0-360°'),
+  s: z.number().min(0).max(100).describe('Saturation 0-100%'),
+  v: z.number().min(0).max(100).describe('Value/brightness 0-100%'),
 });
 
-/** Type for control_device_simple parameters */
-export type ControlDeviceSimpleParams = z.infer<typeof ControlDeviceSimpleParamsSchema>;
+const ControlDeviceSimpleParamsSchema = z.object({
+  uuid: z.string().describe('Device UUID'),
+  power: z.enum(['on', 'off']).optional().describe('"on" or "off"'),
+  brightness: z.number().min(0).max(100).optional().describe('Brightness 0-100 (%)'),
+  kelvin: z.number().min(0).max(65000).optional().describe('Color temperature 0-65000 (K)'),
+  temperature: z.number().min(15).max(30).optional().describe('Target temperature 15-30 (°C)'),
+  mode: z
+    .enum(['AUTO', 'COOL', 'DRY', 'HEAT', 'FAN'])
+    .optional()
+    .describe('AC mode: AUTO, COOL, DRY, HEAT, or FAN'),
+  color: HsvSchema.optional().describe('HSV color — h 0-360°, s 0-100%, v 0-100%'),
+  elementId: z
+    .number()
+    .optional()
+    .describe('Specific element ID to control. Omit to control all elements.'),
+});
 
-/**
- * control_device_simple MCP Tool Definition
- *
- * @see https://spec.modelcontextprotocol.io/latest/basic/tools/
- */
+export type ControlDeviceSimpleParams = z.infer<typeof ControlDeviceSimpleParamsSchema> &
+  ControlAttrs & { uuid: string; elementId?: number };
+
+const DESCRIPTION =
+  'IMPORTANT: Always call get_device_state (or get_device) first. ' +
+  'Attributes present in the state output are the ones this device supports — use the state as your reference. ' +
+  'Set one or more attributes matching their state key names: ' +
+  'power ("on"/"off"), brightness (0-100%), kelvin (0-65000K), temperature (15-30°C), ' +
+  'mode ("AUTO"/"COOL"/"DRY"/"HEAT"/"FAN"), color ({h 0-360, s 0-100, v 0-100}). ' +
+  'Only pass the attributes you want to change. ' +
+  'Async via MQTT — wait 2-3s then re-check state.';
+
 export const CONTROL_DEVICE_SIMPLE_TOOL = {
   name: 'control_device_simple',
-  description:
-    'IMPORTANT: Always call get_device_state (or get_device) first to read current state before issuing control commands. Controlling a device without knowing its current state may cause unintended behavior. ' +
-    'Simplified device control with action names. DESTRUCTIVE. Actions: turn_on/off, set_brightness (0-100%), set_kelvin (0-65000K), set_temperature (15-30°C), set_mode (0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN), set_color_hsv (h 0-360°, s 0-100%, v 0-100%). If elementId omitted, controls all elements. Async via MQTT: wait 2-3s before checking state.',
+  description: DESCRIPTION,
   inputSchema: {
     type: 'object' as const,
     properties: {
-      uuid: {
+      uuid: { type: 'string', description: 'Device UUID' },
+      power: { type: 'string', enum: ['on', 'off'], description: '"on" or "off"' },
+      brightness: { type: 'number', minimum: 0, maximum: 100, description: 'Brightness 0-100 (%)' },
+      kelvin: {
+        type: 'number',
+        minimum: 0,
+        maximum: 65000,
+        description: 'Color temperature 0-65000 (K)',
+      },
+      temperature: {
+        type: 'number',
+        minimum: 15,
+        maximum: 30,
+        description: 'Target temperature 15-30 (°C)',
+      },
+      mode: {
         type: 'string',
-        description: 'Device UUID',
+        enum: ['AUTO', 'COOL', 'DRY', 'HEAT', 'FAN'],
+        description: 'AC mode',
       },
-      action: {
-        type: 'string',
-        enum: [
-          'turn_on',
-          'turn_off',
-          'set_brightness',
-          'set_kelvin',
-          'set_temperature',
-          'set_mode',
-          'set_color_hsv',
-        ],
-        description:
-          'Action to perform. Options: turn_on, turn_off, set_brightness (0-100%), set_kelvin (0-65000K), set_temperature (15-30°C), set_mode (0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN), set_color_hsv (h 0-360, s 0-100, v 0-100)',
-      },
-      value: {
-        type: ['number', 'null'],
-        description:
-          'Value for set_* actions. Ranges: set_brightness 0-100 (percent), set_kelvin 0-65000, set_temperature 15-30, set_mode 0-4. Not used for turn_on/turn_off or set_color_hsv.',
-      },
-      h: {
-        type: ['number', 'null'],
-        description: 'Hue for set_color_hsv (0-360 degrees)',
-      },
-      s: {
-        type: ['number', 'null'],
-        description: 'Saturation for set_color_hsv (0-100 percent)',
-      },
-      v: {
-        type: ['number', 'null'],
-        description: 'Value/brightness for set_color_hsv (0-100 percent)',
+      color: {
+        type: 'object',
+        properties: {
+          h: { type: 'number', minimum: 0, maximum: 360, description: 'Hue 0-360°' },
+          s: { type: 'number', minimum: 0, maximum: 100, description: 'Saturation 0-100%' },
+          v: { type: 'number', minimum: 0, maximum: 100, description: 'Value/brightness 0-100%' },
+        },
+        required: ['h', 's', 'v'],
+        description: 'HSV color',
       },
       elementId: {
-        type: ['number', 'null'],
-        description: 'Optional specific element ID to control. If omitted, controls all elements',
+        type: 'number',
+        description: 'Specific element ID to control. Omit to control all elements.',
       },
     },
-    required: ['uuid', 'action'],
+    required: ['uuid'],
   },
   metadata: {
     name: 'control_device_simple',
-    description:
-      'IMPORTANT: Always call get_device_state (or get_device) first to read current state before issuing control commands. Controlling a device without knowing its current state may cause unintended behavior. ' +
-      'Simplified device control with action names. DESTRUCTIVE. Actions: turn_on/off, set_brightness (0-100%), set_kelvin (0-65000K), set_temperature (15-30°C), set_mode (0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN), set_color_hsv (h 0-360°, s 0-100%, v 0-100%). If elementId omitted, controls all elements. Async via MQTT: wait 2-3s before checking state.',
+    description: DESCRIPTION,
     readOnlyHint: false,
     destructiveHint: true,
     securitySchemes: {
