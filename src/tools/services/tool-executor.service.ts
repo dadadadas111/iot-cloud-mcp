@@ -248,6 +248,24 @@ export class ToolExecutorService {
 
   /** Translate extractStateMap() output into human-readable keys (power, brightness, mode, etc.) */
   private translateDeviceState(stateMap: Record<string, unknown>): Record<string, unknown> {
+    const elements = Object.entries(stateMap).filter(
+      ([, val]) => val && typeof val === 'object' && !Array.isArray(val),
+    );
+
+    if (elements.length === 0) return {};
+
+    if (elements.length === 1) {
+      return this.translateElementAttrs(elements[0][1] as Record<string, unknown>);
+    }
+
+    const translated: Record<string, Record<string, unknown>> = {};
+    for (const [elementId, elementVal] of elements) {
+      translated[elementId] = this.translateElementAttrs(elementVal as Record<string, unknown>);
+    }
+    return { elementCount: elements.length, elements: translated };
+  }
+
+  private translateElementAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
     const MODE_NAMES: Record<number, string> = {
       0: 'AUTO',
       1: 'COOL',
@@ -257,40 +275,35 @@ export class ToolExecutorService {
     };
     const result: Record<string, unknown> = {};
 
-    for (const elementVal of Object.values(stateMap)) {
-      if (!elementVal || typeof elementVal !== 'object' || Array.isArray(elementVal)) continue;
+    for (const [attrId, attrVal] of Object.entries(attrs)) {
+      let values: number[];
+      if (Array.isArray(attrVal) && attrVal.length > 1) {
+        values = attrVal.slice(1);
+      } else if (typeof attrVal === 'number') {
+        values = [attrVal];
+      } else {
+        continue;
+      }
 
-      const attrs = elementVal as Record<string, unknown>;
-      for (const [attrId, attrVal] of Object.entries(attrs)) {
-        let rawValue: number;
-        if (Array.isArray(attrVal) && attrVal.length > 1) {
-          rawValue = attrVal[1];
-        } else if (typeof attrVal === 'number') {
-          rawValue = attrVal;
-        } else {
-          continue;
-        }
-
-        switch (attrId) {
-          case '1':
-            result.power = rawValue === 1 ? 'on' : 'off';
-            break;
-          case '17':
-            result.mode = MODE_NAMES[rawValue] ?? `mode_${rawValue}`;
-            break;
-          case '20':
-            result.temperature = rawValue;
-            break;
-          case '28':
-            result.brightness = Math.round(rawValue / 10);
-            break;
-          case '29':
-            result.kelvin = rawValue;
-            break;
-          default:
-            result[`attr_${attrId}`] = rawValue;
-            break;
-        }
+      switch (attrId) {
+        case '1':
+          result.power = values[0] === 1 ? 'on' : 'off';
+          break;
+        case '17':
+          result.mode = MODE_NAMES[values[0]] ?? `mode_${values[0]}`;
+          break;
+        case '20':
+          result.temperature = values[0];
+          break;
+        case '28':
+          result.brightness = Math.round(values[0] / 10);
+          break;
+        case '29':
+          result.kelvin = values[0];
+          break;
+        default:
+          result[`attr_${attrId}`] = values.length === 1 ? values[0] : values;
+          break;
       }
     }
 
