@@ -246,6 +246,57 @@ export class ToolExecutorService {
     return firstVal as Record<string, unknown>;
   }
 
+  /** Translate extractStateMap() output into human-readable keys (power, brightness, mode, etc.) */
+  private translateDeviceState(stateMap: Record<string, unknown>): Record<string, unknown> {
+    const MODE_NAMES: Record<number, string> = {
+      0: 'AUTO',
+      1: 'COOL',
+      2: 'DRY',
+      3: 'HEAT',
+      4: 'FAN',
+    };
+    const result: Record<string, unknown> = {};
+
+    for (const elementVal of Object.values(stateMap)) {
+      if (!elementVal || typeof elementVal !== 'object' || Array.isArray(elementVal)) continue;
+
+      const attrs = elementVal as Record<string, unknown>;
+      for (const [attrId, attrVal] of Object.entries(attrs)) {
+        let rawValue: number;
+        if (Array.isArray(attrVal) && attrVal.length > 1) {
+          rawValue = attrVal[1];
+        } else if (typeof attrVal === 'number') {
+          rawValue = attrVal;
+        } else {
+          continue;
+        }
+
+        switch (attrId) {
+          case '1':
+            result.power = rawValue === 1 ? 'on' : 'off';
+            break;
+          case '17':
+            result.mode = MODE_NAMES[rawValue] ?? `mode_${rawValue}`;
+            break;
+          case '20':
+            result.temperature = rawValue;
+            break;
+          case '28':
+            result.brightness = Math.round(rawValue / 10);
+            break;
+          case '29':
+            result.kelvin = rawValue;
+            break;
+          default:
+            result[`attr_${attrId}`] = rawValue;
+            break;
+        }
+      }
+    }
+
+    return result;
+  }
+
   // ─── Public API ─────────────────────────────────────────────────────────────
 
   /**
@@ -573,7 +624,9 @@ export class ToolExecutorService {
     try {
       const projectApiKey = this.requireAuthHeader(context);
       const state = await this.iotApiService.getDeviceState(projectApiKey, params.uuid);
-      return this.successResult(state);
+      const stateMap = this.extractStateMap(state);
+      const translated = stateMap ? this.translateDeviceState(stateMap) : {};
+      return this.successResult({ uuid: params.uuid, ...translated });
     } catch (error) {
       return this.errorResult(error);
     }
@@ -616,7 +669,9 @@ export class ToolExecutorService {
         params.locationUuid,
         params.macAddress,
       );
-      return this.successResult(state);
+      const stateMap = this.extractStateMap(state);
+      const translated = stateMap ? this.translateDeviceState(stateMap) : {};
+      return this.successResult({ macAddress: params.macAddress, ...translated });
     } catch (error) {
       return this.errorResult(error);
     }
