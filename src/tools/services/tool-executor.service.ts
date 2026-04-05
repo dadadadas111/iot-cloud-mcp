@@ -6,7 +6,11 @@
 
 import { IotDevice, IotLocation, IotGroup } from '../../proxy/dto/iot-api-response.dto';
 import { Injectable, Inject, BadRequestException, forwardRef } from '@nestjs/common';
-import { extractStateMap, translateDeviceState } from '../utils/device-state.utils';
+import {
+  extractStateMap,
+  translateDeviceState,
+  translateElementAttrs,
+} from '../utils/device-state.utils';
 import { buildControlCommands } from '../utils/device-control.utils';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
@@ -874,7 +878,7 @@ export class ToolExecutorService {
         smartId: cmd.smartId,
         targetId: cmd.targetId,
         target: cmd.target,
-        cmds: cmd.cmds,
+        cmds: this.translateSmartCmds(cmd.cmds),
       }));
 
       return this.successResult({ total: slimCmds.length, commands: slimCmds });
@@ -909,5 +913,17 @@ export class ToolExecutorService {
     } catch (error) {
       return this.errorResult(error);
     }
+  }
+
+  private translateSmartCmds(cmds: Record<string, unknown>): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const [elementId, attrs] of Object.entries(cmds)) {
+      if (attrs && typeof attrs === 'object' && !Array.isArray(attrs)) {
+        result[elementId] = translateElementAttrs(attrs as Record<string, unknown>);
+      } else {
+        result[elementId] = attrs;
+      }
+    }
+    return result;
   }
 }
