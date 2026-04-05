@@ -28,13 +28,10 @@ export type ControlDeviceSimpleParams = z.infer<typeof ControlDeviceSimpleParams
   ControlAttrs & { uuid: string; elementId?: number };
 
 const DESCRIPTION =
-  'IMPORTANT: Always call get_device_state (or get_device) first. ' +
-  'Attributes present in the state output are the ones this device supports — use the state as your reference. ' +
-  'Set one or more attributes matching their state key names: ' +
-  'power ("on"/"off"), brightness (0-100%), kelvin (0-65000K), temperature (15-30°C), ' +
-  'mode ("AUTO"/"COOL"/"DRY"/"HEAT"/"FAN"), color ({h 0-360, s 0-100, v 0-100}). ' +
-  'Only pass the attributes you want to change. ' +
-  'Async via MQTT — wait 2-3s then re-check state.';
+  'IMPORTANT: Always call get_device_state first to read current state. ' +
+  'Only set attributes that appear in the state output — those are the ones this device supports. ' +
+  'Pass the same key names and value format as the state output. ' +
+  'Only pass attributes you want to change. Async via MQTT — wait 2-3s then re-check state.';
 
 export const CONTROL_DEVICE_SIMPLE_TOOL = {
   name: 'control_device_simple',
