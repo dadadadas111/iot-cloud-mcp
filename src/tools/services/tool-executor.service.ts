@@ -520,14 +520,17 @@ export class ToolExecutorService {
       const projectApiKey = this.requireAuthHeader(context);
       const state = await this.iotApiService.getLocationState(projectApiKey, params.locationUuid);
 
-      // Slim location state — drop redundant loc/from/uuid, keep useful fields
       const slimState = Array.isArray(state)
-        ? state.map((entry) => ({
-            mac: entry.mac,
-            devId: entry.devId,
-            state: entry.state,
-            updatedAt: entry.updatedAt,
-          }))
+        ? state.map((entry) => {
+            const stateMap = extractStateMap(entry.state ?? entry);
+            const translated = stateMap ? translateDeviceState(stateMap) : {};
+            return {
+              mac: entry.mac,
+              devId: entry.devId,
+              ...translated,
+              updatedAt: entry.updatedAt,
+            };
+          })
         : state;
 
       return this.successResult(slimState);
