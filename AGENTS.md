@@ -98,6 +98,14 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
+## Xiaozhi Bridge
+
+`bridge/xiaozhi/` — standalone Python bridge that connects a per-user Xiaozhi AI device to Rogo IoT via the deployed MCP server. Each user runs their own instance.
+
+See **`docs/XIAOZHI_BRIDGE.md`** for full setup guide.
+
+Architecture: `bridge.py` (headless OAuth) → `mcp_pipe.py` (Xiaozhi WebSocket relay) → `bridge_server.py` (transparent stdio↔HTTP MCP proxy) → Rogo MCP server.
+
 ## TODOs
 
 - **Update stale resources**: `docs/ai-resources/` markdown files (state-guide, control-guide, device-attributes) still describe raw attrId/value protocol. Now that `get_device_state` returns human-readable keys and `control_device_simple` accepts the same keys, these resources are misleading. Options: (1) Rewrite the markdown files to describe the new format, or (2) Replace the static file-read resources with dynamic ones that auto-generate content from the same maps in `device-state.utils.ts` / `device-control.utils.ts`. Option 2 is preferred — never goes stale.

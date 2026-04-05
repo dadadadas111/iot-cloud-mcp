@@ -39,6 +39,9 @@ lerna-debug.log*
 .env.local
 .env.*.local
 
+# Bridge credentials
+bridge/**/.env
+
 # Firebase
 firebase-service-account.json
 
