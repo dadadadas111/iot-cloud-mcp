@@ -100,7 +100,8 @@ npm run format           # Prettier
 
 ## TODOs
 
-- **Device attribute reference tool**: `docs/ai-resources/` resources (state-guide, control-guide, device-attributes) are becoming stale as we abstract raw attrIds behind human-readable keys. Consider a dedicated `get_device_control_reference` tool that returns a structured, always-current mapping of state keys → valid control values + ranges (e.g., `power: "on"|"off"`, `brightness: 0-100`, `mode: "AUTO"|"COOL"|...`). Called on-demand when the AI is confused about valid values or encounters a control error — not as a mandatory pre-flight. The tool content should be auto-derived from the same maps used in `device-state.utils.ts` and `device-control.utils.ts`.
+- **Update stale resources**: `docs/ai-resources/` markdown files (state-guide, control-guide, device-attributes) still describe raw attrId/value protocol. Now that `get_device_state` returns human-readable keys and `control_device_simple` accepts the same keys, these resources are misleading. Options: (1) Rewrite the markdown files to describe the new format, or (2) Replace the static file-read resources with dynamic ones that auto-generate content from the same maps in `device-state.utils.ts` / `device-control.utils.ts`. Option 2 is preferred — never goes stale.
+- **On-demand control reference tool**: A `get_control_reference` tool that returns a structured mapping of state keys → valid control values + ranges. Auto-derived from `device-control.utils.ts`. Called on-demand when the AI encounters a control error or is unsure about valid values — NOT as a mandatory pre-flight. Description should say: _"Call when unsure about valid values for a control attribute, or after a control error."_ The tool is complex because each attribute has different value types (enum strings, numeric ranges, nested objects) — needs careful per-attribute documentation generation.
 
 ## Notes
 
