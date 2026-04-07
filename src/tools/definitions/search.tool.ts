@@ -27,7 +27,7 @@ export type SearchParams = z.infer<typeof SearchParamsSchema>;
 export const SEARCH_TOOL = {
   name: 'search',
   description:
-    'Search across devices, locations, and groups by keyword. Returns matching resources from all types.',
+    'Search devices, locations, and groups by keyword. Use keywords only — not full sentences (e.g., "phòng khách" not "bật đèn phòng khách"). Results sorted by relevance. If nothing matched, all available devices are returned as suggestions.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -42,7 +42,7 @@ export const SEARCH_TOOL = {
   metadata: {
     name: 'search',
     description:
-      'Search across devices, locations, and groups by keyword. Returns matching resources from all types.',
+      'Search devices, locations, and groups by keyword. Use keywords only — not full sentences (e.g., "phòng khách" not "bật đèn phòng khách"). Results sorted by relevance. If nothing matched, all available devices are returned as suggestions.',
     readOnlyHint: true,
     securitySchemes: {
       oauth2: {

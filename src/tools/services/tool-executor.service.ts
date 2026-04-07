@@ -238,13 +238,15 @@ export class ToolExecutorService {
         this.iotApiService.listGroups(projectApiKey, userId),
       ]);
 
-      const query = params.query.toLowerCase();
+      const tokens = params.query.toLowerCase().split(/\s+/).filter(Boolean);
+      const scoreText = (text: string) =>
+        tokens.filter((t) => text.toLowerCase().includes(t)).length;
 
       const matchedDevices = devices
-        .filter(
-          (d) => d.label?.toLowerCase().includes(query) || d.desc?.toLowerCase().includes(query),
-        )
-        .map((d) => {
+        .map((d) => ({ d, score: Math.max(scoreText(d.label ?? ''), scoreText(d.desc ?? '')) }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map(({ d }) => {
           const typeInfo = resolveDeviceType(d);
           return {
             uuid: d.uuid,
@@ -262,25 +264,34 @@ export class ToolExecutorService {
         });
 
       const matchedLocations = locations
-        .filter(
-          (l) => l.label?.toLowerCase().includes(query) || l.desc?.toLowerCase().includes(query),
-        )
-        .map((l) => ({
-          uuid: l.uuid,
-          label: l.label,
-          desc: l.desc,
-        }));
+        .filter((l) => scoreText(l.label ?? '') + scoreText(l.desc ?? '') > 0)
+        .map((l) => ({ uuid: l.uuid, label: l.label, desc: l.desc }));
 
       const matchedGroups = groups
-        .filter(
-          (g) => g.label?.toLowerCase().includes(query) || g.desc?.toLowerCase().includes(query),
-        )
-        .map((g) => ({
-          uuid: g.uuid,
-          label: g.label,
-          desc: g.desc,
-          locationId: g.locationId,
-        }));
+        .filter((g) => scoreText(g.label ?? '') + scoreText(g.desc ?? '') > 0)
+        .map((g) => ({ uuid: g.uuid, label: g.label, desc: g.desc, locationId: g.locationId }));
+
+      if (
+        matchedDevices.length === 0 &&
+        matchedLocations.length === 0 &&
+        matchedGroups.length === 0
+      ) {
+        return this.successResult({
+          total: 0,
+          devices: [],
+          locations: [],
+          groups: [],
+          message: 'No matches found. Try shorter keywords. All available devices:',
+          allDevices: devices.map((d) => {
+            const typeInfo = resolveDeviceType(d);
+            return {
+              uuid: d.uuid,
+              label: d.label,
+              ...(typeInfo && { deviceType: typeInfo.deviceType }),
+            };
+          }),
+        });
+      }
 
       return this.successResult({
         total: matchedDevices.length + matchedLocations.length + matchedGroups.length,
