@@ -1,6 +1,6 @@
 # src/tools/ — MCP Tool Definitions & Executor
 
-24 MCP tools that proxy AI tool calls to the Rogo IoT Cloud REST API.
+25 MCP tools that proxy AI tool calls to the Rogo IoT Cloud REST API.
 
 ## Key Files
 
@@ -55,43 +55,45 @@ export const TOOL_NAME_TOOL = {
 
 ## Tool List (24 tools)
 
-| Tool                       | Visibility  | Type  | Params                                               |
-| -------------------------- | ----------- | ----- | ---------------------------------------------------- |
-| `fetch_user`               | model       | Read  | _(none)_                                             |
-| `search`                   | model       | Read  | `query`, `type?`                                     |
-| `fetch`                    | model       | Read  | `endpoint`                                           |
-| `list_devices`             | model + app | Read  | `locationId?`, `groupId?`                            |
-| `list_locations`           | model       | Read  | _(none)_                                             |
-| `list_groups`              | model       | Read  | `locationId?`                                        |
-| `get_device`               | model + app | Read  | `uuid`                                               |
-| `get_device_state`         | model       | Read  | `uuid`                                               |
-| `get_device_state_by_mac`  | model       | Read  | `mac`                                                |
-| `get_location_state`       | model       | Read  | `locationId`                                         |
-| `get_device_documentation` | model       | Read  | `topic?`                                             |
-| `list_smarts`              | model       | Read  | _(none)_                                             |
-| `get_smart`                | model       | Read  | `id`                                                 |
-| `list_smart_cmds`          | model       | Read  | `id`                                                 |
-| `activate_smart`           | model       | Write | `id`                                                 |
-| `list_scheduled_jobs`      | model       | Read  | _(none)_                                             |
-| `cancel_scheduled_job`     | model       | Write | `jobId`                                              |
-| `update_device`            | model       | Write | `uuid`, `label?`, `desc?`, `locationId?`, `groupId?` |
-| `delete_device`            | model       | Write | `uuid`                                               |
-| `control_device`           | model       | Write | `uuid`, `elementIds`, `command`                      |
-| `control_device_simple`    | model       | Write | `uuid`, `action`, `value?`                           |
-| `interactive_device`       | model + app | Read  | `uuid`                                               |
-| `_widget_list_devices`     | app only    | Read  | `locationId?`, `groupId?`                            |
-| `_widget_get_device`       | app only    | Read  | `uuid`                                               |
-| `_widget_control_device`   | app only    | Read  | `uuid`                                               |
+| Tool                       | Visibility  | Type  | Params                                                                                       |
+| -------------------------- | ----------- | ----- | -------------------------------------------------------------------------------------------- |
+| `fetch_user`               | model       | Read  | _(none)_                                                                                     |
+| `search`                   | model       | Read  | `query`, `type?`                                                                             |
+| `fetch`                    | model       | Read  | `endpoint`                                                                                   |
+| `list_devices`             | model + app | Read  | `locationId?`, `groupId?`                                                                    |
+| `list_locations`           | model       | Read  | _(none)_                                                                                     |
+| `list_groups`              | model       | Read  | `locationId?`                                                                                |
+| `get_device`               | model + app | Read  | `uuid`                                                                                       |
+| `get_device_state`         | model       | Read  | `uuid`                                                                                       |
+| `get_device_state_by_mac`  | model       | Read  | `mac`                                                                                        |
+| `get_location_state`       | model       | Read  | `locationId`                                                                                 |
+| `get_device_documentation` | model       | Read  | `topic?`                                                                                     |
+| `list_smarts`              | model       | Read  | _(none)_                                                                                     |
+| `get_smart`                | model       | Read  | `id`                                                                                         |
+| `list_smart_cmds`          | model       | Read  | `id`                                                                                         |
+| `activate_smart`           | model       | Write | `id`                                                                                         |
+| `list_scheduled_jobs`      | model       | Read  | _(none)_                                                                                     |
+| `cancel_scheduled_job`     | model       | Write | `jobId`                                                                                      |
+| `update_device`            | model       | Write | `uuid`, `label?`, `desc?`, `locationId?`, `groupId?`                                         |
+| `delete_device`            | model       | Write | `uuid`                                                                                       |
+| `control_device`           | model       | Write | `uuid`, `elementIds`, `command`                                                              |
+| `control_device_simple`    | model       | Write | `uuid`, `power?`, `brightness?`, `kelvin?`, `temperature?`, `mode?`, `color?`, `elementId?`  |
+| `control_devices_bulk`     | model       | Write | `uuids`, `power?`, `brightness?`, `kelvin?`, `temperature?`, `mode?`, `color?`, `elementId?` |
+| `interactive_device`       | model + app | Read  | `uuid`                                                                                       |
+| `_widget_list_devices`     | app only    | Read  | `locationId?`, `groupId?`                                                                    |
+| `_widget_get_device`       | app only    | Read  | `uuid`                                                                                       |
+| `_widget_control_device`   | app only    | Read  | `uuid`                                                                                       |
 
 ## Tool Routing Guide (for AI)
 
 The description fields guide the model, but as context for agents writing tool code:
 
-| User intent                                              | Correct tool            | Reason                       |
-| -------------------------------------------------------- | ----------------------- | ---------------------------- |
-| "control the light" / "adjust the AC" (vague)            | `interactive_device`    | Opens widget control panel   |
-| "turn off the light" / "set brightness to 80" (specific) | `control_device_simple` | Direct command, no widget    |
-| Raw protocol control (attrId + value arrays)             | `control_device`        | Power user / widget internal |
+| User intent                                              | Correct tool            | Reason                           |
+| -------------------------------------------------------- | ----------------------- | -------------------------------- |
+| "control the light" / "adjust the AC" (vague)            | `interactive_device`    | Opens widget control panel       |
+| "turn off the light" / "set brightness to 80" (specific) | `control_device_simple` | Direct command, no widget        |
+| "turn off all lights" / "set all ACs to 26" (bulk)       | `control_devices_bulk`  | Same command across many devices |
+| Raw protocol control (attrId + value arrays)             | `control_device`        | Power user / widget internal     |
 
 ## control_device_simple — Value Ranges & Conversion
 
@@ -140,11 +142,11 @@ Both `_meta.ui.resourceUri` (nested) and `_meta["ui/resourceUri"]` (flat) are pr
 
 ### Auth Patterns
 
-| Pattern            | Tools                                                                                                                                                                                        | Helper used            |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| Full auth (userId) | fetch*user, search, fetch, list_devices, list_locations, list_groups, get_device, update_device, delete_device, control_device, control_device_simple, smarts, interactive_device, widget*\* | `extractUserContext()` |
-| Auth, no userId    | get_device_state, get_location_state, get_device_state_by_mac                                                                                                                                | `requireAuthHeader()`  |
-| No auth            | get_device_documentation                                                                                                                                                                     | _(none)_               |
+| Pattern            | Tools                                                                                                                                                                                                              | Helper used            |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| Full auth (userId) | fetch*user, search, fetch, list_devices, list_locations, list_groups, get_device, update_device, delete_device, control_device, control_device_simple, control_devices_bulk, smarts, interactive_device, widget*\* | `extractUserContext()` |
+| Auth, no userId    | get_device_state, get_location_state, get_device_state_by_mac                                                                                                                                                      | `requireAuthHeader()`  |
+| No auth            | get_device_documentation                                                                                                                                                                                           | _(none)_               |
 
 ## Registry Internals
 

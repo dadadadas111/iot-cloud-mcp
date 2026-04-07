@@ -37,6 +37,10 @@ import {
   ControlDeviceSimpleParams,
 } from '../definitions/control-device-simple.tool';
 import {
+  CONTROL_DEVICES_BULK_TOOL,
+  ControlDevicesBulkParams,
+} from '../definitions/control-devices-bulk.tool';
+import {
   WIDGET_LIST_DEVICES_TOOL,
   WidgetListDevicesParams,
 } from '../definitions/widget-list-devices.tool';
@@ -116,6 +120,8 @@ export class ToolExecutorService {
     [CONTROL_DEVICE_TOOL.name]: (p, c) => this.executeControlDevice(p as ControlDeviceParams, c),
     [CONTROL_DEVICE_SIMPLE_TOOL.name]: (p, c) =>
       this.executeControlDeviceSimple(p as unknown as ControlDeviceSimpleParams, c),
+    [CONTROL_DEVICES_BULK_TOOL.name]: (p, c) =>
+      this.executeControlDevicesBulk(p as unknown as ControlDevicesBulkParams, c),
     [WIDGET_LIST_DEVICES_TOOL.name]: (p, c) =>
       this.executeWidgetListDevices(p as WidgetListDevicesParams, c),
     [WIDGET_GET_DEVICE_TOOL.name]: (p, c) =>
@@ -174,6 +180,14 @@ export class ToolExecutorService {
     return {
       content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
     };
+  }
+
+  private chunkArray<T>(items: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+      chunks.push(items.slice(i, i + size));
+    }
+    return chunks;
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────
@@ -634,6 +648,81 @@ export class ToolExecutorService {
       }
 
       return this.successResult(results.length === 1 ? results[0] : results);
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  /** Control multiple devices with the same attribute set and report per-device outcomes */
+  private async executeControlDevicesBulk(
+    params: ControlDevicesBulkParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+
+      const { uuids, elementId, ...attrs } = params;
+      const commands = buildControlCommands(attrs);
+
+      if (commands.length === 0) {
+        throw new BadRequestException(
+          'At least one attribute must be specified: power, brightness, kelvin, temperature, mode, or color.',
+        );
+      }
+
+      const runForDevice = async (uuid: string) => {
+        const device = await this.iotApiService.getDevice(projectApiKey, userId, uuid);
+        const elementIds = elementId != null ? [elementId] : device.elementIds;
+        const basePayload = {
+          eid: device.eid,
+          elementIds,
+          endpoint: device.endpoint,
+          partnerId: device.partnerId,
+          rootUuid: device.rootUuid ?? device.uuid,
+          protocolCtl: device.protocolCtl,
+        };
+
+        for (const command of commands) {
+          await this.iotApiService.controlDevice(projectApiKey, { ...basePayload, command });
+        }
+
+        return {
+          uuid,
+          label: device.label ?? null,
+          status: 'success',
+          commandsSent: commands.length,
+          elementIds,
+        };
+      };
+
+      const results: Array<Record<string, unknown>> = [];
+      for (const chunk of this.chunkArray(uuids, 10)) {
+        const settled = await Promise.allSettled(chunk.map((uuid) => runForDevice(uuid)));
+        settled.forEach((result, index) => {
+          const uuid = chunk[index];
+          if (result.status === 'fulfilled') {
+            results.push(result.value);
+            return;
+          }
+
+          results.push({
+            uuid,
+            status: 'failed',
+            error: sanitizeErrorForClient(result.reason),
+          });
+        });
+      }
+
+      const succeeded = results.filter((result) => result.status === 'success').length;
+      const failed = results.length - succeeded;
+
+      return this.successResult({
+        _view: 'bulk_control',
+        total: results.length,
+        succeeded,
+        failed,
+        results,
+      });
     } catch (error) {
       return this.errorResult(error);
     }
