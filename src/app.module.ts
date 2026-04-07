@@ -15,6 +15,7 @@ import { RedisModule } from './redis/redis.module';
 import { WidgetsModule } from './widgets/widgets.module';
 import { AliasModule } from './alias/alias.module';
 import { SchedulerModule } from './scheduler/scheduler.module';
+import { BridgeModule } from './bridge/bridge.module';
 
 @Module({
   imports: [
@@ -88,6 +89,8 @@ import { SchedulerModule } from './scheduler/scheduler.module';
 
     // Tool Scheduler (delayed/scheduled tool execution)
     SchedulerModule,
+
+    BridgeModule,
   ],
   controllers: [HealthController],
   providers: [
