@@ -16,38 +16,38 @@ die()  { echo -e "${RED}✗ $1${NC}"; exit 1; }
 
 # ─── Header ───────────────────────────────────────────────────────────────────
 echo -e "\n${BOLD}Rogo IoT × Xiaozhi AI — Bridge Installer${NC}"
-echo -e "Kết nối Xiaozhi AI của bạn với Rogo IoT thông qua MCP.\n"
+echo -e "Connect your Xiaozhi AI to Rogo IoT via MCP.\n"
 
 # ─── Check Docker ─────────────────────────────────────────────────────────────
-step "Kiểm tra Docker"
-command -v docker &>/dev/null || die "Docker chưa được cài. Cài tại: https://docs.docker.com/get-docker/"
-docker info &>/dev/null        || die "Docker daemon chưa chạy. Hãy khởi động Docker trước."
+step "Checking Docker"
+command -v docker &>/dev/null || die "Docker is not installed. Get it at: https://docs.docker.com/get-docker/"
+docker info &>/dev/null        || die "Docker daemon is not running. Please start Docker first."
 ok "Docker OK"
 
 # ─── Collect credentials ──────────────────────────────────────────────────────
-step "Nhập thông tin cấu hình"
-echo -e "(Lấy Xiaozhi endpoint tại: ${BOLD}xiaozhi.me${NC} → Agent → Get MCP Endpoint)"
-echo -e "(Lấy Rogo MCP URL tại: ${BOLD}dash.id.vn${NC} → Project → MCP Endpoint)\n"
+step "Enter configuration"
+echo -e "(Xiaozhi endpoint: ${BOLD}xiaozhi.me${NC} → Agent → Get MCP Endpoint)"
+echo -e "(Rogo MCP URL: ${BOLD}iot.rogo.com.vn${NC} (or iot-stag.rogo.com.vn for staging) → Project → Cloud Service → MCP Service)\n"
 
 read -rp "  Xiaozhi MCP endpoint  : " XIAOZHI_ENDPOINT
-[[ "$XIAOZHI_ENDPOINT" == wss://* ]] || die "Endpoint phải bắt đầu bằng wss://"
+[[ "$XIAOZHI_ENDPOINT" == wss://* ]] || die "Endpoint must start with wss://"
 
 read -rp "  Rogo MCP URL          : " ROGO_MCP_URL
-[[ "$ROGO_MCP_URL" == https://* ]] || die "URL phải bắt đầu bằng https://"
+[[ "$ROGO_MCP_URL" == https://* ]] || die "URL must start with https://"
 
-read -rp "  Rogo email             : " ROGO_EMAIL
-read -rsp "  Rogo password          : " ROGO_PASSWORD
+read -rp "  Rogo email            : " ROGO_EMAIL
+read -rsp "  Rogo password         : " ROGO_PASSWORD
 echo ""
 
 # ─── Create directory ─────────────────────────────────────────────────────────
 INSTALL_DIR="$HOME/rogo-xiaozhi-bridge"
-step "Tạo thư mục: $INSTALL_DIR"
+step "Creating directory: $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
-ok "Thư mục sẵn sàng"
+ok "Directory ready"
 
 # ─── Write requirements.txt ───────────────────────────────────────────────────
-step "Ghi file cấu hình"
+step "Writing bridge files"
 cat > requirements.txt << 'REQEOF'
 mcp
 httpx
@@ -207,50 +207,50 @@ async def main():
 asyncio.run(main())
 SERVEREOF
 
-ok "Files đã ghi xong"
+ok "Files written"
 
 # ─── Download mcp_pipe.py ─────────────────────────────────────────────────────
-step "Tải mcp_pipe.py từ Xiaozhi"
+step "Downloading mcp_pipe.py from Xiaozhi"
 curl -fsSL https://raw.githubusercontent.com/78/mcp-calculator/main/mcp_pipe.py -o mcp_pipe.py
 ok "mcp_pipe.py OK"
 
 # ─── Write .env ───────────────────────────────────────────────────────────────
-step "Tạo .env"
+step "Creating .env"
 cat > .env << ENVEOF
 XIAOZHI_ENDPOINT=${XIAOZHI_ENDPOINT}
 ROGO_MCP_URL=${ROGO_MCP_URL}
 ROGO_EMAIL=${ROGO_EMAIL}
 ROGO_PASSWORD=${ROGO_PASSWORD}
 ENVEOF
-ok ".env OK"
+ok ".env created"
 
 # ─── Build & start ────────────────────────────────────────────────────────────
-step "Build Docker image (lần đầu ~2 phút)"
+step "Building Docker image (first time ~2 min)"
 docker compose build --quiet
 
-step "Khởi động bridge"
+step "Starting bridge"
 docker compose up -d
-ok "Container đã start"
+ok "Container started"
 
 # ─── Wait & verify ────────────────────────────────────────────────────────────
-step "Chờ kết nối..."
+step "Waiting for connection..."
 sleep 6
 
 LOGS=$(docker logs rogo-xiaozhi-bridge 2>&1 | tail -20)
 echo "$LOGS"
 
 if echo "$LOGS" | grep -q "Connected to Rogo MCP server"; then
-  echo -e "\n${GREEN}${BOLD}✓ Kết nối thành công! Xiaozhi đã có thể dùng Rogo IoT tools.${NC}"
+  echo -e "\n${GREEN}${BOLD}✓ Connected! Xiaozhi can now use Rogo IoT tools.${NC}"
 elif echo "$LOGS" | grep -q "Auth OK"; then
-  warn "Auth thành công nhưng chưa thấy xác nhận kết nối Xiaozhi. Kiểm tra lại endpoint."
+  warn "Auth succeeded but Xiaozhi connection not confirmed yet. Check your endpoint."
 else
-  warn "Chưa thể xác nhận kết nối. Xem log: docker logs rogo-xiaozhi-bridge -f"
+  warn "Could not confirm connection. Check logs: docker logs rogo-xiaozhi-bridge -f"
 fi
 
 # ─── Done ─────────────────────────────────────────────────────────────────────
-echo -e "\n${BOLD}Các lệnh hữu ích:${NC}"
-echo -e "  ${BLUE}docker logs rogo-xiaozhi-bridge -f${NC}   — xem log realtime"
-echo -e "  ${BLUE}docker compose restart${NC}               — khởi động lại"
-echo -e "  ${BLUE}docker compose down${NC}                  — dừng bridge"
-echo -e "  ${BLUE}cd $INSTALL_DIR${NC}                 — vào thư mục cài đặt"
+echo -e "\n${BOLD}Useful commands:${NC}"
+echo -e "  ${BLUE}docker logs rogo-xiaozhi-bridge -f${NC}   — live logs"
+echo -e "  ${BLUE}docker compose restart${NC}               — restart bridge"
+echo -e "  ${BLUE}docker compose down${NC}                  — stop bridge"
+echo -e "  ${BLUE}cd $INSTALL_DIR${NC}                 — go to install directory"
 echo ""
