@@ -24,7 +24,7 @@ export type GetDeviceStateByMacParams = z.infer<typeof GetDeviceStateByMacParams
 export const GET_DEVICE_STATE_BY_MAC_TOOL = {
   name: 'get_device_state_by_mac',
   description:
-    'Get device state by MAC address within a location. Useful when you have the MAC address but not the device UUID.',
+    'Get device state by MAC address within a location. Returns human-readable state like get_device_state: { macAddress, power, mode, temperature, brightness, kelvin, ... }. Multi-element devices return { macAddress, elementCount, elements }. Useful when you have the MAC address but not the device UUID.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -42,7 +42,7 @@ export const GET_DEVICE_STATE_BY_MAC_TOOL = {
   metadata: {
     name: 'get_device_state_by_mac',
     description:
-      'Get device state by MAC address within a location. Useful when you have the MAC address but not the device UUID.',
+      'Get device state by MAC address within a location. Returns human-readable state like get_device_state: { macAddress, power, mode, temperature, brightness, kelvin, ... }. Multi-element devices return { macAddress, elementCount, elements }. Useful when you have the MAC address but not the device UUID.',
     readOnlyHint: true,
     securitySchemes: {
       oauth2: {

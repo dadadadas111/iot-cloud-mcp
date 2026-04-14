@@ -23,7 +23,7 @@ export type GetDeviceStateParams = z.infer<typeof GetDeviceStateParamsSchema>;
 export const GET_DEVICE_STATE_TOOL = {
   name: 'get_device_state',
   description:
-    'Get the current state of a specific device by UUID. Returns device state with attributes like power, brightness, temperature, etc. State structure: state[deviceId][elementId][attributeId] = [attributeId, ...values]. See device-attr-and-control.csv for attribute reference.',
+    'Get the current state of a device by UUID. Returns human-readable state: { uuid, power ("on"/"off"), mode ("AUTO"/"COOL"/"DRY"/"HEAT"/"FAN"), temperature (°C), brightness (0-100%), kelvin }. Multi-element devices (e.g. multi-gang switches) return { uuid, elementCount, elements: { "1": {...}, "2": {...} } } with per-element state. Unknown attributes appear as attr_N.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -37,7 +37,7 @@ export const GET_DEVICE_STATE_TOOL = {
   metadata: {
     name: 'get_device_state',
     description:
-      'Get the current state of a specific device by UUID. Returns device state with attributes like power, brightness, temperature, etc. State structure: state[deviceId][elementId][attributeId] = [attributeId, ...values]. See device-attr-and-control.csv for attribute reference.',
+      'Get the current state of a device by UUID. Returns human-readable state: { uuid, power ("on"/"off"), mode ("AUTO"/"COOL"/"DRY"/"HEAT"/"FAN"), temperature (°C), brightness (0-100%), kelvin }. Multi-element devices (e.g. multi-gang switches) return { uuid, elementCount, elements: { "1": {...}, "2": {...} } } with per-element state. Unknown attributes appear as attr_N.',
     readOnlyHint: true,
     securitySchemes: {
       oauth2: {

@@ -9,6 +9,7 @@ export type InteractiveDeviceParams = z.infer<typeof InteractiveDeviceParamsSche
 export const INTERACTIVE_DEVICE_TOOL = {
   name: 'interactive_device',
   description:
+    'IMPORTANT: Always call get_device_state (or get_device) first to read current state before issuing control commands. Controlling a device without knowing its current state may cause unintended behavior. ' +
     'Open an interactive control panel widget for a device. ' +
     'Use this when the user wants to control or manage a device without specifying exact actions ' +
     '(e.g. "control the light", "adjust the AC", "manage bedroom lamp"). ' +
@@ -28,6 +29,7 @@ export const INTERACTIVE_DEVICE_TOOL = {
   metadata: {
     name: 'interactive_device',
     description:
+      'IMPORTANT: Always call get_device_state (or get_device) first to read current state before issuing control commands. Controlling a device without knowing its current state may cause unintended behavior. ' +
       'Open an interactive control panel widget for a device. ' +
       'Use when user wants to control a device without specifying exact actions. ' +
       'Shows visual UI with power, brightness, temperature, and mode controls.',

@@ -1,12 +1,12 @@
 # AGENTS.md — Hierarchical Agent Knowledge
 
-> **Generated**: 2026-03-04 | **Commit**: 1cf4e51 | **Branch**: master
+> **Generated**: 2026-03-26 | **Commit**: 58a6078 | **Branch**: feature-staging
 
 ## Overview
 
 NestJS MCP gateway that proxies AI tool calls to a Rogo IoT Cloud REST API. Multi-tenant via URL-embedded API keys (`/mcp/:projectApiKey`).
 
-**Stack**: NestJS 10 + TypeScript (ES2021/CJS) + Redis (ioredis) + Zod v4 + Jest
+**Stack**: NestJS 10 + TypeScript (ES2021/CJS) + Redis (ioredis) + Zod v4 + Jest + BullMQ
 
 **See `AGENT.md`** for full architecture, data flow, session internals, and environment variables.
 
@@ -18,32 +18,39 @@ src/
 ├── app.module.ts           # Root module (Config, Throttler, Http, all feature modules)
 ├── health.controller.ts    # GET /health
 ├── mcp/                    # MCP protocol — controller, sessions, server factory [→ AGENTS.md]
-├── tools/                  # 15 MCP tool definitions + executor [→ AGENTS.md]
+│   └── mcp-auth.controller.ts  # Subdomain OAuth routes under /mcp/:alias/* [→ AGENTS.md]
+├── tools/                  # 24 MCP tool definitions + executor [→ AGENTS.md]
 ├── resources/              # 4 MCP resource definitions (overview, state-guide, control-guide, device-attributes)
+├── widgets/                # HTML widget SPA (device-app.html) served as ui://widget/* resource
 ├── auth/                   # OAuth 2.1 flow (/authorize, /token, /register)
 ├── discovery/              # .well-known OAuth discovery endpoints
+├── scheduler/              # BullMQ-based tool scheduler (delayed/absolute-time tool execution)
 ├── proxy/                  # IoT API proxy (IotApiService — all HTTP calls to Rogo Cloud)
 ├── redis/                  # @Global Redis client module (ioredis, retry, cleanup)
 └── common/                 # Shared utils, constants, decorators
     ├── constants/          # product.constants.ts (DEVICE_TYPE, BRAND, OWNERSHIP maps)
-    ├── utils/              # jwt.utils.ts, product.utils.ts (resolveDeviceType, decodeProductId)
+    ├── utils/              # jwt.utils.ts, product.utils.ts, url.utils.ts, error.utils.ts
     ├── interfaces/         # Shared interfaces
     └── decorators/         # api-key.decorator.ts
 ```
 
 ## Where to Look
 
-| Task                    | Location                                                        | Notes                                                           |
-| ----------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| Add MCP tool            | `src/tools/definitions/` → `tool-registry` → `iot-api.service`  | See `src/tools/AGENTS.md`                                       |
-| Add MCP resource        | `src/resources/definitions/` → `resource-registry.service.ts`   | Same pattern as tools                                           |
-| Modify session behavior | `src/mcp/services/` (session-manager, redis-session.repository) | See `src/mcp/AGENTS.md`                                         |
-| Change auth flow        | `src/auth/auth.controller.ts` + `services/oauth.service.ts`     | OAuth 2.1, proxies to IoT Cloud `/login`                        |
-| Change API proxy        | `src/proxy/services/iot-api.service.ts`                         | Single file, all HTTP calls                                     |
-| Device type resolution  | `src/common/utils/product.utils.ts`                             | Always use `resolveDeviceType()`, NOT `decodeProductId()` alone |
-| Redis config/keys       | `src/redis/redis.module.ts` + `redis.constants.ts`              | `REDIS_CLIENT` injection token, key prefixes                    |
-| Docker/deploy           | `docker-compose*.yml`, `Dockerfile`, `.github/workflows/`       | See `docs/DEPLOYMENT.md`                                        |
-| Environment vars        | `.env.example`                                                  | All vars documented there; use `ConfigService.get<T>()` in code |
+| Task                     | Location                                                           | Notes                                                            |
+| ------------------------ | ------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Add MCP tool             | `src/tools/definitions/` → `tool-registry` → `iot-api.service`     | See `src/tools/AGENTS.md`                                        |
+| Add MCP resource         | `src/resources/definitions/` → `resource-registry.service.ts`      | Same pattern as tools                                            |
+| Modify session behavior  | `src/mcp/services/` (session-manager, redis-session.repository)    | See `src/mcp/AGENTS.md`                                          |
+| Change auth flow         | `src/auth/auth.controller.ts` + `services/oauth.service.ts`        | OAuth 2.1, proxies to IoT Cloud `/login`                         |
+| Subdomain auth/discovery | `src/mcp/mcp-auth.controller.ts`                                   | Mirrors auth routes under /mcp/:alias for wildcard nginx         |
+| Change API proxy         | `src/proxy/services/iot-api.service.ts`                            | Single file, all HTTP calls                                      |
+| Device type resolution   | `src/common/utils/product.utils.ts`                                | Always use `resolveDeviceType()`, NOT `decodeProductId()` alone  |
+| Build subdomain URL      | `src/common/utils/url.utils.ts` — `buildSubdomainUrl(base, alias)` | localhost/IP passthrough; prefixes alias to hostname             |
+| Redis config/keys        | `src/redis/redis.module.ts` + `redis.constants.ts`                 | `REDIS_CLIENT` injection token, key prefixes                     |
+| Scheduled tool execution | `src/scheduler/`                                                   | BullMQ. Tools: list_scheduled_jobs, cancel_scheduled_job         |
+| Widget HTML (device UI)  | `views/widgets/device-app.html`                                    | Single-file SPA. Uses MCP Apps bridge (\_bridge) for all clients |
+| Docker/deploy            | `docker-compose*.yml`, `Dockerfile`, `.github/workflows/`          | See `docs/DEPLOYMENT.md`                                         |
+| Environment vars         | `.env.example`                                                     | All vars documented there; use `ConfigService.get<T>()` in code  |
 
 ## Conventions
 
@@ -73,7 +80,10 @@ src/
 - **Dual session storage**: Redis (serializable metadata + TTL) + local `Map<string, McpServer>` (non-serializable instances). Cache miss → factory recreates server with tools/resources re-registered
 - **Tool definition pattern**: Each tool is a standalone `.tool.ts` file exporting `{ name, description, schema (zod), metadata }`
 - **Multi-tenant via URL**: `projectApiKey` in path param, forwarded as `x-header-apikey` to IoT API
+- **Subdomain routing**: Nginx rewrites `{alias}.domain.com/*` → `/mcp/{alias}/*`. `McpAuthController` serves OAuth + discovery at these paths. `buildSubdomainUrl()` constructs public-facing subdomain URLs for metadata
 - **Transport**: `StreamableHTTPServerTransport` from `@modelcontextprotocol/sdk` (NOT SSE)
+- **MCP Apps widget**: `views/widgets/device-app.html` is a single-file SPA served as `ui://widget/device-app.html` with MIME `text/html;profile=mcp-app`. Uses `_bridge` (custom JSON-RPC postMessage, compatible with ChatGPT, Claude Desktop, VS Code Copilot). Tool calls use `tools/call` method
+- **Widget tool routing**: Vague control requests → `interactive_device` (opens widget). Specific commands → `control_device_simple`. Raw protocol → `control_device`
 - **Naming**: API field is `productId` (not `modelId`). Constants use this term consistently
 
 ## Commands
@@ -88,9 +98,24 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
+## Xiaozhi Bridge
+
+`bridge/xiaozhi/` — standalone Python bridge that connects a per-user Xiaozhi AI device to Rogo IoT via the deployed MCP server. Each user runs their own instance.
+
+See **`docs/XIAOZHI_BRIDGE.md`** for full setup guide.
+
+Architecture: `bridge.py` (headless OAuth) → `mcp_pipe.py` (Xiaozhi WebSocket relay) → `bridge_server.py` (transparent stdio↔HTTP MCP proxy) → Rogo MCP server.
+
+## TODOs
+
+- **Update stale resources**: `docs/ai-resources/` markdown files (state-guide, control-guide, device-attributes) still describe raw attrId/value protocol. Now that `get_device_state` returns human-readable keys and `control_device_simple` accepts the same keys, these resources are misleading. Options: (1) Rewrite the markdown files to describe the new format, or (2) Replace the static file-read resources with dynamic ones that auto-generate content from the same maps in `device-state.utils.ts` / `device-control.utils.ts`. Option 2 is preferred — never goes stale.
+- **Translate list_smart_cmds output**: `list_smart_cmds` returns raw `cmds` in IoT protocol format (element→attribute arrays). Research the actual smart command structure from real API responses, then translate to human-readable keys matching `get_device_state` output. Low priority — not a core tool.
+- **On-demand control reference tool**: A `get_control_reference` tool that returns a structured mapping of state keys → valid control values + ranges. Auto-derived from `device-control.utils.ts`. Called on-demand when the AI encounters a control error or is unsure about valid values — NOT as a mandatory pre-flight. Description should say: _"Call when unsure about valid values for a control attribute, or after a control error."_ The tool is complex because each attribute has different value types (enum strings, numeric ranges, nested objects) — needs careful per-attribute documentation generation.
+
 ## Notes
 
-- **CI/CD**: Push to master → build Docker + deploy prod (`mcp.dash.id.vn:3001`). PR → staging (`mcp-stag.dash.id.vn:3002`). VPS: `160.187.247.2`
+- **CI/CD**: Push to master → build Docker + deploy prod (`mcp.dash.id.vn:3001`). PR/branch → staging (`mcp-stag.dash.id.vn:3002`). VPS: `160.187.247.2`
+- **Nginx**: All 4 configs have `proxy_buffering off`, `proxy_read_timeout 300s`, `Connection ''` for SSE streaming. Backups at `/tmp/*.bak`
 - **e2e tests**: `test:e2e` script exists in package.json but `test/jest-e2e.json` config is missing — e2e not operational
 - **ThrottlerModule**: Uses array syntax `forRoot([{ttl: 60000, limit: 100}])` — ttl appears to be ms (non-standard, typical is seconds)
 - **Rate limiting**: Configurable via `ENABLE_RATE_LIMIT`, `RATE_LIMIT_MAX`, `RATE_LIMIT_WINDOW` env vars
@@ -99,7 +124,7 @@ npm run format           # Prettier
 ## Hierarchy
 
 ```
-./AGENTS.md              ← you are here
-├── src/mcp/AGENTS.md    ← protocol, sessions, transport
-└── src/tools/AGENTS.md  ← tool definitions, registry, executor
+./AGENTS.md                  ← you are here
+├── src/mcp/AGENTS.md        ← protocol, sessions, transport, subdomain auth
+└── src/tools/AGENTS.md      ← tool definitions, registry, executor
 ```

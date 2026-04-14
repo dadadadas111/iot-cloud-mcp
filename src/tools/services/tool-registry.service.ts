@@ -14,8 +14,9 @@ import { DELETE_DEVICE_TOOL } from '../definitions/delete-device.tool';
 import { GET_DEVICE_STATE_TOOL } from '../definitions/get-device-state.tool';
 import { GET_LOCATION_STATE_TOOL } from '../definitions/get-location-state.tool';
 import { GET_DEVICE_STATE_BY_MAC_TOOL } from '../definitions/get-device-state-by-mac.tool';
-import { CONTROL_DEVICE_TOOL } from '../definitions/control-device.tool';
+// import { CONTROL_DEVICE_TOOL } from '../definitions/control-device.tool';
 import { CONTROL_DEVICE_SIMPLE_TOOL } from '../definitions/control-device-simple.tool';
+import { CONTROL_DEVICES_BULK_TOOL } from '../definitions/control-devices-bulk.tool';
 import { WIDGET_LIST_DEVICES_TOOL } from '../definitions/widget-list-devices.tool';
 import { WIDGET_GET_DEVICE_TOOL } from '../definitions/widget-get-device.tool';
 import { WIDGET_CONTROL_DEVICE_TOOL } from '../definitions/widget-control-device.tool';
@@ -42,8 +43,9 @@ const ALL_TOOL_DEFINITIONS = [
   GET_DEVICE_STATE_TOOL,
   GET_LOCATION_STATE_TOOL,
   GET_DEVICE_STATE_BY_MAC_TOOL,
-  CONTROL_DEVICE_TOOL,
+  // CONTROL_DEVICE_TOOL — temporarily unregistered; AI should use control_device_simple
   CONTROL_DEVICE_SIMPLE_TOOL,
+  CONTROL_DEVICES_BULK_TOOL,
   WIDGET_LIST_DEVICES_TOOL,
   WIDGET_GET_DEVICE_TOOL,
   WIDGET_CONTROL_DEVICE_TOOL,

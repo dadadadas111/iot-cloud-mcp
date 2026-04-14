@@ -6,6 +6,8 @@
 
 import { IotDevice, IotLocation, IotGroup } from '../../proxy/dto/iot-api-response.dto';
 import { Injectable, Inject, BadRequestException, forwardRef } from '@nestjs/common';
+import { extractStateMap, translateDeviceState } from '../utils/device-state.utils';
+import { buildControlCommands } from '../utils/device-control.utils';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { IotApiService } from '../../proxy/services/iot-api.service';
 import { SchedulerService } from '../../scheduler/scheduler.service';
@@ -34,6 +36,10 @@ import {
   CONTROL_DEVICE_SIMPLE_TOOL,
   ControlDeviceSimpleParams,
 } from '../definitions/control-device-simple.tool';
+import {
+  CONTROL_DEVICES_BULK_TOOL,
+  ControlDevicesBulkParams,
+} from '../definitions/control-devices-bulk.tool';
 import {
   WIDGET_LIST_DEVICES_TOOL,
   WidgetListDevicesParams,
@@ -113,7 +119,9 @@ export class ToolExecutorService {
       this.executeGetDeviceStateByMac(p as GetDeviceStateByMacParams, c),
     [CONTROL_DEVICE_TOOL.name]: (p, c) => this.executeControlDevice(p as ControlDeviceParams, c),
     [CONTROL_DEVICE_SIMPLE_TOOL.name]: (p, c) =>
-      this.executeControlDeviceSimple(p as ControlDeviceSimpleParams, c),
+      this.executeControlDeviceSimple(p as unknown as ControlDeviceSimpleParams, c),
+    [CONTROL_DEVICES_BULK_TOOL.name]: (p, c) =>
+      this.executeControlDevicesBulk(p as unknown as ControlDevicesBulkParams, c),
     [WIDGET_LIST_DEVICES_TOOL.name]: (p, c) =>
       this.executeWidgetListDevices(p as WidgetListDevicesParams, c),
     [WIDGET_GET_DEVICE_TOOL.name]: (p, c) =>
@@ -162,19 +170,6 @@ export class ToolExecutorService {
     };
   }
 
-  private requireValue(value: number | null | undefined, action: string): number {
-    if (value == null) {
-      throw new BadRequestException(`value is required for ${action} action`);
-    }
-    return value;
-  }
-
-  private validateRange(value: number, min: number, max: number, label: string): void {
-    if (value < min || value > max) {
-      throw new BadRequestException(`${label} must be ${min}-${max}. Got: ${value}`);
-    }
-  }
-
   /** Wrap error as MCP CallToolResult with sanitized message */
   private errorResult(error: unknown, includeAuthHint = true): CallToolResult {
     const errorMessage = sanitizeErrorForClient(error);
@@ -187,63 +182,12 @@ export class ToolExecutorService {
     };
   }
 
-  /**
-   * Extract flat element→attribute state map from the getDeviceState API response.
-   *
-   * The API returns a nested structure:
-   *   { state: { DEVICE_ID: { ELEMENT_ID: { ATTR_ID: [attrId, val, ...] } } }, mac, ... }
-   *
-   * This normalizes it to the flat element→attribute map:
-   *   { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
-   */
-  private extractStateMap(rawState: unknown): Record<string, unknown> | null {
-    if (!rawState || typeof rawState !== 'object') return null;
-
-    // Handle array wrapper: [{ state: {...} }]
-    if (Array.isArray(rawState)) {
-      const first = rawState[0] as Record<string, unknown> | undefined;
-      if (first?.state && typeof first.state === 'object') {
-        return this.extractStateMap(first);
-      }
-      return null;
+  private chunkArray<T>(items: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < items.length; i += size) {
+      chunks.push(items.slice(i, i + size));
     }
-
-    let record = rawState as Record<string, unknown>;
-
-    // Unwrap .state key: { state: { ... }, mac, devId, ... } → { ... }
-    if (
-      'state' in record &&
-      record.state &&
-      typeof record.state === 'object' &&
-      !Array.isArray(record.state)
-    ) {
-      record = record.state as Record<string, unknown>;
-    }
-
-    // Now record is either:
-    // A) element→attribute map: { "1": { "1": [1,1] }, "2": { "1": [1,0] } }
-    //    where inner-most values are ARRAYS
-    // B) deviceId→elements wrapper: { "devUuid": { "1": { "1": [1,1] }, ... } }
-    //    where inner-most values at this depth are still OBJECTS
-    //
-    // Detect which by checking: are the leaf values at depth-2 arrays?
-    const keys = Object.keys(record);
-    if (keys.length === 0) return null;
-
-    const firstVal = record[keys[0]];
-    if (!firstVal || typeof firstVal !== 'object' || Array.isArray(firstVal)) {
-      return record; // Unexpected shape, return as-is
-    }
-
-    // Check if firstVal's values are arrays (= this IS the element→attribute map)
-    const inner = firstVal as Record<string, unknown>;
-    const innerKeys = Object.keys(inner);
-    if (innerKeys.length > 0 && Array.isArray(inner[innerKeys[0]])) {
-      return record; // Confirmed: element→attribute map
-    }
-
-    // Inner values are objects → device ID wrapper. Unwrap by taking first device's state.
-    return firstVal as Record<string, unknown>;
+    return chunks;
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────
@@ -308,13 +252,15 @@ export class ToolExecutorService {
         this.iotApiService.listGroups(projectApiKey, userId),
       ]);
 
-      const query = params.query.toLowerCase();
+      const tokens = params.query.toLowerCase().split(/\s+/).filter(Boolean);
+      const scoreText = (text: string) =>
+        tokens.filter((t) => text.toLowerCase().includes(t)).length;
 
       const matchedDevices = devices
-        .filter(
-          (d) => d.label?.toLowerCase().includes(query) || d.desc?.toLowerCase().includes(query),
-        )
-        .map((d) => {
+        .map((d) => ({ d, score: Math.max(scoreText(d.label ?? ''), scoreText(d.desc ?? '')) }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score)
+        .map(({ d }) => {
           const typeInfo = resolveDeviceType(d);
           return {
             uuid: d.uuid,
@@ -332,25 +278,34 @@ export class ToolExecutorService {
         });
 
       const matchedLocations = locations
-        .filter(
-          (l) => l.label?.toLowerCase().includes(query) || l.desc?.toLowerCase().includes(query),
-        )
-        .map((l) => ({
-          uuid: l.uuid,
-          label: l.label,
-          desc: l.desc,
-        }));
+        .filter((l) => scoreText(l.label ?? '') + scoreText(l.desc ?? '') > 0)
+        .map((l) => ({ uuid: l.uuid, label: l.label, desc: l.desc }));
 
       const matchedGroups = groups
-        .filter(
-          (g) => g.label?.toLowerCase().includes(query) || g.desc?.toLowerCase().includes(query),
-        )
-        .map((g) => ({
-          uuid: g.uuid,
-          label: g.label,
-          desc: g.desc,
-          locationId: g.locationId,
-        }));
+        .filter((g) => scoreText(g.label ?? '') + scoreText(g.desc ?? '') > 0)
+        .map((g) => ({ uuid: g.uuid, label: g.label, desc: g.desc, locationId: g.locationId }));
+
+      if (
+        matchedDevices.length === 0 &&
+        matchedLocations.length === 0 &&
+        matchedGroups.length === 0
+      ) {
+        return this.successResult({
+          total: 0,
+          devices: [],
+          locations: [],
+          groups: [],
+          message: 'No matches found. Try shorter keywords. All available devices:',
+          allDevices: devices.map((d) => {
+            const typeInfo = resolveDeviceType(d);
+            return {
+              uuid: d.uuid,
+              label: d.label,
+              ...(typeInfo && { deviceType: typeInfo.deviceType }),
+            };
+          }),
+        });
+      }
 
       return this.successResult({
         total: matchedDevices.length + matchedLocations.length + matchedGroups.length,
@@ -511,7 +466,7 @@ export class ToolExecutorService {
 
       // Normalize state to flat element→attribute map { "1": { "1": [1,1] }, ... }
       // The getDeviceState API may return wrapped: { state: {...}, mac, devId, ... }
-      const stateMap = this.extractStateMap(state);
+      const stateMap = extractStateMap(state);
 
       const enrichedDevice = {
         ...device,
@@ -573,7 +528,9 @@ export class ToolExecutorService {
     try {
       const projectApiKey = this.requireAuthHeader(context);
       const state = await this.iotApiService.getDeviceState(projectApiKey, params.uuid);
-      return this.successResult(state);
+      const stateMap = extractStateMap(state);
+      const translated = stateMap ? translateDeviceState(stateMap) : {};
+      return this.successResult({ uuid: params.uuid, ...translated });
     } catch (error) {
       return this.errorResult(error);
     }
@@ -588,14 +545,17 @@ export class ToolExecutorService {
       const projectApiKey = this.requireAuthHeader(context);
       const state = await this.iotApiService.getLocationState(projectApiKey, params.locationUuid);
 
-      // Slim location state — drop redundant loc/from/uuid, keep useful fields
       const slimState = Array.isArray(state)
-        ? state.map((entry) => ({
-            mac: entry.mac,
-            devId: entry.devId,
-            state: entry.state,
-            updatedAt: entry.updatedAt,
-          }))
+        ? state.map((entry) => {
+            const stateMap = extractStateMap(entry.state ?? entry);
+            const translated = stateMap ? translateDeviceState(stateMap) : {};
+            return {
+              mac: entry.mac,
+              devId: entry.devId,
+              ...translated,
+              updatedAt: entry.updatedAt,
+            };
+          })
         : state;
 
       return this.successResult(slimState);
@@ -616,7 +576,9 @@ export class ToolExecutorService {
         params.locationUuid,
         params.macAddress,
       );
-      return this.successResult(state);
+      const stateMap = extractStateMap(state);
+      const translated = stateMap ? translateDeviceState(stateMap) : {};
+      return this.successResult({ macAddress: params.macAddress, ...translated });
     } catch (error) {
       return this.errorResult(error);
     }
@@ -650,7 +612,7 @@ export class ToolExecutorService {
     }
   }
 
-  /** Control device using simplified action names */
+  /** Control device by setting one or more attributes (property-bag matching state output keys) */
   private async executeControlDeviceSimple(
     params: ControlDeviceSimpleParams,
     context: ToolContext,
@@ -658,65 +620,109 @@ export class ToolExecutorService {
     try {
       const { userId, projectApiKey } = this.extractUserContext(context);
 
-      // Fetch device details first to get required control fields
-      const device = await this.iotApiService.getDevice(projectApiKey, userId, params.uuid);
+      const { uuid, elementId, ...attrs } = params;
+      const commands = buildControlCommands(attrs);
 
-      // Map simplified action to command array
-      let command: number[];
-      switch (params.action) {
-        case 'turn_on':
-          command = [1, 1];
-          break;
-        case 'turn_off':
-          command = [1, 0];
-          break;
-        case 'set_brightness': {
-          const v = this.requireValue(params.value, 'set_brightness');
-          this.validateRange(v, 0, 100, 'Brightness (percent)');
-          command = [28, Math.round(v * 10)];
-          break;
-        }
-        case 'set_kelvin': {
-          const v = this.requireValue(params.value, 'set_kelvin');
-          this.validateRange(v, 0, 65000, 'Color temperature (Kelvin)');
-          command = [29, Math.round(v)];
-          break;
-        }
-        case 'set_temperature': {
-          const v = this.requireValue(params.value, 'set_temperature');
-          this.validateRange(v, 15, 30, 'Temperature (°C)');
-          command = [20, Math.round(v)];
-          break;
-        }
-        case 'set_mode': {
-          const v = this.requireValue(params.value, 'set_mode');
-          if (!Number.isInteger(v) || v < 0 || v > 4) {
-            throw new BadRequestException(
-              `Invalid mode: ${v}. Valid modes: 0=AUTO, 1=COOL, 2=DRY, 3=HEAT, 4=FAN`,
-            );
-          }
-          command = [17, v];
-          break;
-        }
-        default:
-          throw new BadRequestException(`Unknown action: ${params.action}`);
+      if (commands.length === 0) {
+        throw new BadRequestException(
+          'At least one attribute must be specified: power, brightness, kelvin, temperature, mode, or color.',
+        );
       }
 
-      // Use specified elementId or all device elementIds
-      const elementIds = params.elementId != null ? [params.elementId] : device.elementIds;
-
-      const controlPayload = {
+      const device = await this.iotApiService.getDevice(projectApiKey, userId, uuid);
+      const elementIds = elementId != null ? [elementId] : device.elementIds;
+      const basePayload = {
         eid: device.eid,
         elementIds,
-        command,
         endpoint: device.endpoint,
         partnerId: device.partnerId,
-        rootUuid: device.rootUuid ? device.rootUuid : device.uuid,
+        rootUuid: device.rootUuid ?? device.uuid,
         protocolCtl: device.protocolCtl,
       };
 
-      const result = await this.iotApiService.controlDevice(projectApiKey, controlPayload);
-      return this.successResult(result);
+      const results: unknown[] = [];
+      for (const command of commands) {
+        results.push(
+          await this.iotApiService.controlDevice(projectApiKey, { ...basePayload, command }),
+        );
+      }
+
+      return this.successResult(results.length === 1 ? results[0] : results);
+    } catch (error) {
+      return this.errorResult(error);
+    }
+  }
+
+  /** Control multiple devices with the same attribute set and report per-device outcomes */
+  private async executeControlDevicesBulk(
+    params: ControlDevicesBulkParams,
+    context: ToolContext,
+  ): Promise<CallToolResult> {
+    try {
+      const { userId, projectApiKey } = this.extractUserContext(context);
+
+      const { uuids, elementId, ...attrs } = params;
+      const commands = buildControlCommands(attrs);
+
+      if (commands.length === 0) {
+        throw new BadRequestException(
+          'At least one attribute must be specified: power, brightness, kelvin, temperature, mode, or color.',
+        );
+      }
+
+      const runForDevice = async (uuid: string) => {
+        const device = await this.iotApiService.getDevice(projectApiKey, userId, uuid);
+        const elementIds = elementId != null ? [elementId] : device.elementIds;
+        const basePayload = {
+          eid: device.eid,
+          elementIds,
+          endpoint: device.endpoint,
+          partnerId: device.partnerId,
+          rootUuid: device.rootUuid ?? device.uuid,
+          protocolCtl: device.protocolCtl,
+        };
+
+        for (const command of commands) {
+          await this.iotApiService.controlDevice(projectApiKey, { ...basePayload, command });
+        }
+
+        return {
+          uuid,
+          label: device.label ?? null,
+          status: 'success',
+          commandsSent: commands.length,
+          elementIds,
+        };
+      };
+
+      const results: Array<Record<string, unknown>> = [];
+      for (const chunk of this.chunkArray(uuids, 10)) {
+        const settled = await Promise.allSettled(chunk.map((uuid) => runForDevice(uuid)));
+        settled.forEach((result, index) => {
+          const uuid = chunk[index];
+          if (result.status === 'fulfilled') {
+            results.push(result.value);
+            return;
+          }
+
+          results.push({
+            uuid,
+            status: 'failed',
+            error: sanitizeErrorForClient(result.reason),
+          });
+        });
+      }
+
+      const succeeded = results.filter((result) => result.status === 'success').length;
+      const failed = results.length - succeeded;
+
+      return this.successResult({
+        _view: 'bulk_control',
+        total: results.length,
+        succeeded,
+        failed,
+        results,
+      });
     } catch (error) {
       return this.errorResult(error);
     }
@@ -750,7 +756,7 @@ export class ToolExecutorService {
 
       const typeInfo = resolveDeviceType(device);
       const productDecoded = device.productId ? decodeProductId(device.productId) : null;
-      const stateMap = this.extractStateMap(state);
+      const stateMap = extractStateMap(state);
 
       const enrichedDevice = {
         _view: 'dashboard',
@@ -799,7 +805,7 @@ export class ToolExecutorService {
 
       const typeInfo = resolveDeviceType(device);
       const productDecoded = device.productId ? decodeProductId(device.productId) : null;
-      const stateMap = this.extractStateMap(state);
+      const stateMap = extractStateMap(state);
 
       const enrichedDevice = {
         _view: 'control',

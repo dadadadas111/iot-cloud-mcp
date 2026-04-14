@@ -7,8 +7,12 @@ const HsvSchema = z.object({
   v: z.number().min(0).max(100).describe('Value/brightness 0-100%'),
 });
 
-const ControlDeviceSimpleParamsSchema = z.object({
-  uuid: z.string().describe('Device UUID'),
+const ControlDevicesBulkParamsSchema = z.object({
+  uuids: z
+    .array(z.string())
+    .min(1)
+    .max(50)
+    .describe('Device UUIDs to control (1-50). Typically obtained from a prior list_devices call.'),
   power: z.enum(['on', 'off']).optional().describe('"on" or "off"'),
   brightness: z.number().min(0).max(100).optional().describe('Brightness 0-100 (%)'),
   kelvin: z.number().min(0).max(65000).optional().describe('Color temperature 0-65000 (K)'),
@@ -21,25 +25,36 @@ const ControlDeviceSimpleParamsSchema = z.object({
   elementId: z
     .number()
     .optional()
-    .describe('Specific element ID to control. Omit to control all elements.'),
+    .describe(
+      'Optional element ID applied uniformly to ALL targeted devices. Omit to control all elements on each device. Only use if every targeted device shares the same element numbering.',
+    ),
 });
 
-export type ControlDeviceSimpleParams = z.infer<typeof ControlDeviceSimpleParamsSchema> &
-  ControlAttrs & { uuid: string; elementId?: number };
+export type ControlDevicesBulkParams = z.infer<typeof ControlDevicesBulkParamsSchema> &
+  ControlAttrs & { uuids: string[]; elementId?: number };
 
 const DESCRIPTION =
-  'IMPORTANT: Always call get_device_state first to read current state. ' +
-  'Only set attributes that appear in the state output — those are the ones this device supports. ' +
-  'Pass the same key names and value format as the state output. ' +
-  'Only pass attributes you want to change. Async via MQTT — wait 2-3s then re-check state.';
+  'Apply the SAME control settings to multiple devices in one call (e.g. "turn off all lights", "set all ACs to 26°C"). ' +
+  'You must already have the UUIDs — typically from a prior list_devices call; the AI is responsible for selecting which devices to target. ' +
+  'Pass only the attributes you want to change — each device silently ignores attributes it does not support. ' +
+  'Devices are controlled in parallel (concurrency 10) and partial failures are reported per-device, so one offline device will not block the others. ' +
+  'Returns { total, succeeded, failed, results[] } so you can tell the user exactly which devices succeeded or failed. ' +
+  'For single-device control use control_device_simple instead. Async via MQTT — wait 2-3s then re-check state.';
 
-export const CONTROL_DEVICE_SIMPLE_TOOL = {
-  name: 'control_device_simple',
+export const CONTROL_DEVICES_BULK_TOOL = {
+  name: 'control_devices_bulk',
   description: DESCRIPTION,
   inputSchema: {
     type: 'object' as const,
     properties: {
-      uuid: { type: 'string', description: 'Device UUID' },
+      uuids: {
+        type: 'array',
+        items: { type: 'string' },
+        minItems: 1,
+        maxItems: 50,
+        description:
+          'Device UUIDs to control (1-50). Typically obtained from a prior list_devices call.',
+      },
       power: { type: 'string', enum: ['on', 'off'], description: '"on" or "off"' },
       brightness: { type: 'number', minimum: 0, maximum: 100, description: 'Brightness 0-100 (%)' },
       kelvin: {
@@ -71,13 +86,14 @@ export const CONTROL_DEVICE_SIMPLE_TOOL = {
       },
       elementId: {
         type: 'number',
-        description: 'Specific element ID to control. Omit to control all elements.',
+        description:
+          'Optional element ID applied uniformly to ALL targeted devices. Omit to control all elements on each device.',
       },
     },
-    required: ['uuid'],
+    required: ['uuids'],
   },
   metadata: {
-    name: 'control_device_simple',
+    name: 'control_devices_bulk',
     description: DESCRIPTION,
     readOnlyHint: false,
     destructiveHint: true,
@@ -94,5 +110,5 @@ export const CONTROL_DEVICE_SIMPLE_TOOL = {
       },
     },
   },
-  schema: ControlDeviceSimpleParamsSchema,
+  schema: ControlDevicesBulkParamsSchema,
 };
