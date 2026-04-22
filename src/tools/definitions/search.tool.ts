@@ -5,11 +5,15 @@
  */
 
 import { z } from 'zod';
+import {
+  PAGINATION_INPUT_SCHEMA_PROPERTIES,
+  PaginationParamsSchema,
+} from './pagination-params.tool';
 
 /**
  * search tool parameters
  */
-const SearchParamsSchema = z.object({
+const SearchParamsSchema = PaginationParamsSchema.extend({
   query: z
     .string()
     .describe('Search keyword to match against device labels, location names, and group names'),
@@ -27,7 +31,7 @@ export type SearchParams = z.infer<typeof SearchParamsSchema>;
 export const SEARCH_TOOL = {
   name: 'search',
   description:
-    'Search devices, locations, and groups by keyword. Use keywords only — not full sentences (e.g., "phòng khách" not "bật đèn phòng khách"). Results sorted by relevance. If nothing matched, all available devices are returned as suggestions.',
+    'Search devices, locations, and groups by keyword with compact pagination. Use keywords only — not full sentences (e.g., "phòng khách" not "bật đèn phòng khách"). Defaults to limit=20, offset=0. If nothing matched, a capped suggestion list is returned instead of dumping every device.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -36,13 +40,14 @@ export const SEARCH_TOOL = {
         description:
           'Search keyword to match against device labels, location names, and group names',
       },
+      ...PAGINATION_INPUT_SCHEMA_PROPERTIES,
     },
     required: ['query'],
   },
   metadata: {
     name: 'search',
     description:
-      'Search devices, locations, and groups by keyword. Use keywords only — not full sentences (e.g., "phòng khách" not "bật đèn phòng khách"). Results sorted by relevance. If nothing matched, all available devices are returned as suggestions.',
+      'Search devices, locations, and groups by keyword with compact pagination. Use keywords only — not full sentences (e.g., "phòng khách" not "bật đèn phòng khách"). Defaults to limit=20, offset=0. If nothing matched, a capped suggestion list is returned instead of dumping every device.',
     readOnlyHint: true,
     securitySchemes: {
       oauth2: {
