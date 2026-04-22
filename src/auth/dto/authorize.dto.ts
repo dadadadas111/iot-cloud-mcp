@@ -1,4 +1,10 @@
 import { IsString, IsOptional, IsIn, IsUrl } from 'class-validator';
+
+const OAUTH_REDIRECT_URI_OPTIONS = {
+  protocols: ['http', 'https'],
+  require_protocol: true,
+  require_tld: false,
+};
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -17,7 +23,7 @@ export class AuthorizeQueryDto {
     description: 'Redirection URI where authorization code will be sent',
     example: 'http://localhost:3000/callback',
   })
-  @IsUrl()
+  @IsUrl(OAUTH_REDIRECT_URI_OPTIONS)
   redirect_uri: string;
 
   @ApiProperty({
