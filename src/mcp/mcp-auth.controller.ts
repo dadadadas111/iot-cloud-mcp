@@ -204,13 +204,23 @@ export class McpAuthController {
   }
 
   @Post('register')
-  async register(@Param('alias') alias: string): Promise<any> {
+  async register(
+    @Param('alias') alias: string,
+    @Body() body?: Record<string, unknown>,
+  ): Promise<any> {
     this.logger.log(`Subdomain client registration for alias: ${alias}`);
     await this.resolveOrFail(alias);
+
+    const redirectUris =
+      Array.isArray(body?.redirect_uris) &&
+      body.redirect_uris.every((uri): uri is string => typeof uri === 'string')
+        ? [...body.redirect_uris]
+        : undefined;
 
     return {
       client_id: 'web-client-static',
       client_id_issued_at: Math.floor(Date.now() / 1000),
+      ...(redirectUris ? { redirect_uris: redirectUris } : {}),
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',
