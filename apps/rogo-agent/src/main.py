@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, Request, Response, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 
 from .config.settings import settings
 from .wakeword.pipeline import WakewordPipeline
@@ -76,14 +76,11 @@ async def ota_config(request: Request) -> dict:
     ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
     path = "/xiaozhi/ws" if settings.firmware_protocol == "xiaozhi" else "/device/ws"
     ws_url = ws_base + path
-    # Xiaozhi OTA v2 protocol: websocket.url is applied on every boot regardless of firmware update.
-    # firmware.version must be > device version so the device processes the full response.
+    # Xiaozhi OTA v2: websocket.url is always saved to NVS on every OTA check.
+    # Report same version as device so no firmware download is attempted.
     return {
         "websocket": {"url": ws_url},
-        "firmware": {
-            "version": "9.9.9",
-            "url": f"{base}/ota/firmware.bin",
-        },
+        "firmware": {"version": "2.2.1"},
     }
 
 
