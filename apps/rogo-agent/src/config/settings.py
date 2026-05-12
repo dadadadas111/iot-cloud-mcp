@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     firmware_protocol: str = "xiaozhi"
     xiaozhi_audio_format: str = "opus"  # "opus" | "pcm" — audio encoding the device sends
     xiaozhi_max_listening_ms: int = 15000  # force utterance processing if stock firmware never sends listen.stop
+    xiaozhi_vad_enabled: bool = True
+    xiaozhi_vad_aggressiveness: int = 2
+    xiaozhi_vad_frame_ms: int = 30
+    xiaozhi_vad_silence_ms: int = 900
+    xiaozhi_vad_min_speech_ms: int = 300
+    xiaozhi_vad_poll_ms: int = 500
 
 
 settings = Settings()
