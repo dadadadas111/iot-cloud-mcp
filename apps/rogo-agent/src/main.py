@@ -84,12 +84,6 @@ async def ota_config(request: Request) -> dict:
     }
 
 
-@app.get("/ota/firmware.bin")
-async def ota_firmware() -> Response:
-    """Placeholder — device may attempt download after seeing newer firmware version."""
-    return Response(status_code=204)
-
-
 @app.websocket("/device/ws")
 async def device_ws(websocket: WebSocket) -> None:
     """Rogo-native protocol (patched firmware)."""
