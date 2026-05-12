@@ -201,3 +201,90 @@ async def test_hard_cutoff_triggers_processing(monkeypatch):
     assert websocket.sent_text[3]["type"] == "tts"
     assert websocket.sent_text[3]["state"] == "stop"
     assert session.state == SessionState.IDLE
+
+
+@pytest.mark.asyncio
+async def test_vad_poll_triggers_processing(monkeypatch):
+    websocket = FakeWebSocket()
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_audio_format", "pcm")
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.silence_timeout_ms", 1000)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_max_listening_ms", 1000)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_vad_enabled", True)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_vad_poll_ms", 1)
+
+    gateway = XiaozhiGateway(
+        wakeword=MagicMock(),
+        stt=MagicMock(transcribe=AsyncMock(return_value="bat den")),
+        llm=MagicMock(chat=AsyncMock(return_value="Da bat den")),
+        tts=MagicMock(synthesize=MagicMock(return_value=_tts_chunks())),
+        mcp=MagicMock(list_tools=AsyncMock(return_value=[]), call_tool=AsyncMock()),
+        store=MagicMock(),
+    )
+
+    async def fake_get_audio_for_vad(session: AudioSession) -> bytes:
+        return b"pcm-audio"
+
+    async def fake_tts_to_opus(data: bytes, sample_rate: int) -> bytes:
+        return b"opus-payload"
+
+    monkeypatch.setattr(gateway, "_get_audio_for_vad", fake_get_audio_for_vad)
+    monkeypatch.setattr(gateway, "_detect_vad_endpoint", lambda pcm_audio: True)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter._tts_to_opus", fake_tts_to_opus)
+
+    session = AudioSession(
+        session_id="session-vad",
+        device_id="device-1",
+        websocket=websocket,
+        state=SessionState.IDLE,
+    )
+
+    await gateway._handle_text(session, {"type": "listen", "state": "start", "mode": "auto"})
+    await gateway._handle_audio(session, b"pcm-audio")
+    await asyncio.sleep(0.05)
+
+    assert websocket.sent_text[0] == {
+        "type": "listen",
+        "state": "detect",
+        "session_id": "session-vad",
+    }
+    assert websocket.sent_text[1]["type"] == "stt"
+    assert websocket.sent_text[2]["type"] == "tts"
+    assert websocket.sent_text[2]["state"] == "start"
+    assert websocket.sent_text[3]["type"] == "tts"
+    assert websocket.sent_text[3]["state"] == "stop"
+    assert session.state == SessionState.IDLE
+
+
+def test_detect_vad_endpoint_uses_trailing_silence(monkeypatch):
+    class FakeVad:
+        def __init__(self, flags):
+            self._flags = iter(flags)
+
+        def is_speech(self, frame: bytes, sample_rate: int) -> bool:
+            return next(self._flags)
+
+    class FakeVadModule:
+        def __init__(self, flags):
+            self._flags = flags
+
+        def Vad(self, aggressiveness: int):
+            return FakeVad(self._flags)
+
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_vad_enabled", True)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.audio_sample_rate", 16000)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_vad_frame_ms", 30)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_vad_silence_ms", 60)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_vad_min_speech_ms", 60)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.webrtcvad", FakeVadModule([True, True, False, False]))
+
+    gateway = XiaozhiGateway(
+        wakeword=MagicMock(),
+        stt=MagicMock(),
+        llm=MagicMock(),
+        tts=MagicMock(),
+        mcp=MagicMock(),
+        store=MagicMock(),
+    )
+
+    pcm_audio = b"\x01\x02" * (16000 * 30 // 1000) * 4
+    assert gateway._detect_vad_endpoint(pcm_audio) is True

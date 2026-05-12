@@ -26,6 +26,7 @@ import asyncio
 import json
 import logging
 import uuid
+from math import ceil
 
 from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
@@ -41,6 +42,11 @@ from ..session.store import SessionStore
 
 logger = logging.getLogger(__name__)
 XIAOZHI_TTS_CHUNK_SIZE = 4096
+
+try:
+    import webrtcvad
+except ImportError:  # pragma: no cover - handled by timer fallback
+    webrtcvad = None
 
 
 async def _opus_to_pcm16(data: bytes, sample_rate: int) -> bytes:
@@ -108,6 +114,7 @@ class XiaozhiGateway:
         self._inactivity_tasks: dict[str, asyncio.Task] = {}
         self._hard_cutoff_tasks: dict[str, asyncio.Task] = {}
         self._utterance_tasks: dict[str, asyncio.Task] = {}
+        self._vad_tasks: dict[str, asyncio.Task] = {}
 
     @property
     def active_sessions(self) -> int:
@@ -169,10 +176,12 @@ class XiaozhiGateway:
         self._cancel_task(self._inactivity_tasks.pop(session_id, None))
         self._cancel_task(self._hard_cutoff_tasks.pop(session_id, None))
         self._cancel_task(self._utterance_tasks.pop(session_id, None))
+        self._cancel_task(self._vad_tasks.pop(session_id, None))
 
     def _cancel_listening_timers(self, session_id: str) -> None:
         self._cancel_task(self._inactivity_tasks.pop(session_id, None))
         self._cancel_task(self._hard_cutoff_tasks.pop(session_id, None))
+        self._cancel_task(self._vad_tasks.pop(session_id, None))
 
     def _enter_listening(self, session: AudioSession, reset_audio: bool = False) -> None:
         self._cancel_listening_timers(session.session_id)
@@ -181,6 +190,7 @@ class XiaozhiGateway:
         if session.state != SessionState.LISTENING:
             session.transition(SessionState.LISTENING)
         self._schedule_hard_cutoff(session)
+        self._schedule_vad_poll(session)
 
     def _schedule_inactivity_timeout(self, session: AudioSession) -> None:
         self._cancel_task(self._inactivity_tasks.pop(session.session_id, None))
@@ -199,6 +209,17 @@ class XiaozhiGateway:
             name=f"xiaozhi-hard-cutoff-{session.session_id}",
         )
         self._hard_cutoff_tasks[session.session_id] = task
+
+    def _schedule_vad_poll(self, session: AudioSession) -> None:
+        if not settings.xiaozhi_vad_enabled or webrtcvad is None:
+            return
+        self._cancel_task(self._vad_tasks.pop(session.session_id, None))
+        poll_s = max(settings.xiaozhi_vad_poll_ms, 1) / 1000
+        task = asyncio.create_task(
+            self._watch_vad_endpoint(session, poll_s),
+            name=f"xiaozhi-vad-{session.session_id}",
+        )
+        self._vad_tasks[session.session_id] = task
 
     async def _watch_inactivity_timeout(self, session: AudioSession, timeout_s: float) -> None:
         try:
@@ -235,6 +256,70 @@ class XiaozhiGateway:
             current = self._hard_cutoff_tasks.get(session.session_id)
             if current is asyncio.current_task():
                 self._hard_cutoff_tasks.pop(session.session_id, None)
+
+    async def _watch_vad_endpoint(self, session: AudioSession, poll_s: float) -> None:
+        last_checked_bytes = 0
+        try:
+            while session.state == SessionState.LISTENING:
+                await asyncio.sleep(poll_s)
+                if session.state != SessionState.LISTENING:
+                    return
+
+                buffered_bytes = len(session.audio_buffer)
+                if buffered_bytes <= last_checked_bytes or buffered_bytes == 0:
+                    continue
+                last_checked_bytes = buffered_bytes
+
+                pcm_audio = await self._get_audio_for_vad(session)
+                if self._detect_vad_endpoint(pcm_audio):
+                    logger.info(
+                        "xiaozhi vad endpoint session=%s buffered_bytes=%d silence_ms=%d",
+                        session.session_id,
+                        buffered_bytes,
+                        settings.xiaozhi_vad_silence_ms,
+                    )
+                    self._start_utterance_processing(session, reason="vad_silence")
+                    return
+        except asyncio.CancelledError:
+            pass
+        finally:
+            current = self._vad_tasks.get(session.session_id)
+            if current is asyncio.current_task():
+                self._vad_tasks.pop(session.session_id, None)
+
+    async def _get_audio_for_vad(self, session: AudioSession) -> bytes:
+        audio = session.get_audio_bytes()
+        if settings.xiaozhi_audio_format == "opus":
+            return await _opus_to_pcm16(audio, settings.audio_sample_rate)
+        return audio
+
+    def _detect_vad_endpoint(self, pcm_audio: bytes) -> bool:
+        if not settings.xiaozhi_vad_enabled or webrtcvad is None or not pcm_audio:
+            return False
+
+        frame_ms = settings.xiaozhi_vad_frame_ms
+        sample_rate = settings.audio_sample_rate
+        bytes_per_frame = int(sample_rate * frame_ms / 1000) * 2
+        if bytes_per_frame <= 0 or len(pcm_audio) < bytes_per_frame:
+            return False
+
+        vad = webrtcvad.Vad(max(0, min(settings.xiaozhi_vad_aggressiveness, 3)))
+        frame_count = len(pcm_audio) // bytes_per_frame
+        voiced_frames: list[bool] = []
+
+        for index in range(frame_count):
+            start = index * bytes_per_frame
+            frame = pcm_audio[start : start + bytes_per_frame]
+            voiced_frames.append(vad.is_speech(frame, sample_rate))
+
+        speech_frames = sum(voiced_frames)
+        min_speech_frames = max(1, ceil(settings.xiaozhi_vad_min_speech_ms / frame_ms))
+        if speech_frames < min_speech_frames:
+            return False
+
+        last_voiced_index = max(index for index, voiced in enumerate(voiced_frames) if voiced)
+        trailing_silence_ms = (frame_count - last_voiced_index - 1) * frame_ms
+        return trailing_silence_ms >= settings.xiaozhi_vad_silence_ms
 
     def _start_utterance_processing(self, session: AudioSession, reason: str) -> None:
         existing = self._utterance_tasks.get(session.session_id)
