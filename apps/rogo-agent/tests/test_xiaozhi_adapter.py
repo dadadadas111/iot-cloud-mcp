@@ -1,5 +1,6 @@
 """Tests for Xiaozhi websocket compatibility adapter."""
 
+import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
 
@@ -110,3 +111,93 @@ async def test_tts_to_opus_uses_ffmpeg(monkeypatch):
         "ogg",
         "pipe:1",
     )
+
+
+@pytest.mark.asyncio
+async def test_inactivity_timeout_triggers_processing(monkeypatch):
+    websocket = FakeWebSocket()
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_audio_format", "pcm")
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.silence_timeout_ms", 1)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_max_listening_ms", 1000)
+
+    gateway = XiaozhiGateway(
+        wakeword=MagicMock(),
+        stt=MagicMock(transcribe=AsyncMock(return_value="bat den")),
+        llm=MagicMock(chat=AsyncMock(return_value="Da bat den")),
+        tts=MagicMock(synthesize=MagicMock(return_value=_tts_chunks())),
+        mcp=MagicMock(list_tools=AsyncMock(return_value=[]), call_tool=AsyncMock()),
+        store=MagicMock(),
+    )
+
+    async def fake_tts_to_opus(data: bytes, sample_rate: int) -> bytes:
+        return b"opus-payload"
+
+    monkeypatch.setattr("src.audio.xiaozhi_adapter._tts_to_opus", fake_tts_to_opus)
+
+    session = AudioSession(
+        session_id="session-inactivity",
+        device_id="device-1",
+        websocket=websocket,
+        state=SessionState.IDLE,
+    )
+
+    await gateway._handle_text(session, {"type": "listen", "state": "start", "mode": "auto"})
+    await gateway._handle_audio(session, b"pcm-audio")
+    await asyncio.sleep(0.05)
+
+    assert websocket.sent_text[0] == {
+        "type": "listen",
+        "state": "detect",
+        "session_id": "session-inactivity",
+    }
+    assert websocket.sent_text[1]["type"] == "stt"
+    assert websocket.sent_text[2]["type"] == "tts"
+    assert websocket.sent_text[2]["state"] == "start"
+    assert websocket.sent_text[3]["type"] == "tts"
+    assert websocket.sent_text[3]["state"] == "stop"
+    assert session.state == SessionState.IDLE
+
+
+@pytest.mark.asyncio
+async def test_hard_cutoff_triggers_processing(monkeypatch):
+    websocket = FakeWebSocket()
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_audio_format", "pcm")
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.silence_timeout_ms", 1000)
+    monkeypatch.setattr("src.audio.xiaozhi_adapter.settings.xiaozhi_max_listening_ms", 1)
+
+    gateway = XiaozhiGateway(
+        wakeword=MagicMock(),
+        stt=MagicMock(transcribe=AsyncMock(return_value="bat den")),
+        llm=MagicMock(chat=AsyncMock(return_value="Da bat den")),
+        tts=MagicMock(synthesize=MagicMock(return_value=_tts_chunks())),
+        mcp=MagicMock(list_tools=AsyncMock(return_value=[]), call_tool=AsyncMock()),
+        store=MagicMock(),
+    )
+
+    async def fake_tts_to_opus(data: bytes, sample_rate: int) -> bytes:
+        return b"opus-payload"
+
+    monkeypatch.setattr("src.audio.xiaozhi_adapter._tts_to_opus", fake_tts_to_opus)
+
+    session = AudioSession(
+        session_id="session-hard-cutoff",
+        device_id="device-1",
+        websocket=websocket,
+        state=SessionState.IDLE,
+    )
+
+    await gateway._handle_text(session, {"type": "listen", "state": "start", "mode": "auto"})
+    await gateway._handle_audio(session, b"pcm-audio")
+    await asyncio.sleep(0.05)
+
+    assert websocket.sent_text[0] == {
+        "type": "listen",
+        "state": "detect",
+        "session_id": "session-hard-cutoff",
+    }
+    assert websocket.sent_text[1]["type"] == "stt"
+    assert websocket.sent_text[2]["type"] == "tts"
+    assert websocket.sent_text[2]["state"] == "start"
+    assert websocket.sent_text[3]["type"] == "tts"
+    assert websocket.sent_text[3]["state"] == "stop"
+    assert session.state == SessionState.IDLE

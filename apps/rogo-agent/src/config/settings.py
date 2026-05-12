@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     # firmware_protocol: "rogo" → /device/ws | "xiaozhi" → /xiaozhi/ws
     firmware_protocol: str = "xiaozhi"
     xiaozhi_audio_format: str = "opus"  # "opus" | "pcm" — audio encoding the device sends
+    xiaozhi_max_listening_ms: int = 15000  # force utterance processing if stock firmware never sends listen.stop
 
 
 settings = Settings()

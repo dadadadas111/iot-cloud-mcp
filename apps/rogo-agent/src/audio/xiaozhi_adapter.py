@@ -105,6 +105,9 @@ class XiaozhiGateway:
         self._mcp = mcp
         self._store = store
         self._sessions: dict[str, AudioSession] = {}
+        self._inactivity_tasks: dict[str, asyncio.Task] = {}
+        self._hard_cutoff_tasks: dict[str, asyncio.Task] = {}
+        self._utterance_tasks: dict[str, asyncio.Task] = {}
 
     @property
     def active_sessions(self) -> int:
@@ -154,8 +157,116 @@ class XiaozhiGateway:
                              session.session_id if session else "unknown")
         finally:
             if session:
+                self._cancel_session_tasks(session.session_id)
                 await self._store.save_history(session.device_id, session.conversation_history)
                 self._sessions.pop(session.session_id, None)
+
+    def _cancel_task(self, task: asyncio.Task | None) -> None:
+        if task and not task.done():
+            task.cancel()
+
+    def _cancel_session_tasks(self, session_id: str) -> None:
+        self._cancel_task(self._inactivity_tasks.pop(session_id, None))
+        self._cancel_task(self._hard_cutoff_tasks.pop(session_id, None))
+        self._cancel_task(self._utterance_tasks.pop(session_id, None))
+
+    def _cancel_listening_timers(self, session_id: str) -> None:
+        self._cancel_task(self._inactivity_tasks.pop(session_id, None))
+        self._cancel_task(self._hard_cutoff_tasks.pop(session_id, None))
+
+    def _enter_listening(self, session: AudioSession, reset_audio: bool = False) -> None:
+        self._cancel_listening_timers(session.session_id)
+        if reset_audio:
+            session.reset_audio()
+        if session.state != SessionState.LISTENING:
+            session.transition(SessionState.LISTENING)
+        self._schedule_hard_cutoff(session)
+
+    def _schedule_inactivity_timeout(self, session: AudioSession) -> None:
+        self._cancel_task(self._inactivity_tasks.pop(session.session_id, None))
+        timeout_s = max(settings.silence_timeout_ms, 1) / 1000
+        task = asyncio.create_task(
+            self._watch_inactivity_timeout(session, timeout_s),
+            name=f"xiaozhi-inactivity-{session.session_id}",
+        )
+        self._inactivity_tasks[session.session_id] = task
+
+    def _schedule_hard_cutoff(self, session: AudioSession) -> None:
+        self._cancel_task(self._hard_cutoff_tasks.pop(session.session_id, None))
+        timeout_s = max(settings.xiaozhi_max_listening_ms, 1) / 1000
+        task = asyncio.create_task(
+            self._watch_hard_cutoff(session, timeout_s),
+            name=f"xiaozhi-hard-cutoff-{session.session_id}",
+        )
+        self._hard_cutoff_tasks[session.session_id] = task
+
+    async def _watch_inactivity_timeout(self, session: AudioSession, timeout_s: float) -> None:
+        try:
+            await asyncio.sleep(timeout_s)
+            if session.state == SessionState.LISTENING and session.audio_buffer:
+                logger.info(
+                    "xiaozhi inactivity timeout session=%s buffered_bytes=%d timeout_ms=%d",
+                    session.session_id,
+                    len(session.audio_buffer),
+                    settings.silence_timeout_ms,
+                )
+                self._start_utterance_processing(session, reason="inactivity_timeout")
+        except asyncio.CancelledError:
+            pass
+        finally:
+            current = self._inactivity_tasks.get(session.session_id)
+            if current is asyncio.current_task():
+                self._inactivity_tasks.pop(session.session_id, None)
+
+    async def _watch_hard_cutoff(self, session: AudioSession, timeout_s: float) -> None:
+        try:
+            await asyncio.sleep(timeout_s)
+            if session.state == SessionState.LISTENING and session.audio_buffer:
+                logger.info(
+                    "xiaozhi hard cutoff session=%s buffered_bytes=%d timeout_ms=%d",
+                    session.session_id,
+                    len(session.audio_buffer),
+                    settings.xiaozhi_max_listening_ms,
+                )
+                self._start_utterance_processing(session, reason="hard_cutoff")
+        except asyncio.CancelledError:
+            pass
+        finally:
+            current = self._hard_cutoff_tasks.get(session.session_id)
+            if current is asyncio.current_task():
+                self._hard_cutoff_tasks.pop(session.session_id, None)
+
+    def _start_utterance_processing(self, session: AudioSession, reason: str) -> None:
+        existing = self._utterance_tasks.get(session.session_id)
+        if existing and not existing.done():
+            logger.info(
+                "xiaozhi utterance already scheduled session=%s reason=%s",
+                session.session_id,
+                reason,
+            )
+            return
+        if session.state != SessionState.LISTENING:
+            logger.info(
+                "xiaozhi skip utterance scheduling session=%s state=%s reason=%s",
+                session.session_id,
+                session.state,
+                reason,
+            )
+            return
+
+        logger.info(
+            "xiaozhi scheduling utterance processing session=%s buffered_bytes=%d reason=%s",
+            session.session_id,
+            len(session.audio_buffer),
+            reason,
+        )
+        self._cancel_listening_timers(session.session_id)
+        session.transition(SessionState.PROCESSING)
+        task = asyncio.create_task(
+            self._process_utterance(session, reason=reason),
+            name=f"utterance-{session.session_id}",
+        )
+        self._utterance_tasks[session.session_id] = task
 
     async def _message_loop(self, session: AudioSession) -> None:
         ws = session.websocket
@@ -194,6 +305,8 @@ class XiaozhiGateway:
             )
             return
         session.append_audio(chunk)
+        if session.state == SessionState.LISTENING:
+            self._schedule_inactivity_timeout(session)
         logger.info(
             "xiaozhi buffered audio session=%s state=%s total_buffered_bytes=%d",
             session.session_id,
@@ -205,7 +318,7 @@ class XiaozhiGateway:
             if await self._wakeword.process_chunk(chunk):
                 logger.info("wakeword detected session=%s", session.session_id)
                 session.reset_audio()
-                session.transition(SessionState.LISTENING)
+                self._enter_listening(session)
 
     async def _handle_text(self, session: AudioSession, data: dict) -> None:
         msg_type = data.get("type")
@@ -215,8 +328,7 @@ class XiaozhiGateway:
             if state in ("start", "detect"):
                 # "start" = manual mode begin; "detect" = device wakeword fired, speech follows
                 if session.state == SessionState.IDLE:
-                    session.transition(SessionState.LISTENING)
-                    session.reset_audio()
+                    self._enter_listening(session, reset_audio=True)
                     # Device waits for this ACK before streaming audio (server-side wakeword mode)
                     await session.websocket.send_text(json.dumps({
                         "type": "listen",
@@ -231,29 +343,24 @@ class XiaozhiGateway:
                     len(session.audio_buffer),
                 )
                 if session.state == SessionState.LISTENING:
-                    logger.info(
-                        "xiaozhi scheduling utterance processing session=%s buffered_bytes=%d",
-                        session.session_id,
-                        len(session.audio_buffer),
-                    )
-                    asyncio.create_task(
-                        self._process_utterance(session),
-                        name=f"utterance-{session.session_id}",
-                    )
+                    self._start_utterance_processing(session, reason="listen_stop")
 
         elif msg_type == "abort":
+            self._cancel_session_tasks(session.session_id)
             session.reset_audio()
             session.transition(SessionState.IDLE)
 
-    async def _process_utterance(self, session: AudioSession) -> None:
-        session.transition(SessionState.PROCESSING)
+    async def _process_utterance(self, session: AudioSession, reason: str = "direct") -> None:
+        if session.state != SessionState.PROCESSING:
+            session.transition(SessionState.PROCESSING)
         audio = session.get_audio_bytes()
         session.reset_audio()
         logger.info(
-            "xiaozhi process_utterance start session=%s audio_bytes=%d format=%s",
+            "xiaozhi process_utterance start session=%s audio_bytes=%d format=%s reason=%s",
             session.session_id,
             len(audio),
             settings.xiaozhi_audio_format,
+            reason,
         )
 
         if not audio:
@@ -323,4 +430,7 @@ class XiaozhiGateway:
         except Exception:
             logger.exception("pipeline error session=%s", session.session_id)
         finally:
+            current = self._utterance_tasks.get(session.session_id)
+            if current is asyncio.current_task():
+                self._utterance_tasks.pop(session.session_id, None)
             session.transition(SessionState.IDLE)
