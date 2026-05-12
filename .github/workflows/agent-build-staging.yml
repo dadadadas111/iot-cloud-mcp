@@ -81,6 +81,12 @@ jobs:
 
             echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
 
+            # Remove old agent-staging images before pulling to avoid OOM during pull
+            docker images --format '{{.Repository}}:{{.Tag}}' | \
+              grep "${IMAGE_NAME}:agent-staging-" | \
+              grep -v "${IMAGE_TAG}" | \
+              xargs -r docker rmi -f || true
+
             docker pull ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
 
             IMAGE_TAG=${IMAGE_TAG} docker compose down || true
@@ -92,6 +98,6 @@ jobs:
             docker compose ps
             docker compose logs --tail=50 rogo-agent-staging
 
-            docker image prune -af --filter "until=24h" || true
+            docker image prune -f || true
 
             echo "rogo-agent staging deployment complete — https://agent.mcp-stag.dash.id.vn"
