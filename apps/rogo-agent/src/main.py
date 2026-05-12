@@ -66,7 +66,7 @@ async def health() -> dict:
     }
 
 
-@app.get("/ota/")
+@app.api_route("/ota/", methods=["GET", "POST"])
 async def ota_config() -> dict:
     """
     OTA config endpoint polled by ESP32 firmware on boot.
