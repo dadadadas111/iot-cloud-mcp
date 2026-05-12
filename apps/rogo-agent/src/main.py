@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, Request, WebSocket
+from fastapi import FastAPI, Request, Response, WebSocket
 
 from .config.settings import settings
 from .wakeword.pipeline import WakewordPipeline
@@ -68,10 +68,7 @@ async def health() -> dict:
 
 @app.api_route("/ota/", methods=["GET", "POST"])
 async def ota_config(request: Request) -> dict:
-    """
-    OTA config endpoint polled by ESP32 firmware on boot.
-    Returns both server_url (older xiaozhi firmware) and websocket_url (newer firmware).
-    """
+    """OTA config endpoint polled by ESP32 xiaozhi firmware on boot."""
     body = await request.body()
     logger.info("OTA request from %s body=%s", request.client, body.decode(errors="replace"))
 
@@ -79,11 +76,21 @@ async def ota_config(request: Request) -> dict:
     ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
     path = "/xiaozhi/ws" if settings.firmware_protocol == "xiaozhi" else "/device/ws"
     ws_url = ws_base + path
+    # Xiaozhi OTA v2 protocol: websocket.url is applied on every boot regardless of firmware update.
+    # firmware.version must be > device version so the device processes the full response.
     return {
-        "server_url": ws_url,        # older xiaozhi-esp32 firmware
-        "websocket_url": ws_url,     # newer firmware
-        "firmware_version": "9.9.9",
+        "websocket": {"url": ws_url},
+        "firmware": {
+            "version": "9.9.9",
+            "url": f"{base}/ota/firmware.bin",
+        },
     }
+
+
+@app.get("/ota/firmware.bin")
+async def ota_firmware() -> Response:
+    """Placeholder — device may attempt download after seeing newer firmware version."""
+    return Response(status_code=204)
 
 
 @app.websocket("/device/ws")
