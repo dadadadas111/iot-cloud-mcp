@@ -118,6 +118,7 @@ class XiaozhiGateway:
                 "version": 3,
                 "transport": "websocket",
                 "session_id": session_id,
+                "status": "ok",
                 "audio_params": {
                     "format": settings.xiaozhi_audio_format,
                     "sample_rate": settings.audio_sample_rate,
@@ -147,8 +148,10 @@ class XiaozhiGateway:
             if message["type"] == "websocket.disconnect":
                 break
             if message.get("bytes"):
+                logger.debug("audio chunk %d bytes state=%s", len(message["bytes"]), session.state)
                 await self._handle_audio(session, message["bytes"])
             elif message.get("text"):
+                logger.info("text msg: %s state=%s", message["text"][:200], session.state)
                 await self._handle_text(session, json.loads(message["text"]))
 
     async def _handle_audio(self, session: AudioSession, chunk: bytes) -> None:
