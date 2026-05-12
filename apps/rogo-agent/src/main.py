@@ -82,7 +82,7 @@ async def ota_config(request: Request) -> dict:
     return {
         "server_url": ws_url,        # older xiaozhi-esp32 firmware
         "websocket_url": ws_url,     # newer firmware
-        "firmware_version": "1.0.0",
+        "firmware_version": "9.9.9",
     }
 
 
