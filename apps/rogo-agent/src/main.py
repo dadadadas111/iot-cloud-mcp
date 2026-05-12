@@ -4,7 +4,7 @@ import logging
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Request, WebSocket
 
 from .config.settings import settings
 from .wakeword.pipeline import WakewordPipeline
@@ -67,17 +67,21 @@ async def health() -> dict:
 
 
 @app.api_route("/ota/", methods=["GET", "POST"])
-async def ota_config() -> dict:
+async def ota_config(request: Request) -> dict:
     """
     OTA config endpoint polled by ESP32 firmware on boot.
-    firmware_protocol=xiaozhi → send xiaozhi-compatible WebSocket path
-    firmware_protocol=rogo    → send rogo-native WebSocket path
+    Returns both server_url (older xiaozhi firmware) and websocket_url (newer firmware).
     """
+    body = await request.body()
+    logger.info("OTA request from %s body=%s", request.client, body.decode(errors="replace"))
+
     base = settings.public_url.rstrip("/")
     ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
     path = "/xiaozhi/ws" if settings.firmware_protocol == "xiaozhi" else "/device/ws"
+    ws_url = ws_base + path
     return {
-        "websocket_url": ws_base + path,
+        "server_url": ws_url,        # older xiaozhi-esp32 firmware
+        "websocket_url": ws_url,     # newer firmware
         "firmware_version": "1.0.0",
     }
 
@@ -91,6 +95,12 @@ async def device_ws(websocket: WebSocket) -> None:
 @app.websocket("/xiaozhi/ws")
 async def xiaozhi_ws(websocket: WebSocket) -> None:
     """Xiaozhi-compatible protocol (stock firmware, no reflash needed for demo)."""
+    await _xiaozhi_gateway.handle(websocket)
+
+
+@app.websocket("/xiaozhi/v1/")
+async def xiaozhi_v1(websocket: WebSocket) -> None:
+    """Alias used by some xiaozhi-esp32 firmware versions that append /xiaozhi/v1/ to server_url."""
     await _xiaozhi_gateway.handle(websocket)
 
 
