@@ -167,11 +167,12 @@ class XiaozhiGateway:
 
         if msg_type == "listen":
             state = data.get("state")
-            if state == "start":
+            if state in ("start", "detect"):
+                # "start" = manual mode begin; "detect" = device wakeword fired, speech follows
                 if session.state == SessionState.IDLE:
                     session.transition(SessionState.LISTENING)
                     session.reset_audio()
-            elif state == "stop" or state == "detect":
+            elif state == "stop":
                 if session.state == SessionState.LISTENING:
                     asyncio.create_task(
                         self._process_utterance(session),
