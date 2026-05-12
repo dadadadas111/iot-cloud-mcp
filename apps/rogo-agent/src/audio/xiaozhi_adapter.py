@@ -162,9 +162,23 @@ class XiaozhiGateway:
         while ws.client_state == WebSocketState.CONNECTED:
             message = await ws.receive()
             if message["type"] == "websocket.disconnect":
+                logger.info(
+                    "xiaozhi websocket disconnect session=%s state=%s code=%s reason=%s buffered_bytes=%d",
+                    session.session_id,
+                    session.state,
+                    message.get("code"),
+                    message.get("reason"),
+                    len(session.audio_buffer),
+                )
                 break
             if message.get("bytes"):
-                logger.debug("audio chunk %d bytes state=%s", len(message["bytes"]), session.state)
+                logger.info(
+                    "xiaozhi audio chunk session=%s state=%s chunk_bytes=%d buffered_bytes_before=%d",
+                    session.session_id,
+                    session.state,
+                    len(message["bytes"]),
+                    len(session.audio_buffer),
+                )
                 await self._handle_audio(session, message["bytes"])
             elif message.get("text"):
                 logger.info("text msg: %s state=%s", message["text"][:200], session.state)
@@ -172,8 +186,20 @@ class XiaozhiGateway:
 
     async def _handle_audio(self, session: AudioSession, chunk: bytes) -> None:
         if session.state in (SessionState.PROCESSING, SessionState.RESPONDING):
+            logger.info(
+                "xiaozhi dropping audio chunk session=%s state=%s chunk_bytes=%d",
+                session.session_id,
+                session.state,
+                len(chunk),
+            )
             return
         session.append_audio(chunk)
+        logger.info(
+            "xiaozhi buffered audio session=%s state=%s total_buffered_bytes=%d",
+            session.session_id,
+            session.state,
+            len(session.audio_buffer),
+        )
 
         if session.state == SessionState.IDLE:
             if await self._wakeword.process_chunk(chunk):
@@ -198,7 +224,18 @@ class XiaozhiGateway:
                         "session_id": session.session_id,
                     }))
             elif state == "stop":
+                logger.info(
+                    "xiaozhi listen.stop session=%s state=%s buffered_bytes=%d",
+                    session.session_id,
+                    session.state,
+                    len(session.audio_buffer),
+                )
                 if session.state == SessionState.LISTENING:
+                    logger.info(
+                        "xiaozhi scheduling utterance processing session=%s buffered_bytes=%d",
+                        session.session_id,
+                        len(session.audio_buffer),
+                    )
                     asyncio.create_task(
                         self._process_utterance(session),
                         name=f"utterance-{session.session_id}",
@@ -212,8 +249,15 @@ class XiaozhiGateway:
         session.transition(SessionState.PROCESSING)
         audio = session.get_audio_bytes()
         session.reset_audio()
+        logger.info(
+            "xiaozhi process_utterance start session=%s audio_bytes=%d format=%s",
+            session.session_id,
+            len(audio),
+            settings.xiaozhi_audio_format,
+        )
 
         if not audio:
+            logger.info("xiaozhi process_utterance empty audio session=%s", session.session_id)
             session.transition(SessionState.IDLE)
             return
 
