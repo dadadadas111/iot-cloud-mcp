@@ -119,11 +119,6 @@ class XiaozhiGateway:
                 "transport": "websocket",
                 "session_id": session_id,
                 "status": "ok",
-                "audio_params": {
-                    "format": settings.xiaozhi_audio_format,
-                    "sample_rate": settings.audio_sample_rate,
-                    "channels": 1,
-                },
             }))
 
             await self._message_loop(session)
@@ -175,6 +170,12 @@ class XiaozhiGateway:
                 if session.state == SessionState.IDLE:
                     session.transition(SessionState.LISTENING)
                     session.reset_audio()
+                    # Device waits for this ACK before streaming audio (server-side wakeword mode)
+                    await session.websocket.send_text(json.dumps({
+                        "type": "listen",
+                        "state": "detect",
+                        "session_id": session.session_id,
+                    }))
             elif state == "stop":
                 if session.state == SessionState.LISTENING:
                     asyncio.create_task(
@@ -236,6 +237,14 @@ class XiaozhiGateway:
             await session.websocket.send_text(json.dumps({
                 "type": "tts",
                 "state": "end",
+                "session_id": session.session_id,
+            }))
+
+            # Return device to listening loop
+            await session.websocket.send_text(json.dumps({
+                "type": "listen",
+                "state": "start",
+                "mode": "auto",
                 "session_id": session.session_id,
             }))
 
