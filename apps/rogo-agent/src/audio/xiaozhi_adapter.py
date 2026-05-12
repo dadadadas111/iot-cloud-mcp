@@ -12,8 +12,8 @@ Xiaozhi protocol (inferred from xinnan-tech/xiaozhi-esp32-server source):
   device → server (binary): Opus-encoded audio frames (default) or raw PCM16
   device → server (text): {"type":"listen","state":"stop"}
   server → device (text): {"type":"tts","state":"start","text":"..."}
-  server → device (binary): MP3 TTS audio
-  server → device (text): {"type":"tts","state":"end"}
+  server → device (binary): Opus TTS audio
+  server → device (text): {"type":"tts","state":"stop"}
   device → server (text): {"type":"abort","session_id":"..."}
 
 Audio format note:
@@ -40,6 +40,7 @@ from ..mcp_client.client import RogoMcpClient
 from ..session.store import SessionStore
 
 logger = logging.getLogger(__name__)
+XIAOZHI_TTS_CHUNK_SIZE = 4096
 
 
 async def _opus_to_pcm16(data: bytes, sample_rate: int) -> bytes:
@@ -60,6 +61,26 @@ async def _opus_to_pcm16(data: bytes, sample_rate: int) -> bytes:
             return stdout
     logger.warning("opus decode failed — falling back to raw bytes")
     return data
+
+
+async def _tts_to_opus(data: bytes, sample_rate: int) -> bytes:
+    """Transcode provider TTS audio to Opus for Xiaozhi firmware playback."""
+    proc = await asyncio.create_subprocess_exec(
+        "ffmpeg", "-y",
+        "-i", "pipe:0",
+        "-c:a", "libopus",
+        "-ar", str(sample_rate),
+        "-ac", "1",
+        "-f", "ogg",
+        "pipe:1",
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    stdout, _ = await proc.communicate(data)
+    if proc.returncode != 0 or not stdout:
+        raise RuntimeError("tts opus transcode failed")
+    return stdout
 
 
 class XiaozhiGateway:
@@ -229,14 +250,21 @@ class XiaozhiGateway:
                 "session_id": session.session_id,
             }))
 
+            tts_audio = bytearray()
             async for audio_chunk in self._tts.synthesize(response_text):
                 if session.websocket.client_state != WebSocketState.CONNECTED:
                     break
-                await session.websocket.send_bytes(audio_chunk)
+
+                tts_audio.extend(audio_chunk)
+
+            if session.websocket.client_state == WebSocketState.CONNECTED and tts_audio:
+                opus_audio = await _tts_to_opus(bytes(tts_audio), settings.audio_sample_rate)
+                for i in range(0, len(opus_audio), XIAOZHI_TTS_CHUNK_SIZE):
+                    await session.websocket.send_bytes(opus_audio[i : i + XIAOZHI_TTS_CHUNK_SIZE])
 
             await session.websocket.send_text(json.dumps({
                 "type": "tts",
-                "state": "end",
+                "state": "stop",
                 "session_id": session.session_id,
             }))
 
