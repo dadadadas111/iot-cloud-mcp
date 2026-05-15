@@ -1,0 +1,111 @@
+import json
+import logging
+from asyncio import wait_for
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+from redis.asyncio import Redis
+
+from .config.settings import settings
+from .protocol.models import HelloMessage, OtaResponse
+from .protocol.parser import parse_audio_frame
+from .services.runtime import XiaozhiRuntime
+from .session.store import SessionStore
+
+logging.basicConfig(
+    level=settings.log_level,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+REQUIRED_WS_HEADERS = ("protocol-version", "device-id", "client-id")
+
+_redis = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
+_store = SessionStore(_redis, settings.session_ttl_seconds)
+_runtime = XiaozhiRuntime(_store)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    yield
+    await _redis.aclose()
+
+
+app = FastAPI(title="xiaozhi-cloud", version="0.1.0", lifespan=lifespan)
+
+
+@app.get("/health")
+async def health() -> dict:
+    return {
+        "status": "ok",
+        "service": "xiaozhi-cloud",
+        "redis": settings.redis_url,
+        "mcp_base_url": settings.mcp_base_url,
+        "stt_model": settings.groq_stt_model,
+        "llm_model": settings.openai_compatible_model,
+    }
+
+
+@app.api_route("/ota/", methods=["GET", "POST"])
+async def ota(request: Request) -> dict:
+    body = await request.body()
+    logger.info(
+        "ota request device_id=%s client_id=%s activation_version=%s body=%s",
+        request.headers.get("device-id"),
+        request.headers.get("client-id"),
+        request.headers.get("activation-version"),
+        body.decode(errors="replace"),
+    )
+    response = OtaResponse(
+        websocket={"url": settings.public_ws_url},
+        firmware={"version": "2.2.1"},
+    )
+    return response.model_dump()
+
+
+@app.websocket("/xiaozhi/v1/")
+async def xiaozhi_v1(websocket: WebSocket) -> None:
+    missing_headers = [name for name in REQUIRED_WS_HEADERS if not websocket.headers.get(name)]
+    if missing_headers:
+        await websocket.close(code=4400, reason=f"missing headers: {', '.join(missing_headers)}")
+        return
+
+    await websocket.accept()
+    logger.info(
+        "websocket connected authorization=%s protocol_version=%s device_id=%s client_id=%s",
+        "present" if websocket.headers.get("authorization") else "missing",
+        websocket.headers.get("protocol-version"),
+        websocket.headers.get("device-id"),
+        websocket.headers.get("client-id"),
+    )
+
+    try:
+        raw = await wait_for(websocket.receive_text(), timeout=10.0)
+        hello = HelloMessage.model_validate(json.loads(raw))
+        session = await _runtime.bootstrap_session(websocket, hello)
+        server_hello = await _runtime.server_hello(session)
+        await websocket.send_text(server_hello.model_dump_json())
+
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+            if message.get("text"):
+                logger.info("text frame session_id=%s payload=%s", session.session_id, message["text"][:500])
+            elif message.get("bytes"):
+                frame = parse_audio_frame(message["bytes"])
+                logger.info(
+                    "audio frame session_id=%s protocol_version=%s message_type=%s timestamp=%s payload_bytes=%s",
+                    session.session_id,
+                    frame.protocol_version,
+                    frame.message_type,
+                    frame.timestamp,
+                    len(frame.payload),
+                )
+    except WebSocketDisconnect:
+        logger.info("websocket disconnected")
+
+
+@app.websocket("/xiaozhi/ws")
+async def xiaozhi_ws_alias(websocket: WebSocket) -> None:
+    await xiaozhi_v1(websocket)
