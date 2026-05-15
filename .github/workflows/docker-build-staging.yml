@@ -5,6 +5,23 @@ on:
     branches:
       - master
       - main
+    paths:
+      - '.github/workflows/docker-build-staging.yml'
+      - 'src/**'
+      - 'views/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'nest-cli.json'
+      - '.eslintrc.js'
+      - '.prettierrc'
+      - 'Dockerfile'
+      - 'docker-compose.staging.yml'
+      - '.dockerignore'
+      - '.env.example'
+      - 'docs/DEPLOYMENT.md'
 
 env:
   REGISTRY: ghcr.io
