@@ -1,4 +1,6 @@
 from enum import IntEnum, StrEnum
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -18,6 +20,12 @@ class ListenState(StrEnum):
     START = "start"
     STOP = "stop"
     DETECT = "detect"
+
+
+class ListenMode(StrEnum):
+    AUTO = "auto"
+    MANUAL = "manual"
+    REALTIME = "realtime"
 
 
 class AudioParams(BaseModel):
@@ -42,7 +50,7 @@ class ListenMessage(BaseModel):
     type: ClientMessageType = ClientMessageType.LISTEN
     state: ListenState
     session_id: str | None = None
-    mode: str | None = None
+    mode: ListenMode | None = None
     text: str | None = None
 
 
@@ -63,3 +71,17 @@ class ServerHelloMessage(BaseModel):
 class OtaResponse(BaseModel):
     websocket: dict
     firmware: dict
+
+
+ClientMessage = HelloMessage | ListenMessage | AbortMessage
+
+
+def parse_client_message(data: dict[str, Any]) -> ClientMessage:
+    message_type = data.get("type")
+    if message_type == ClientMessageType.HELLO:
+        return HelloMessage.model_validate(data)
+    if message_type == ClientMessageType.LISTEN:
+        return ListenMessage.model_validate(data)
+    if message_type == ClientMessageType.ABORT:
+        return AbortMessage.model_validate(data)
+    raise ValueError(f"Unsupported client message type: {message_type!r}")

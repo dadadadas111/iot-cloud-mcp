@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
 from .config.settings import settings
-from .protocol.models import HelloMessage, OtaResponse
+from .protocol.models import HelloMessage, OtaResponse, parse_client_message
 from .protocol.parser import parse_audio_frame
 from .services.runtime import XiaozhiRuntime
 from .session.store import SessionStore
@@ -91,6 +91,11 @@ async def xiaozhi_v1(websocket: WebSocket) -> None:
             if message["type"] == "websocket.disconnect":
                 break
             if message.get("text"):
+                client_message = parse_client_message(json.loads(message["text"]))
+                if isinstance(client_message, HelloMessage):
+                    logger.info("duplicate hello ignored session_id=%s", session.session_id)
+                    continue
+                await _runtime.handle_control_message(session, client_message)
                 logger.info("text frame session_id=%s payload=%s", session.session_id, message["text"][:500])
             elif message.get("bytes"):
                 frame = parse_audio_frame(message["bytes"])

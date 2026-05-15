@@ -23,6 +23,8 @@ class SessionStore:
             "protocol_version": session.protocol_version,
             "phase": session.phase,
             "conversation_history": session.conversation_history,
+            "listen_mode": session.listen_mode,
+            "last_abort_reason": session.last_abort_reason,
         }
         await self._redis.set(self._key(session.session_id), json.dumps(payload), ex=self._ttl_seconds)
 

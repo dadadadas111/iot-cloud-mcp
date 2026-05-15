@@ -20,3 +20,5 @@ class DeviceSession:
     protocol_version: int
     phase: SessionPhase = SessionPhase.CONNECTED
     conversation_history: list[dict] = field(default_factory=list)
+    listen_mode: str | None = None
+    last_abort_reason: str | None = None
