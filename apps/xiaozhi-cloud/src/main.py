@@ -166,7 +166,7 @@ async def _check_silence_and_maybe_process(websocket: WebSocket, session) -> Non
         pcm = await decode_length_prefixed_opus_to_pcm(length_prefixed_opus, settings.audio_sample_rate)
         rms = calculate_rms(pcm)
     except Exception as exc:
-        logger.warning("energy check decode failed session_id=%s: %s", session.session_id, exc)
+        logger.warning("energy check decode failed session_id=%s: %s", session.session_id, exc, exc_info=True)
         return
 
     session.audio_analyzed_offset = len(session.audio_frames)

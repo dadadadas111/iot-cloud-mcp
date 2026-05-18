@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import struct
+
+_logger = logging.getLogger(__name__)
 
 
 async def _run_ffmpeg(args: list[str], data: bytes) -> bytes:
@@ -18,8 +21,39 @@ async def _run_ffmpeg(args: list[str], data: bytes) -> bytes:
     return stdout
 
 
+async def _try_ffmpeg(args: list[str], data: bytes) -> bytes | None:
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    stdout, stderr = await proc.communicate(data)
+    if proc.returncode != 0 or not stdout:
+        _logger.warning("ffmpeg failed: %s", stderr.decode(errors="replace")[:500])
+        return None
+    return stdout
+
+
 async def decode_length_prefixed_opus_to_pcm(data: bytes, sample_rate: int) -> bytes:
-    """Decode raw Opus packets that are each prefixed with a 4-byte big-endian length."""
+    result = await _try_ffmpeg(
+        [
+            "ffmpeg",
+            "-y",
+            "-f", "opus",
+            "-ar", str(sample_rate),
+            "-ac", "1",
+            "-i", "pipe:0",
+            "-ar", str(sample_rate),
+            "-ac", "1",
+            "-f", "s16le",
+            "pipe:1",
+        ],
+        data,
+    )
+    if result is not None:
+        return result
+
     return await _run_ffmpeg(
         [
             "ffmpeg",
@@ -70,6 +104,12 @@ async def transcode_to_ogg_opus(data: bytes, sample_rate: int) -> bytes:
         ],
         data,
     )
+
+
+def calculate_raw_energy(data: bytes) -> float:
+    if not data:
+        return 0.0
+    return sum(b * b for b in data) / len(data)
 
 
 def calculate_rms(pcm_s16le: bytes) -> float:
