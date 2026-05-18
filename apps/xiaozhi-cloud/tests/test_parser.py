@@ -1,6 +1,13 @@
 from src.protocol.parser import parse_audio_frame
 
 
+def test_parse_v1_audio_frame() -> None:
+    payload = b"raw-opus-data"
+    parsed = parse_audio_frame(payload, protocol_version=1)
+    assert parsed.protocol_version == 1
+    assert parsed.payload == payload
+
+
 def test_parse_v2_audio_frame() -> None:
     payload = b"opus-bytes"
     frame = (
@@ -12,7 +19,7 @@ def test_parse_v2_audio_frame() -> None:
         + payload
     )
 
-    parsed = parse_audio_frame(frame)
+    parsed = parse_audio_frame(frame, protocol_version=2)
 
     assert parsed.protocol_version == 2
     assert parsed.message_type == 0
@@ -24,7 +31,7 @@ def test_parse_v3_audio_frame() -> None:
     payload = b"opus-bytes"
     frame = bytes([0, 0]) + len(payload).to_bytes(2, "big") + payload
 
-    parsed = parse_audio_frame(frame)
+    parsed = parse_audio_frame(frame, protocol_version=3)
 
     assert parsed.protocol_version == 3
     assert parsed.message_type == 0

@@ -121,7 +121,16 @@ async def xiaozhi_v1(websocket: WebSocket) -> None:
                 if should_process:
                     await _process_turn(websocket, session)
             elif message.get("bytes"):
-                frame = parse_audio_frame(message["bytes"])
+                try:
+                    frame = parse_audio_frame(message["bytes"], session.protocol_version)
+                except ValueError:
+                    logger.warning(
+                        "bad audio frame session_id=%s version=%s bytes=%s",
+                        session.session_id,
+                        session.protocol_version,
+                        len(message["bytes"]),
+                    )
+                    continue
                 await _runtime.handle_audio_frame(session, frame.payload)
                 logger.info(
                     "audio frame session_id=%s protocol_version=%s message_type=%s timestamp=%s payload_bytes=%s",

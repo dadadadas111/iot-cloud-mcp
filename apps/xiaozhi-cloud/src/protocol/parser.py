@@ -12,7 +12,16 @@ class ParsedAudioFrame:
     payload: bytes
 
 
-def parse_audio_frame(payload: bytes) -> ParsedAudioFrame:
+def parse_audio_frame(payload: bytes, protocol_version: int = 1) -> ParsedAudioFrame:
+    # Protocol v1: raw Opus bytes, no header
+    if protocol_version == 1:
+        return ParsedAudioFrame(
+            protocol_version=1,
+            message_type=0,
+            timestamp=0,
+            payload=payload,
+        )
+
     if len(payload) >= 16:
         version, message_type, reserved, timestamp, payload_size = struct.unpack("!HHIII", payload[:16])
         if version == 2 and len(payload) >= 16 + payload_size:
@@ -35,4 +44,4 @@ def parse_audio_frame(payload: bytes) -> ParsedAudioFrame:
                 payload=audio_payload,
             )
 
-    raise ValueError("Unsupported or truncated Xiaozhi audio frame")
+    raise ValueError(f"Unsupported or truncated Xiaozhi audio frame (version={protocol_version}, bytes={len(payload)})")
