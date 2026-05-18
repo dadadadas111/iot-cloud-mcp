@@ -1,12 +1,13 @@
 import json
 import logging
+import time
 from asyncio import wait_for
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
-from .audio import build_audio_frame, decode_opus_to_wav, transcode_to_ogg_opus
+from .audio import build_audio_frame, calculate_rms, decode_opus_to_pcm, decode_opus_to_wav, transcode_to_ogg_opus
 from .config.settings import settings
 from .integrations.edge_tts_client import EdgeTtsClient
 from .integrations.groq_stt import GroqSttClient
@@ -24,6 +25,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 REQUIRED_WS_HEADERS = ("protocol-version", "device-id", "client-id")
+ENERGY_THRESHOLD = 500
+ENERGY_CHECK_INTERVAL = 5
 
 _redis = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
 _store = SessionStore(_redis, settings.session_ttl_seconds)
@@ -107,6 +110,7 @@ async def xiaozhi_v1(websocket: WebSocket) -> None:
         server_hello = await _runtime.server_hello(session)
         await websocket.send_text(server_hello.model_dump_json())
 
+        frames_since_energy_check = 0
         while True:
             message = await websocket.receive()
             if message["type"] == "websocket.disconnect":
@@ -140,8 +144,48 @@ async def xiaozhi_v1(websocket: WebSocket) -> None:
                     frame.timestamp,
                     len(frame.payload),
                 )
+
+                if session.phase == SessionPhase.LISTENING:
+                    frames_since_energy_check += 1
+                    if frames_since_energy_check >= ENERGY_CHECK_INTERVAL:
+                        frames_since_energy_check = 0
+                        await _check_silence_and_maybe_process(websocket, session)
     except WebSocketDisconnect:
         logger.info("websocket disconnected")
+
+
+async def _check_silence_and_maybe_process(websocket: WebSocket, session) -> None:
+    if session.phase != SessionPhase.LISTENING:
+        return
+
+    raw_audio = session.get_audio_bytes()
+    if not raw_audio:
+        return
+
+    try:
+        pcm = await decode_opus_to_pcm(raw_audio, settings.audio_sample_rate)
+        rms = calculate_rms(pcm)
+    except Exception:
+        return
+
+    if rms > ENERGY_THRESHOLD:
+        session.last_speech_time = time.time()
+        return
+
+    if session.last_speech_time is None:
+        session.last_speech_time = time.time()
+        return
+
+    elapsed_ms = (time.time() - session.last_speech_time) * 1000
+    if elapsed_ms >= settings.silence_timeout_ms:
+        logger.info(
+            "silence detected session_id=%s rms=%.1f elapsed_ms=%.0f",
+            session.session_id,
+            rms,
+            elapsed_ms,
+        )
+        await _runtime.transition(session, SessionPhase.PROCESSING)
+        await _process_turn(websocket, session)
 
 
 async def _process_turn(websocket: WebSocket, session) -> None:

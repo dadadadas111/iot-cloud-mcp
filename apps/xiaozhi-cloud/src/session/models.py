@@ -23,6 +23,7 @@ class DeviceSession:
     listen_mode: str | None = None
     last_abort_reason: str | None = None
     audio_buffer: bytearray = field(default_factory=bytearray)
+    last_speech_time: float | None = None
 
     def append_audio(self, chunk: bytes) -> None:
         self.audio_buffer.extend(chunk)
