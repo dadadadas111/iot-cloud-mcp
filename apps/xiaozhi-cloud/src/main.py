@@ -6,10 +6,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
+from .audio import build_audio_frame, decode_opus_to_wav, transcode_to_ogg_opus
 from .config.settings import settings
+from .integrations.edge_tts_client import EdgeTtsClient
+from .integrations.groq_stt import GroqSttClient
+from .integrations.openai_compatible_llm import OpenAiCompatibleLlmClient
 from .protocol.models import HelloMessage, OtaResponse, parse_client_message
 from .protocol.parser import parse_audio_frame
 from .services.runtime import XiaozhiRuntime
+from .session.models import SessionPhase
 from .session.store import SessionStore
 
 logging.basicConfig(
@@ -22,7 +27,18 @@ REQUIRED_WS_HEADERS = ("protocol-version", "device-id", "client-id")
 
 _redis = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
 _store = SessionStore(_redis, settings.session_ttl_seconds)
-_runtime = XiaozhiRuntime(_store)
+_stt_client = GroqSttClient(settings.groq_api_key, settings.groq_stt_model) if settings.groq_api_key else None
+_llm_client = (
+    OpenAiCompatibleLlmClient(
+        settings.openai_compatible_base_url,
+        settings.openai_compatible_api_key,
+        settings.openai_compatible_model,
+    )
+    if settings.openai_compatible_base_url and settings.openai_compatible_api_key and settings.openai_compatible_model
+    else None
+)
+_tts_client = EdgeTtsClient(settings.tts_voice)
+_runtime = XiaozhiRuntime(_store, stt_client=_stt_client, llm_client=_llm_client, tts_client=_tts_client)
 
 
 @asynccontextmanager
@@ -43,6 +59,11 @@ async def health() -> dict:
         "mcp_base_url": settings.mcp_base_url,
         "stt_model": settings.groq_stt_model,
         "llm_model": settings.openai_compatible_model,
+        "providers_ready": {
+            "stt": _stt_client is not None,
+            "llm": _llm_client is not None,
+            "tts": _tts_client is not None,
+        },
     }
 
 
@@ -95,10 +116,13 @@ async def xiaozhi_v1(websocket: WebSocket) -> None:
                 if isinstance(client_message, HelloMessage):
                     logger.info("duplicate hello ignored session_id=%s", session.session_id)
                     continue
-                await _runtime.handle_control_message(session, client_message)
+                should_process = await _runtime.handle_control_message(session, client_message)
                 logger.info("text frame session_id=%s payload=%s", session.session_id, message["text"][:500])
+                if should_process:
+                    await _process_turn(websocket, session)
             elif message.get("bytes"):
                 frame = parse_audio_frame(message["bytes"])
+                await _runtime.handle_audio_frame(session, frame.payload)
                 logger.info(
                     "audio frame session_id=%s protocol_version=%s message_type=%s timestamp=%s payload_bytes=%s",
                     session.session_id,
@@ -109,6 +133,52 @@ async def xiaozhi_v1(websocket: WebSocket) -> None:
                 )
     except WebSocketDisconnect:
         logger.info("websocket disconnected")
+
+
+async def _process_turn(websocket: WebSocket, session) -> None:
+    try:
+        raw_audio = session.get_audio_bytes()
+        if not raw_audio:
+            await _runtime.transition(session, SessionPhase.READY)
+            return
+
+        wav_audio = await decode_opus_to_wav(raw_audio, settings.audio_sample_rate)
+        turn = await _runtime.process_turn(session, wav_audio)
+        await websocket.send_text(json.dumps({"type": "stt", "text": turn.transcript, "session_id": session.session_id}))
+        await _runtime.transition(session, SessionPhase.RESPONDING)
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "tts",
+                    "state": "start",
+                    "text": turn.response_text,
+                    "session_id": session.session_id,
+                }
+            )
+        )
+
+        opus_audio = await transcode_to_ogg_opus(turn.tts_audio, settings.audio_sample_rate)
+        for offset in range(0, len(opus_audio), 4096):
+            chunk = opus_audio[offset : offset + 4096]
+            await websocket.send_bytes(build_audio_frame(session.protocol_version, chunk))
+
+        await websocket.send_text(json.dumps({"type": "tts", "state": "stop", "session_id": session.session_id}))
+        await _runtime.transition(session, SessionPhase.READY)
+        session.reset_audio()
+    except Exception as exc:
+        logger.exception("turn processing failed session_id=%s", session.session_id)
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "tts",
+                    "state": "stop",
+                    "session_id": session.session_id,
+                    "error": str(exc),
+                }
+            )
+        )
+        await _runtime.transition(session, SessionPhase.READY)
+        session.reset_audio()
 
 
 @app.websocket("/xiaozhi/ws")

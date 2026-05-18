@@ -22,3 +22,18 @@ class DeviceSession:
     conversation_history: list[dict] = field(default_factory=list)
     listen_mode: str | None = None
     last_abort_reason: str | None = None
+    audio_buffer: bytearray = field(default_factory=bytearray)
+
+    def append_audio(self, chunk: bytes) -> None:
+        self.audio_buffer.extend(chunk)
+
+    def reset_audio(self) -> None:
+        self.audio_buffer = bytearray()
+
+    def get_audio_bytes(self) -> bytes:
+        return bytes(self.audio_buffer)
+
+    def add_turn(self, role: str, content: str) -> None:
+        self.conversation_history.append({"role": role, "content": content})
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self.conversation_history[-20:]

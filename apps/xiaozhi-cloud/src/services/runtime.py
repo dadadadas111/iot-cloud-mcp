@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 
 from fastapi import WebSocket
 
@@ -12,9 +13,19 @@ from ..session.store import SessionStore
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class TurnResult:
+    transcript: str
+    response_text: str
+    tts_audio: bytes
+
+
 class XiaozhiRuntime:
-    def __init__(self, store: SessionStore) -> None:
+    def __init__(self, store: SessionStore, stt_client=None, llm_client=None, tts_client=None) -> None:
         self._store = store
+        self._stt_client = stt_client
+        self._llm_client = llm_client
+        self._tts_client = tts_client
 
     async def bootstrap_session(self, websocket: WebSocket, hello: HelloMessage) -> DeviceSession:
         protocol_version = int(websocket.headers["protocol-version"])
@@ -46,7 +57,7 @@ class XiaozhiRuntime:
         self,
         session: DeviceSession,
         message: ListenMessage | AbortMessage,
-    ) -> list[dict]:
+    ) -> bool:
         self._validate_session_message(session, message.session_id)
 
         if isinstance(message, ListenMessage):
@@ -59,36 +70,71 @@ class XiaozhiRuntime:
             session.session_id,
             session.last_abort_reason,
         )
-        return []
+        session.reset_audio()
+        return False
 
     def _validate_session_message(self, session: DeviceSession, message_session_id: str | None) -> None:
         if message_session_id is not None and message_session_id != session.session_id:
             raise ValueError("session_id mismatch")
 
-    async def _handle_listen_message(self, session: DeviceSession, message: ListenMessage) -> list[dict]:
+    async def _handle_listen_message(self, session: DeviceSession, message: ListenMessage) -> bool:
         if message.state == ListenState.START:
             session.listen_mode = message.mode.value if message.mode else None
+            session.reset_audio()
             await self.transition(session, SessionPhase.LISTENING)
             logger.info(
                 "session listening session_id=%s mode=%s",
                 session.session_id,
                 session.listen_mode,
             )
-            return []
+            return False
 
         if message.state == ListenState.DETECT:
             session.listen_mode = message.mode.value if message.mode else session.listen_mode
+            session.reset_audio()
             await self.transition(session, SessionPhase.LISTENING)
             logger.info(
                 "wake detected session_id=%s text=%s",
                 session.session_id,
                 message.text,
             )
-            return []
+            return False
 
         if session.phase != SessionPhase.LISTENING:
             raise ValueError("listen.stop received while not listening")
 
         await self.transition(session, SessionPhase.PROCESSING)
         logger.info("session processing session_id=%s", session.session_id)
-        return []
+        return True
+
+    async def handle_audio_frame(self, session: DeviceSession, payload: bytes) -> None:
+        if session.phase != SessionPhase.LISTENING:
+            logger.info(
+                "dropping audio session_id=%s phase=%s payload_bytes=%s",
+                session.session_id,
+                session.phase,
+                len(payload),
+            )
+            return
+        session.append_audio(payload)
+        await self._store.save(session)
+
+    async def process_turn(self, session: DeviceSession, wav_audio: bytes) -> TurnResult:
+        if self._stt_client is None or self._llm_client is None or self._tts_client is None:
+            raise RuntimeError("runtime providers are not configured")
+
+        transcript = (await self._stt_client.transcribe(wav_audio, filename="turn.wav")).strip()
+        if not transcript:
+            raise RuntimeError("empty transcript")
+
+        session.add_turn("user", transcript)
+        messages = [{"role": "system", "content": "You are a helpful Vietnamese-speaking assistant. Keep replies concise and natural for voice conversation."}]
+        messages.extend(session.conversation_history)
+        response_text = (await self._llm_client.chat(messages)).strip()
+        if not response_text:
+            raise RuntimeError("empty llm response")
+
+        session.add_turn("assistant", response_text)
+        tts_audio = await self._tts_client.synthesize(response_text)
+        await self._store.save(session)
+        return TurnResult(transcript=transcript, response_text=response_text, tts_audio=tts_audio)

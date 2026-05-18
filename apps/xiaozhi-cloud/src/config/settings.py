@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     public_ota_url: str = "http://localhost:8080/ota/"
     redis_url: str = "redis://localhost:6379/1"
     session_ttl_seconds: int = 3600
+    audio_sample_rate: int = 16000
+    audio_chunk_ms: int = 60
+    silence_timeout_ms: int = 1500
 
     mcp_base_url: str = "http://localhost:3001"
     mcp_project_api_key: str = ""
@@ -24,6 +27,7 @@ class Settings(BaseSettings):
 
     tts_provider: str = "edge"
     tts_voice: str = "vi-VN-HoaiMyNeural"
+    system_prompt: str = "You are a helpful Vietnamese-speaking assistant. Keep replies concise and natural for voice conversation."
     log_level: str = "INFO"
 
 

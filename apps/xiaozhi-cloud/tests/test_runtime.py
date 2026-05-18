@@ -35,7 +35,7 @@ async def test_listen_start_moves_session_to_listening() -> None:
     )
 
     assert session.phase == SessionPhase.LISTENING
-    assert outbound == []
+    assert outbound is False
 
 
 @pytest.mark.asyncio
