@@ -25,7 +25,8 @@ class SessionStore:
             "conversation_history": session.conversation_history,
             "listen_mode": session.listen_mode,
             "last_abort_reason": session.last_abort_reason,
-            "audio_buffer_bytes": len(session.audio_buffer),
+            "audio_frame_count": len(session.audio_frames),
+            "audio_total_bytes": sum(len(f) for f in session.audio_frames),
         }
         await self._redis.set(self._key(session.session_id), json.dumps(payload), ex=self._ttl_seconds)
 
