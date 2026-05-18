@@ -106,8 +106,8 @@ jobs:
             if [ -f docker-compose.staging.yml ]; then mv -f docker-compose.staging.yml docker-compose.yml; fi
             echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
             docker pull ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-            IMAGE_TAG=${IMAGE_TAG} docker compose down || true
-            IMAGE_TAG=${IMAGE_TAG} docker compose up -d
+            docker rm -f xiaozhi-cloud-staging 2>/dev/null || true
+            IMAGE_TAG=${IMAGE_TAG} docker compose up -d --force-recreate
             sleep 10
             docker compose ps
             docker compose logs --tail=80 xiaozhi-cloud-staging
