@@ -18,56 +18,37 @@ async def _run_ffmpeg(args: list[str], data: bytes) -> bytes:
     return stdout
 
 
-async def decode_opus_to_pcm(data: bytes, sample_rate: int) -> bytes:
-    for fmt in ("ogg", "opus"):
-        try:
-            return await _run_ffmpeg(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-f",
-                    fmt,
-                    "-i",
-                    "pipe:0",
-                    "-ar",
-                    str(sample_rate),
-                    "-ac",
-                    "1",
-                    "-f",
-                    "s16le",
-                    "pipe:1",
-                ],
-                data,
-            )
-        except RuntimeError:
-            continue
-    raise RuntimeError("failed to decode opus audio")
+async def decode_length_prefixed_opus_to_pcm(data: bytes, sample_rate: int) -> bytes:
+    """Decode raw Opus packets that are each prefixed with a 4-byte big-endian length."""
+    return await _run_ffmpeg(
+        [
+            "ffmpeg",
+            "-y",
+            "-f", "opus",
+            "-i", "pipe:0",
+            "-ar", str(sample_rate),
+            "-ac", "1",
+            "-f", "s16le",
+            "pipe:1",
+        ],
+        data,
+    )
 
 
 async def decode_opus_to_wav(data: bytes, sample_rate: int) -> bytes:
-    for fmt in ("ogg", "opus"):
-        try:
-            return await _run_ffmpeg(
-                [
-                    "ffmpeg",
-                    "-y",
-                    "-f",
-                    fmt,
-                    "-i",
-                    "pipe:0",
-                    "-ar",
-                    str(sample_rate),
-                    "-ac",
-                    "1",
-                    "-f",
-                    "wav",
-                    "pipe:1",
-                ],
-                data,
-            )
-        except RuntimeError:
-            continue
-    raise RuntimeError("failed to decode opus audio")
+    return await _run_ffmpeg(
+        [
+            "ffmpeg",
+            "-y",
+            "-f", "opus",
+            "-i", "pipe:0",
+            "-ar", str(sample_rate),
+            "-ac", "1",
+            "-f", "wav",
+            "pipe:1",
+        ],
+        data,
+    )
 
 
 async def transcode_to_ogg_opus(data: bytes, sample_rate: int) -> bytes:

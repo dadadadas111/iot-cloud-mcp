@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
-from .audio import build_audio_frame, calculate_rms, decode_opus_to_pcm, decode_opus_to_wav, transcode_to_ogg_opus
+from .audio import build_audio_frame, calculate_rms, decode_length_prefixed_opus_to_pcm, decode_opus_to_wav, transcode_to_ogg_opus
 from .config.settings import settings
 from .integrations.edge_tts_client import EdgeTtsClient
 from .integrations.groq_stt import GroqSttClient
@@ -158,19 +158,18 @@ async def _check_silence_and_maybe_process(websocket: WebSocket, session) -> Non
     if session.phase != SessionPhase.LISTENING:
         return
 
-    raw_audio = session.get_audio_bytes()
-    new_audio = raw_audio[session.audio_analyzed_offset:]
-    if not new_audio:
+    if session.audio_analyzed_offset >= len(session.audio_frames):
         return
 
-    session.audio_analyzed_offset = len(raw_audio)
-
     try:
-        pcm = await decode_opus_to_pcm(new_audio, settings.audio_sample_rate)
+        length_prefixed_opus = session.get_opus_from(session.audio_analyzed_offset)
+        pcm = await decode_length_prefixed_opus_to_pcm(length_prefixed_opus, settings.audio_sample_rate)
         rms = calculate_rms(pcm)
     except Exception as exc:
         logger.warning("energy check decode failed session_id=%s: %s", session.session_id, exc)
         return
+
+    session.audio_analyzed_offset = len(session.audio_frames)
 
     if rms > ENERGY_THRESHOLD:
         session.last_speech_time = time.time()
@@ -201,12 +200,12 @@ async def _check_silence_and_maybe_process(websocket: WebSocket, session) -> Non
 
 async def _process_turn(websocket: WebSocket, session) -> None:
     try:
-        raw_audio = session.get_audio_bytes()
-        if not raw_audio:
+        if not session.audio_frames:
             await _runtime.transition(session, SessionPhase.READY)
             return
 
-        wav_audio = await decode_opus_to_wav(raw_audio, settings.audio_sample_rate)
+        length_prefixed_opus = session.get_opus_from(0)
+        wav_audio = await decode_opus_to_wav(length_prefixed_opus, settings.audio_sample_rate)
         turn = await _runtime.process_turn(session, wav_audio)
         await websocket.send_text(json.dumps({"type": "stt", "text": turn.transcript, "session_id": session.session_id}))
         await _runtime.transition(session, SessionPhase.RESPONDING)
