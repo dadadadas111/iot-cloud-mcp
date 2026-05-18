@@ -159,17 +159,21 @@ async def _check_silence_and_maybe_process(websocket: WebSocket, session) -> Non
         return
 
     raw_audio = session.get_audio_bytes()
-    if not raw_audio:
+    new_audio = raw_audio[session.audio_analyzed_offset:]
+    if not new_audio:
         return
 
     try:
-        pcm = await decode_opus_to_pcm(raw_audio, settings.audio_sample_rate)
+        pcm = await decode_opus_to_pcm(new_audio, settings.audio_sample_rate)
         rms = calculate_rms(pcm)
     except Exception:
         return
 
+    session.audio_analyzed_offset = len(raw_audio)
+
     if rms > ENERGY_THRESHOLD:
         session.last_speech_time = time.time()
+        logger.info("speech detected session_id=%s rms=%.1f", session.session_id, rms)
         return
 
     if session.last_speech_time is None:
@@ -177,6 +181,12 @@ async def _check_silence_and_maybe_process(websocket: WebSocket, session) -> Non
         return
 
     elapsed_ms = (time.time() - session.last_speech_time) * 1000
+    logger.info(
+        "silence check session_id=%s rms=%.1f elapsed_ms=%.0f",
+        session.session_id,
+        rms,
+        elapsed_ms,
+    )
     if elapsed_ms >= settings.silence_timeout_ms:
         logger.info(
             "silence detected session_id=%s rms=%.1f elapsed_ms=%.0f",

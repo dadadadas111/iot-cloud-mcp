@@ -24,12 +24,15 @@ class DeviceSession:
     last_abort_reason: str | None = None
     audio_buffer: bytearray = field(default_factory=bytearray)
     last_speech_time: float | None = None
+    audio_analyzed_offset: int = 0
 
     def append_audio(self, chunk: bytes) -> None:
         self.audio_buffer.extend(chunk)
 
     def reset_audio(self) -> None:
         self.audio_buffer = bytearray()
+        self.audio_analyzed_offset = 0
+        self.last_speech_time = None
 
     def get_audio_bytes(self) -> bytes:
         return bytes(self.audio_buffer)
