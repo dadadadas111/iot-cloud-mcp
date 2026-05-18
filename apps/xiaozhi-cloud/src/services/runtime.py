@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from dataclasses import dataclass
 
 from fastapi import WebSocket
 
-from ..protocol.models import AbortMessage, HelloMessage, ListenMessage, ListenState, ServerHelloMessage
+from ..protocol.models import AbortMessage, AudioParams, HelloMessage, ListenMessage, ListenState, ServerHelloMessage
 from ..session.models import DeviceSession, SessionPhase
 from ..session.store import SessionStore
 
@@ -34,6 +35,9 @@ class XiaozhiRuntime:
             device_id=hello.device_id or websocket.headers["device-id"],
             client_id=hello.client_id or websocket.headers["client-id"],
             protocol_version=protocol_version or hello.version,
+            audio_sample_rate=hello.audio_params.sample_rate,
+            audio_channels=hello.audio_params.channels,
+            audio_frame_duration=hello.audio_params.frame_duration,
             phase=SessionPhase.READY,
         )
         await self._store.save(session)
@@ -47,7 +51,15 @@ class XiaozhiRuntime:
         return session
 
     async def server_hello(self, session: DeviceSession) -> ServerHelloMessage:
-        return ServerHelloMessage(version=session.protocol_version, session_id=session.session_id)
+        return ServerHelloMessage(
+            version=session.protocol_version,
+            session_id=session.session_id,
+            audio_params=AudioParams(
+                sample_rate=session.audio_sample_rate,
+                channels=session.audio_channels,
+                frame_duration=session.audio_frame_duration,
+            ),
+        )
 
     async def transition(self, session: DeviceSession, phase: SessionPhase) -> None:
         session.phase = phase
@@ -81,6 +93,7 @@ class XiaozhiRuntime:
         if message.state == ListenState.START:
             session.listen_mode = message.mode.value if message.mode else None
             session.reset_audio()
+            session.listening_started_at = time.time()
             await self.transition(session, SessionPhase.LISTENING)
             logger.info(
                 "session listening session_id=%s mode=%s",
@@ -92,6 +105,7 @@ class XiaozhiRuntime:
         if message.state == ListenState.DETECT:
             session.listen_mode = message.mode.value if message.mode else session.listen_mode
             session.reset_audio()
+            session.listening_started_at = time.time()
             await self.transition(session, SessionPhase.LISTENING)
             logger.info(
                 "wake detected session_id=%s text=%s",
@@ -119,15 +133,24 @@ class XiaozhiRuntime:
         session.append_audio(payload)
         await self._store.save(session)
 
-    async def process_turn(self, session: DeviceSession, wav_audio: bytes) -> TurnResult:
-        if self._stt_client is None or self._llm_client is None or self._tts_client is None:
-            raise RuntimeError("runtime providers are not configured")
+    async def transcribe_audio(self, session: DeviceSession, wav_audio: bytes) -> str:
+        """STT only — returns transcript and stores user turn in session."""
+        if self._stt_client is None:
+            raise RuntimeError("STT provider is not configured")
 
         transcript = (await self._stt_client.transcribe(wav_audio, filename="turn.wav")).strip()
         if not transcript:
             raise RuntimeError("empty transcript")
 
         session.add_turn("user", transcript)
+        await self._store.save(session)
+        return transcript
+
+    async def generate_response(self, session: DeviceSession) -> tuple[str, bytes]:
+        """LLM + TTS after STT — returns (response_text, tts_audio)."""
+        if self._llm_client is None or self._tts_client is None:
+            raise RuntimeError("LLM/TTS providers are not configured")
+
         messages = [{"role": "system", "content": "You are a helpful Vietnamese-speaking assistant. Keep replies concise and natural for voice conversation."}]
         messages.extend(session.conversation_history)
         response_text = (await self._llm_client.chat(messages)).strip()
@@ -137,4 +160,10 @@ class XiaozhiRuntime:
         session.add_turn("assistant", response_text)
         tts_audio = await self._tts_client.synthesize(response_text)
         await self._store.save(session)
+        return response_text, tts_audio
+
+    async def process_turn(self, session: DeviceSession, wav_audio: bytes) -> TurnResult:
+        """Full pipeline — kept for backward compat (not used by the fast path)."""
+        transcript = await self.transcribe_audio(session, wav_audio)
+        response_text, tts_audio = await self.generate_response(session)
         return TurnResult(transcript=transcript, response_text=response_text, tts_audio=tts_audio)

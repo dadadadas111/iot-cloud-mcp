@@ -53,6 +53,27 @@ jobs:
           cache-from: type=gha,scope=xiaozhi-cloud-staging
           cache-to: type=gha,mode=max,scope=xiaozhi-cloud-staging
 
+  deploy:
+    name: Deploy xiaozhi-cloud staging
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Ensure staging directory exists
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          script: mkdir -p /opt/xiaozhi-cloud-stag
+
       - name: Upload staging compose file
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -64,15 +85,6 @@ jobs:
           target: /opt/xiaozhi-cloud-stag
           strip_components: 2
 
-  deploy:
-    name: Deploy xiaozhi-cloud staging
-    needs: build-and-push
-    runs-on: ubuntu-latest
-
-    env:
-      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-
-    steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.0
         env:
@@ -91,7 +103,7 @@ jobs:
             set -e
             mkdir -p /opt/xiaozhi-cloud-stag
             cd /opt/xiaozhi-cloud-stag
-            if [ -f docker-compose.staging.yml ] && [ ! -f docker-compose.yml ]; then mv docker-compose.staging.yml docker-compose.yml; fi
+            if [ -f docker-compose.staging.yml ]; then mv -f docker-compose.staging.yml docker-compose.yml; fi
             echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
             docker pull ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
             IMAGE_TAG=${IMAGE_TAG} docker compose down || true

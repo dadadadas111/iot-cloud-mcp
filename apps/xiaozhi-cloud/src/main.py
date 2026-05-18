@@ -1,13 +1,13 @@
 import json
 import logging
 import time
-from asyncio import wait_for
+from asyncio import sleep, wait_for
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
-from .audio import build_audio_frame, calculate_rms, decode_length_prefixed_opus_to_pcm, decode_opus_to_wav, transcode_to_ogg_opus
+from .audio import build_audio_frame, calculate_rms, contains_speech, decode_opus_frames_to_pcm, decode_opus_frames_to_wav, transcode_to_opus_frames
 from .config.settings import settings
 from .integrations.edge_tts_client import EdgeTtsClient
 from .integrations.groq_stt import GroqSttClient
@@ -25,8 +25,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 REQUIRED_WS_HEADERS = ("protocol-version", "device-id", "client-id")
-ENERGY_THRESHOLD = 500
 ENERGY_CHECK_INTERVAL = 5
+VAD_AGGRESSIVENESS = 2
+MIN_SILENCE_TIMEOUT_MS = 1000
+VAD_GRACE_PERIOD_SECONDS = 2.0
+TTS_PREROLL_FRAMES = 5
+TTS_STOP_DELAY_SECONDS = 0.42
+MIN_SPEECH_RMS = 42.0
+MIN_VOICED_FRAMES = 4
+MIN_VOICED_RATIO = 0.6
 
 _redis = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
 _store = SessionStore(_redis, settings.session_ttl_seconds)
@@ -158,26 +165,41 @@ async def _check_silence_and_maybe_process(websocket: WebSocket, session) -> Non
     if session.phase != SessionPhase.LISTENING:
         return
 
+    if session.listen_mode == "manual":
+        return
+
     if session.audio_analyzed_offset >= len(session.audio_frames):
         return
 
+    if session.listening_started_at is not None and time.time() - session.listening_started_at < VAD_GRACE_PERIOD_SECONDS:
+        return
+
     try:
-        length_prefixed_opus = session.get_opus_from(session.audio_analyzed_offset)
-        pcm = await decode_length_prefixed_opus_to_pcm(length_prefixed_opus, settings.audio_sample_rate)
+        pcm = await decode_opus_frames_to_pcm(
+            session.audio_frames[session.audio_analyzed_offset :],
+            session.audio_sample_rate,
+        )
         rms = calculate_rms(pcm)
+        speech_present = contains_speech(
+            pcm,
+            session.audio_sample_rate,
+            aggressiveness=VAD_AGGRESSIVENESS,
+            min_voiced_frames=MIN_VOICED_FRAMES,
+            min_voiced_ratio=MIN_VOICED_RATIO,
+        )
     except Exception as exc:
-        logger.warning("energy check decode failed session_id=%s: %s", session.session_id, exc, exc_info=True)
+        logger.warning("energy check decode failed session_id=%s: %s", session.session_id, exc)
         return
 
     session.audio_analyzed_offset = len(session.audio_frames)
 
-    if rms > ENERGY_THRESHOLD:
+    if speech_present and rms >= MIN_SPEECH_RMS:
+        session.speech_detected = True
         session.last_speech_time = time.time()
         logger.info("speech detected session_id=%s rms=%.1f", session.session_id, rms)
         return
 
-    if session.last_speech_time is None:
-        session.last_speech_time = time.time()
+    if not session.speech_detected or session.last_speech_time is None:
         return
 
     elapsed_ms = (time.time() - session.last_speech_time) * 1000
@@ -187,7 +209,7 @@ async def _check_silence_and_maybe_process(websocket: WebSocket, session) -> Non
         rms,
         elapsed_ms,
     )
-    if elapsed_ms >= settings.silence_timeout_ms:
+    if elapsed_ms >= max(settings.silence_timeout_ms, MIN_SILENCE_TIMEOUT_MS):
         logger.info(
             "silence detected session_id=%s rms=%.1f elapsed_ms=%.0f",
             session.session_id,
@@ -204,42 +226,54 @@ async def _process_turn(websocket: WebSocket, session) -> None:
             await _runtime.transition(session, SessionPhase.READY)
             return
 
-        length_prefixed_opus = session.get_opus_from(0)
-        wav_audio = await decode_opus_to_wav(length_prefixed_opus, settings.audio_sample_rate)
-        turn = await _runtime.process_turn(session, wav_audio)
-        await websocket.send_text(json.dumps({"type": "stt", "text": turn.transcript, "session_id": session.session_id}))
+        wav_audio = await decode_opus_frames_to_wav(session.audio_frames, session.audio_sample_rate)
         await _runtime.transition(session, SessionPhase.RESPONDING)
+
+        # 1) STT only — fast path
+        transcript = await _runtime.transcribe_audio(session, wav_audio)
+        await websocket.send_text(json.dumps({"type": "stt", "text": transcript, "session_id": session.session_id}))
+        # Early tts:start — device transitions to "Speaking" during LLM processing
+        await websocket.send_text(json.dumps({"type": "tts", "state": "start", "session_id": session.session_id}))
+
+        # 2) LLM + TTS — device shows "Speaking" while this runs
+        response_text, tts_audio = await _runtime.generate_response(session)
+
+        # 3) Display text and stream audio
         await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "tts",
-                    "state": "start",
-                    "text": turn.response_text,
-                    "session_id": session.session_id,
-                }
-            )
+            json.dumps({"type": "tts", "state": "sentence_start", "text": response_text, "session_id": session.session_id})
         )
+        opus_frames = await transcode_to_opus_frames(
+            tts_audio,
+            session.audio_sample_rate,
+            session.audio_frame_duration,
+        )
+        for index, opus_frame in enumerate(opus_frames):
+            await websocket.send_bytes(
+                build_audio_frame(
+                    session.protocol_version,
+                    opus_frame,
+                    timestamp=index * session.audio_frame_duration,
+                )
+            )
+            if index + 1 >= TTS_PREROLL_FRAMES:
+                await sleep(session.audio_frame_duration / 1000)
 
-        opus_audio = await transcode_to_ogg_opus(turn.tts_audio, settings.audio_sample_rate)
-        for offset in range(0, len(opus_audio), 4096):
-            chunk = opus_audio[offset : offset + 4096]
-            await websocket.send_bytes(build_audio_frame(session.protocol_version, chunk))
-
+        await sleep(TTS_STOP_DELAY_SECONDS)
         await websocket.send_text(json.dumps({"type": "tts", "state": "stop", "session_id": session.session_id}))
+        await _runtime.transition(session, SessionPhase.READY)
+        session.reset_audio()
+    except WebSocketDisconnect:
+        logger.warning("client disconnected during turn session_id=%s", session.session_id)
         await _runtime.transition(session, SessionPhase.READY)
         session.reset_audio()
     except Exception as exc:
         logger.exception("turn processing failed session_id=%s", session.session_id)
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "tts",
-                    "state": "stop",
-                    "session_id": session.session_id,
-                    "error": str(exc),
-                }
+        try:
+            await websocket.send_text(
+                json.dumps({"type": "tts", "state": "stop", "session_id": session.session_id, "error": str(exc)})
             )
-        )
+        except Exception:
+            pass
         await _runtime.transition(session, SessionPhase.READY)
         session.reset_audio()
 

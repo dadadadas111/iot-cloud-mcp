@@ -46,7 +46,7 @@ jobs:
           cache-from: type=gha,scope=xiaozhi-cloud-prod
           cache-to: type=gha,mode=max,scope=xiaozhi-cloud-prod
 
-      - name: Upload production compose file
+      - name: Upload compose files
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.VPS_HOST }}
