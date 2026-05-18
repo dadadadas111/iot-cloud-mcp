@@ -1,0 +1,101 @@
+name: Build and Deploy xiaozhi-cloud (Staging)
+
+on:
+  push:
+    branches-ignore:
+      - master
+      - main
+    paths:
+      - 'apps/xiaozhi-cloud/**'
+      - '.github/workflows/xiaozhi-cloud-staging.yml'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build xiaozhi-cloud staging image
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.tag.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: tag
+        run: echo "tag=xiaozhi-cloud-staging-$(echo '${{ github.sha }}' | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/xiaozhi-cloud
+          file: ./apps/xiaozhi-cloud/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha,scope=xiaozhi-cloud-staging
+          cache-to: type=gha,mode=max,scope=xiaozhi-cloud-staging
+
+      - name: Upload staging compose file
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          source: apps/xiaozhi-cloud/docker-compose.staging.yml
+          target: /opt/xiaozhi-cloud-stag
+          strip_components: 2
+
+  deploy:
+    name: Deploy xiaozhi-cloud staging
+    needs: build-and-push
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        env:
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          password: ${{ secrets.VPS_PASSWORD }}
+          port: ${{ secrets.VPS_PORT }}
+          envs: REGISTRY,IMAGE_NAME,IMAGE_TAG,GITHUB_TOKEN,GITHUB_ACTOR
+          script: |
+            set -e
+            mkdir -p /opt/xiaozhi-cloud-stag
+            cd /opt/xiaozhi-cloud-stag
+            if [ -f docker-compose.staging.yml ] && [ ! -f docker-compose.yml ]; then mv docker-compose.staging.yml docker-compose.yml; fi
+            echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+            docker pull ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+            IMAGE_TAG=${IMAGE_TAG} docker compose down || true
+            IMAGE_TAG=${IMAGE_TAG} docker compose up -d
+            sleep 10
+            docker compose ps
+            docker compose logs --tail=80 xiaozhi-cloud-staging
