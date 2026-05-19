@@ -12,6 +12,7 @@ from .config.settings import settings
 from .integrations.edge_tts_client import EdgeTtsClient
 from .integrations.groq_stt import GroqSttClient
 from .integrations.openai_compatible_llm import OpenAiCompatibleLlmClient
+from .integrations.rogo_mcp import RogoMcpClient
 from .protocol.models import HelloMessage, OtaResponse, parse_client_message
 from .protocol.parser import parse_audio_frame
 from .services.runtime import XiaozhiRuntime
@@ -48,7 +49,21 @@ _llm_client = (
     else None
 )
 _tts_client = EdgeTtsClient(settings.tts_voice)
-_runtime = XiaozhiRuntime(_store, stt_client=_stt_client, llm_client=_llm_client, tts_client=_tts_client)
+_mcp_client = (
+    RogoMcpClient(
+        mcp_url=f"{settings.mcp_base_url}/mcp/{settings.mcp_project_api_key}",
+        bearer_token=settings.mcp_bearer_token,
+    )
+    if settings.mcp_base_url and settings.mcp_project_api_key and settings.mcp_bearer_token
+    else None
+)
+_runtime = XiaozhiRuntime(
+    _store,
+    stt_client=_stt_client,
+    llm_client=_llm_client,
+    tts_client=_tts_client,
+    mcp_client=_mcp_client,
+)
 
 
 @asynccontextmanager
@@ -73,6 +88,7 @@ async def health() -> dict:
             "stt": _stt_client is not None,
             "llm": _llm_client is not None,
             "tts": _tts_client is not None,
+            "mcp": _mcp_client is not None,
         },
     }
 
@@ -232,11 +248,12 @@ async def _process_turn(websocket: WebSocket, session) -> None:
         # 1) STT only — fast path
         transcript = await _runtime.transcribe_audio(session, wav_audio)
         await websocket.send_text(json.dumps({"type": "stt", "text": transcript, "session_id": session.session_id}))
-        # Early tts:start — device transitions to "Speaking" during LLM processing
-        await websocket.send_text(json.dumps({"type": "tts", "state": "start", "session_id": session.session_id}))
 
-        # 2) LLM + TTS — device shows "Speaking" while this runs
+        # 2) LLM + optional tool loop + TTS synthesis
+        # tts:start fires AFTER the full tool loop so the device only shows
+        # "Speaking" once we have actual audio ready — not mid-tool-call.
         response_text, tts_audio = await _runtime.generate_response(session)
+        await websocket.send_text(json.dumps({"type": "tts", "state": "start", "session_id": session.session_id}))
 
         # 3) Display text and stream audio
         await websocket.send_text(

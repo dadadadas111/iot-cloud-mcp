@@ -9,13 +9,26 @@ class OpenAiCompatibleLlmClient:
         self._api_key = api_key
         self._model = model
 
-    async def chat(self, messages: list[dict], tools: list[dict] | None = None) -> str:
+    async def chat(self, messages: list[dict], tools: list[dict] | None = None) -> dict:
+        """
+        Send a chat completion request and return the full assistant message dict.
+
+        The returned dict has the shape:
+            {
+                "role": "assistant",
+                "content": str | None,
+                "tool_calls": [...] | None,   # present when the model requests tools
+            }
+
+        Callers that only want the text content should use .get("content") or "".
+        """
         body: dict = {
             "model": self._model,
             "messages": messages,
         }
         if tools:
             body["tools"] = tools
+            body["tool_choice"] = "auto"
 
         async with httpx.AsyncClient(timeout=60) as client:
             response = await client.post(
@@ -29,4 +42,4 @@ class OpenAiCompatibleLlmClient:
             response.raise_for_status()
             payload = response.json()
 
-        return payload["choices"][0]["message"].get("content", "")
+        return payload["choices"][0]["message"]
