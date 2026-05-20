@@ -6,6 +6,8 @@ import edge_tts
 
 
 class EdgeTtsClient:
+    output_format = "mp3"
+
     def __init__(self, voice: str) -> None:
         self._voice = voice
 

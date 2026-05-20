@@ -27,6 +27,7 @@ class Settings(BaseSettings):
 
     tts_provider: str = "edge"
     tts_voice: str = "vi-VN-HoaiMyNeural"
+    piper_model_path: str = "/app/models/vi_VN-vivos-medium.onnx"
     system_prompt: str = "You are a helpful Vietnamese-speaking assistant. Keep replies concise and natural for voice conversation."
     log_level: str = "INFO"
 

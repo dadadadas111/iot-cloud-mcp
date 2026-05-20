@@ -36,6 +36,17 @@ MIN_SPEECH_RMS = 42.0
 MIN_VOICED_FRAMES = 4
 MIN_VOICED_RATIO = 0.6
 
+_FAREWELL_KEYWORDS = frozenset({
+    "bye", "goodbye", "tạm biệt", "thôi nhé", "kết thúc",
+    "bái bai", "chào tạm biệt", "gặp lại sau", "dừng lại",
+    "dừng", "stop", "quit", "thoát", "cảm ơn nhé",
+})
+
+def _is_farewell(transcript: str) -> bool:
+    lower = transcript.lower().strip()
+    return any(kw in lower for kw in _FAREWELL_KEYWORDS)
+
+
 _redis = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
 _store = SessionStore(_redis, settings.session_ttl_seconds)
 _stt_client = GroqSttClient(settings.groq_api_key, settings.groq_stt_model) if settings.groq_api_key else None
@@ -48,7 +59,11 @@ _llm_client = (
     if settings.openai_compatible_base_url and settings.openai_compatible_api_key and settings.openai_compatible_model
     else None
 )
-_tts_client = EdgeTtsClient(settings.tts_voice)
+if settings.tts_provider == "piper":
+    from .integrations.piper_tts_client import PiperTtsClient
+    _tts_client = PiperTtsClient(settings.piper_model_path)
+else:
+    _tts_client = EdgeTtsClient(settings.tts_voice)
 _mcp_client = (
     RogoMcpClient(
         mcp_url=settings.mcp_base_url,
@@ -249,6 +264,7 @@ async def _process_turn(websocket: WebSocket, session) -> None:
         transcript = await _runtime.transcribe_audio(session, wav_audio)
         await websocket.send_text(json.dumps({"type": "stt", "text": transcript, "session_id": session.session_id}))
         await websocket.send_text(json.dumps({"type": "tts", "state": "start", "session_id": session.session_id}))
+        is_farewell = _is_farewell(transcript)
 
         # 2) Streaming LLM + sentence-pipelined TTS
         frame_timestamp = 0
@@ -287,8 +303,12 @@ async def _process_turn(websocket: WebSocket, session) -> None:
             elif t == "error":
                 logger.warning("turn non-fatal error session_id=%s msg=%s", session.session_id, event["message"])
 
-        await _runtime.transition(session, SessionPhase.READY)
-        session.reset_audio()
+        if is_farewell:
+            await _runtime.transition(session, SessionPhase.CLOSED)
+            await websocket.close()
+        else:
+            await _runtime.transition(session, SessionPhase.READY)
+            session.reset_audio()
     except WebSocketDisconnect:
         logger.warning("client disconnected during turn session_id=%s", session.session_id)
         await _runtime.transition(session, SessionPhase.READY)

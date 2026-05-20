@@ -10,7 +10,7 @@ from typing import AsyncIterator
 
 from fastapi import WebSocket
 
-from ..audio import stream_mp3_to_opus_frames
+from ..audio import stream_mp3_to_opus_frames, stream_pcm_to_opus_frames
 from ..protocol.models import AbortMessage, AudioParams, HelloMessage, ListenMessage, ListenState, ServerHelloMessage
 from ..session.models import DeviceSession, SessionPhase
 from ..session.store import SessionStore
@@ -421,12 +421,20 @@ class XiaozhiRuntime:
         """Run TTS + encode for one sentence, push audio_frame events. Retries once on failure."""
         for attempt in range(2):
             try:
-                mp3_iter = self._tts_client.synthesize_stream(sentence)
-                async for opus_frame in stream_mp3_to_opus_frames(
-                    mp3_iter,
-                    sample_rate=session.audio_sample_rate,
-                    frame_ms=session.audio_frame_duration,
-                ):
+                audio_iter = self._tts_client.synthesize_stream(sentence)
+                if getattr(self._tts_client, "output_format", "mp3") == "pcm":
+                    frame_source = stream_pcm_to_opus_frames(
+                        audio_iter,
+                        sample_rate=session.audio_sample_rate,
+                        frame_ms=session.audio_frame_duration,
+                    )
+                else:
+                    frame_source = stream_mp3_to_opus_frames(
+                        audio_iter,
+                        sample_rate=session.audio_sample_rate,
+                        frame_ms=session.audio_frame_duration,
+                    )
+                async for opus_frame in frame_source:
                     await events.put(
                         {"type": "audio_frame", "opus": opus_frame, "index": frame_index_ref[0]}
                     )

@@ -342,6 +342,25 @@ async def stream_mp3_to_opus_frames(
         raise RuntimeError(f"ffmpeg stream failed (rc={proc.returncode})")
 
 
+async def stream_pcm_to_opus_frames(
+    pcm_iter: AsyncIterator[bytes],
+    sample_rate: int,
+    frame_ms: int,
+    channels: int = 1,
+) -> AsyncIterator[bytes]:
+    """Convert streaming s16le PCM chunks to Opus frames.
+
+    Faster than stream_mp3_to_opus_frames — no ffmpeg subprocess needed
+    when the TTS provider already emits raw PCM (e.g. Piper).
+    """
+    with OpusStreamEncoder(sample_rate=sample_rate, frame_ms=frame_ms, channels=channels) as encoder:
+        async for chunk in pcm_iter:
+            for frame in encoder.encode_pcm_chunk(chunk):
+                yield frame
+        for frame in encoder.flush():
+            yield frame
+
+
 async def _run_ffmpeg(args: list[str], data: bytes) -> bytes:
     proc = await asyncio.create_subprocess_exec(
         *args,
