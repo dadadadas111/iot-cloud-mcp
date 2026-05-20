@@ -1,19 +1,19 @@
 # Temporary Xiaozhi Cloud Task Tracker
 
-Last updated: 2026-05-15
-Branch: `feat/xiaozhi-custom-cloud`
+Last updated: 2026-05-20
+Branch: `feat/xiaozhi-custom-cloud` · Commit: `caed271`
 
 ## Overall progress
 
-- Project progress: **33%**
-- Current execution slice: **Protocol state machine + structured control handling**
+- Project progress: **~95%** — staging deploys clean, end-to-end voice turns work with real devices.
+- Current execution slice: **Pre-merge cleanup** (see open items in `docs/XIAOZHI_CLOUD_PLAN.md`).
 
 ## Local environment status
 
 - [x] System Python tooling fixed (`python3-venv`, `python3-pip`)
 - [x] App-local virtualenv created at `apps/xiaozhi-cloud/.venv`
 - [x] `xiaozhi-cloud` runtime + dev dependencies installed
-- [x] Core test suite runs locally (`8 passed`)
+- [x] Full test suite green (`40 passed, 1 skipped`)
 
 ## Sequential tasks
 
@@ -27,64 +27,75 @@ Branch: `feat/xiaozhi-custom-cloud`
 - [x] Implement structured parsing for `hello`, `listen`, `abort`
 - [x] Persist session phase changes in Redis-backed store
 - [x] Add protocol-focused tests for state transitions
-- [ ] Add structured `mcp` message handling
+- [ ] Add structured `mcp` message handling (control-channel MCP, distinct from server-side tool loop — still open)
 
-Progress: **72%**
+Progress: **89%**
 
 ### 2. Audio turn pipeline
 
-- [ ] Inbound audio buffering policy by phase
-- [ ] Opus frame decode path
-- [ ] Turn lifecycle: listening -> processing -> responding
-- [ ] Timeout policy and cleanup rules
-- [ ] TTS interruption / abort semantics
+- [x] Inbound audio buffering policy by phase
+- [x] Opus frame decode path (ffmpeg-backed)
+- [x] Turn lifecycle: listening → processing → responding
+- [x] Timeout policy and cleanup rules (1s silence cutoff, VAD + RMS dual-signal)
+- [x] TTS interruption / abort semantics
+- [x] Streaming pipeline (interleaved LLM/TTS/Opus for low first-audio latency)
+- [x] Sentence splitter preserves URLs / decimals / times
+- [x] TTS state-machine: `tts_start` gated to first enqueued sentence; terminal failure propagates cleanly
 
-Progress: **5%**
+Progress: **100%**
 
 ### 3. Provider integrations
 
-- [ ] Groq STT real request/response flow
-- [ ] OpenAI-compatible LLM real request/response flow
-- [ ] TTS provider abstraction and first implementation
+- [x] Groq STT real request/response flow
+- [x] OpenAI-compatible LLM real request/response flow (streaming + tool_call deltas)
+- [x] TTS provider abstraction + EdgeTTS implementation (`vi-VN-HoaiMyNeural` default)
 
-Progress: **10%**
+Progress: **100%**
 
 ### 4. MCP bridge
 
-- [ ] MCP auth/session strategy for custom cloud
-- [ ] Tool discovery
-- [ ] Tool execution round-trip
-- [ ] LLM + tool loop orchestration
+- [x] MCP auth/session strategy (bearer token + project API key path)
+- [x] Tool discovery (cached per-session, TTL 300s)
+- [x] Tool execution round-trip
+- [x] LLM + tool loop orchestration (`MAX_TOOL_ITERATIONS = 5`)
 
-Progress: **10%**
+Progress: **100%**
 
 ### 5. Deployment
 
-- [ ] Dedicated xiaozhi-cloud Docker/compose wiring
-- [ ] Dedicated GitHub Actions workflows for xiaozhi-cloud
-- [ ] VPS directory/layout/runbook for staging and prod
+- [x] Dedicated xiaozhi-cloud Docker/compose wiring (prod + staging)
+- [x] Dedicated GitHub Actions workflows (`xiaozhi-cloud.yml`, `xiaozhi-cloud-staging.yml`)
+- [x] VPS directory/layout/runbook for staging and prod (`/opt/xiaozhi-cloud[-stag]`)
+- [x] Staging deploy verified end-to-end (commit `caed271`, container `Up 10s`, uvicorn serving on `:8080`)
 
-Progress: **0%**
+Progress: **100%**
 
 ### 6. Verification
 
-- [ ] Mocked end-to-end voice turn test
-- [ ] Real device handshake validation
-- [ ] Real server log validation
-- [ ] Redis session inspection on VPS
+- [x] Mocked end-to-end voice turn test (`tests/test_runtime_stream.py`, 12 tests covering interleaving + ordering)
+- [x] Real device handshake validation (live staging traffic on VPS)
+- [x] Real server log validation
+- [x] Redis session inspection on VPS
+- [x] Regression suite for streaming pipeline bugs (19 tests in commit `1bbe0e8`)
 
-Progress: **0%**
+Progress: **100%**
 
-## Immediate acceptance target
+## Pre-merge cleanup (before `feat/xiaozhi-custom-cloud` → `master`)
 
-The current slice is complete when:
+Surfaced in the caed271 pre-merge review. Not blocking the staging deploy but should be resolved before merging:
 
-1. text control messages are parsed into typed models,
-2. websocket session phase changes are explicit and persisted,
-3. invalid session/message ordering is rejected cleanly,
-4. tests cover the main state transitions.
+- [ ] Post-merge staging hole — workflow restricted to `feat/xiaozhi-custom-cloud`; decide on `staging` branch / wider allowlist
+- [ ] Prod workflow needs the orphan-container fix that staging got in `34789ae`
+- [ ] `/health` cleanup — stop echoing `redis_url` / `mcp_base_url`
+- [ ] MCP tool error sanitization in `rogo_mcp.py:call_tool`
+- [ ] Conversation history truncation preserves tool↔assistant.tool_calls pairs
+- [ ] System prompt source of truth — pick `runtime.py` or `settings.system_prompt`
+- [ ] Throttle `store.save()` frequency (currently every 60ms opus frame)
+- [ ] Drop dead constant `SENTENCE_TERMINATORS` (superseded by `_SPLIT_RE`)
+- [ ] Optional: end-to-end test driving `generate_response_stream` through a TTS failure
 
 ## Latest validation
 
-- `apps/xiaozhi-cloud/.venv/bin/pytest apps/xiaozhi-cloud/tests/test_parser.py apps/xiaozhi-cloud/tests/test_runtime.py apps/xiaozhi-cloud/tests/test_ota.py`
-- Result: **8 passed**
+- `.venv/bin/pytest` (from `apps/xiaozhi-cloud/`)
+- Result: **40 passed, 1 skipped**
+- Staging deploy run [#26145301575](https://github.com/dadadadas111/iot-cloud-mcp/actions/runs/26145301575) — green
