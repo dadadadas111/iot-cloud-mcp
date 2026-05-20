@@ -28,7 +28,7 @@ class PiperTtsClient:
         loop = asyncio.get_running_loop()
 
         def _run() -> list[bytes]:
-            return list(self._voice.synthesize_stream_raw(text))
+            return [c.audio_int16_bytes for c in self._voice.synthesize(text)]
 
         chunks = await loop.run_in_executor(self._executor, _run)
         for chunk in chunks:
