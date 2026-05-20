@@ -353,6 +353,8 @@ class XiaozhiRuntime:
                 raise RuntimeError("empty llm response")
 
             if hop_result.get("type") == "tool_calls":
+                tool_names = ", ".join(v.get("name", "?") for v in hop_result["accum"].values())
+                yield {"type": "tool_thinking", "text": f"[{tool_names}]"}
                 logger.info(
                     "tool_calls iteration=%d session_id=%s calls=%s",
                     iteration,

@@ -248,13 +248,21 @@ async def _process_turn(websocket: WebSocket, session) -> None:
         # 1) STT only — fast path
         transcript = await _runtime.transcribe_audio(session, wav_audio)
         await websocket.send_text(json.dumps({"type": "stt", "text": transcript, "session_id": session.session_id}))
+        await websocket.send_text(json.dumps({"type": "tts", "state": "start", "session_id": session.session_id}))
 
         # 2) Streaming LLM + sentence-pipelined TTS
         frame_timestamp = 0
         async for event in _runtime.generate_response_stream(session):
             t = event["type"]
             if t == "tts_start":
-                await websocket.send_text(json.dumps({"type": "tts", "state": "start", "session_id": session.session_id}))
+                pass  # already sent immediately after STT
+            elif t == "tool_thinking":
+                await websocket.send_text(json.dumps({
+                    "type": "tts",
+                    "state": "sentence_start",
+                    "text": event["text"],
+                    "session_id": session.session_id,
+                }))
             elif t == "sentence_start":
                 await websocket.send_text(json.dumps({
                     "type": "tts",
