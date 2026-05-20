@@ -427,6 +427,7 @@ class XiaozhiRuntime:
                         audio_iter,
                         sample_rate=session.audio_sample_rate,
                         frame_ms=session.audio_frame_duration,
+                        input_rate=getattr(self._tts_client, "sample_rate", session.audio_sample_rate),
                     )
                 else:
                     frame_source = stream_mp3_to_opus_frames(

@@ -19,6 +19,10 @@ class PiperTtsClient:
         self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="piper")
         logger.info("piper model loaded path=%s sample_rate=%d", model_path, self._voice.config.sample_rate)
 
+    @property
+    def sample_rate(self) -> int:
+        return self._voice.config.sample_rate
+
     async def synthesize_stream(self, text: str) -> AsyncIterator[bytes]:
         """Yield raw PCM bytes (s16le) from Piper. Runs synthesis in executor."""
         loop = asyncio.get_running_loop()

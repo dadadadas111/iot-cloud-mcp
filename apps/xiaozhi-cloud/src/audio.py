@@ -347,16 +347,29 @@ async def stream_pcm_to_opus_frames(
     sample_rate: int,
     frame_ms: int,
     channels: int = 1,
+    input_rate: int | None = None,
 ) -> AsyncIterator[bytes]:
     """Convert streaming s16le PCM chunks to Opus frames.
 
     Faster than stream_mp3_to_opus_frames — no ffmpeg subprocess needed
     when the TTS provider already emits raw PCM (e.g. Piper).
+
+    If input_rate differs from sample_rate, the PCM is resampled via audioop
+    before encoding (e.g. Piper vais1000-medium outputs 22050 Hz).
     """
+    effective_input_rate = input_rate if input_rate is not None else sample_rate
     with OpusStreamEncoder(sample_rate=sample_rate, frame_ms=frame_ms, channels=channels) as encoder:
-        async for chunk in pcm_iter:
-            for frame in encoder.encode_pcm_chunk(chunk):
-                yield frame
+        if effective_input_rate != sample_rate:
+            import audioop  # lazy: avoids DeprecationWarning at module load (removed in 3.13)
+            state = None
+            async for chunk in pcm_iter:
+                resampled, state = audioop.ratecv(chunk, 2, channels, effective_input_rate, sample_rate, state)
+                for frame in encoder.encode_pcm_chunk(resampled):
+                    yield frame
+        else:
+            async for chunk in pcm_iter:
+                for frame in encoder.encode_pcm_chunk(chunk):
+                    yield frame
         for frame in encoder.flush():
             yield frame
 
