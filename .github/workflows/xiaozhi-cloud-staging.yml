@@ -2,9 +2,8 @@ name: Build and Deploy xiaozhi-cloud (Staging)
 
 on:
   push:
-    branches-ignore:
-      - master
-      - main
+    branches:
+      - feat/xiaozhi-custom-cloud
     paths:
       - 'apps/xiaozhi-cloud/**'
       - '.github/workflows/xiaozhi-cloud-staging.yml'
