@@ -15,8 +15,8 @@ class RogoMcpClient:
     """
     Thin async client for the Rogo MCP HTTP server.
 
-    URL format: {mcp_base_url}/mcp/{mcp_project_api_key}
-    Auth:       Bearer {bearer_token}
+    URL:  {mcp_base_url}  (full endpoint — no suffix appended)
+    Auth: Bearer {bearer_token}
 
     Each public method opens a fresh MCP HTTP session, performs the operation,
     and closes cleanly.  Tool list results are cached on DeviceSession by the
@@ -76,4 +76,4 @@ class RogoMcpClient:
             return "\n".join(parts) if parts else "(no output)"
         except Exception as exc:
             logger.warning("mcp call_tool name=%s failed: %s", name, exc)
-            return f"Tool call failed: {exc}"
+            return "Tool temporarily unavailable."

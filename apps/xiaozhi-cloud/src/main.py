@@ -30,7 +30,7 @@ ENERGY_CHECK_INTERVAL = 5
 VAD_AGGRESSIVENESS = 2
 MIN_SILENCE_TIMEOUT_MS = 1000
 VAD_GRACE_PERIOD_SECONDS = 2.0
-TTS_PREROLL_FRAMES = 5
+TTS_PREROLL_FRAMES = 0
 TTS_STOP_DELAY_SECONDS = 0.42
 MIN_SPEECH_RMS = 42.0
 MIN_VOICED_FRAMES = 4
@@ -51,10 +51,10 @@ _llm_client = (
 _tts_client = EdgeTtsClient(settings.tts_voice)
 _mcp_client = (
     RogoMcpClient(
-        mcp_url=f"{settings.mcp_base_url}/mcp/{settings.mcp_project_api_key}",
+        mcp_url=settings.mcp_base_url,
         bearer_token=settings.mcp_bearer_token,
     )
-    if settings.mcp_base_url and settings.mcp_project_api_key and settings.mcp_bearer_token
+    if settings.mcp_base_url and settings.mcp_bearer_token
     else None
 )
 _runtime = XiaozhiRuntime(

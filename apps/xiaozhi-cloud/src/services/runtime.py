@@ -361,7 +361,9 @@ class XiaozhiRuntime:
                 )
                 assistant_msg = self._build_assistant_msg_from_tool_calls(hop_result["accum"])
                 messages.append(assistant_msg)
+                session.add_message(assistant_msg)
                 await self._execute_tool_calls_and_append(messages, hop_result["accum"], session)
+                await self._store.save(session)
                 continue
 
             # Content hop complete.
@@ -478,10 +480,10 @@ class XiaozhiRuntime:
                 tool_result[:120],
             )
 
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call_id,
-                    "content": tool_result,
-                }
-            )
+            tool_msg = {
+                "role": "tool",
+                "tool_call_id": tool_call_id,
+                "content": tool_result,
+            }
+            messages.append(tool_msg)
+            session.add_message(tool_msg)

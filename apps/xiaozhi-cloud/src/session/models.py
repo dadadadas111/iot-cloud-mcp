@@ -53,7 +53,20 @@ class DeviceSession:
     def add_turn(self, role: str, content: str) -> None:
         self.conversation_history.append({"role": role, "content": content})
         if len(self.conversation_history) > 20:
-            self.conversation_history = self.conversation_history[-20:]
+            self.conversation_history = self._safe_truncate(self.conversation_history)
+
+    def add_message(self, msg: dict) -> None:
+        """Append a raw message dict (for assistant+tool_calls and tool result messages)."""
+        self.conversation_history.append(msg)
+        if len(self.conversation_history) > 20:
+            self.conversation_history = self._safe_truncate(self.conversation_history)
+
+    @staticmethod
+    def _safe_truncate(history: list[dict]) -> list[dict]:
+        sliced = history[-20:]
+        while sliced and sliced[0].get("role") == "tool":
+            sliced = sliced[1:]
+        return sliced
 
     def is_mcp_tools_stale(self, ttl_seconds: float = 300.0) -> bool:
         """Return True if the tool cache is empty or older than ttl_seconds."""
