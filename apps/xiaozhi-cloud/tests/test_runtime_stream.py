@@ -355,3 +355,211 @@ async def test_generate_response_stream_tts_start_before_sentence_start() -> Non
     idx_tts_start = types.index("tts_start")
     idx_sentence_start = types.index("sentence_start")
     assert idx_tts_start < idx_sentence_start, "tts_start must precede sentence_start"
+
+
+# ---------------------------------------------------------------------------
+# Fix B — tts_start fires on first ENQUEUED sentence (not first delta)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_tts_start_fires_on_first_enqueued_sentence_multi_sentence() -> None:
+    """Fix B (normal path): tts_start precedes first sentence_start in a multi-sentence stream."""
+    store = MagicMock(save=AsyncMock())
+    llm = _make_llm_mock([
+        [
+            {"content": "Hello world. How are you?"},
+            {"finish_reason": "stop"},
+        ]
+    ])
+    tts = _make_tts_mock([b"mp3-data"])
+
+    async def _fake_stream_mp3(mp3_iter, sample_rate, frame_ms, channels=1):
+        async for _ in mp3_iter:
+            pass
+        yield b"opus-frame"
+
+    runtime = XiaozhiRuntime(store, llm_client=llm, tts_client=tts)
+    ws = MagicMock(headers={"protocol-version": "3", "device-id": "d", "client-id": "c"})
+    session = await runtime.bootstrap_session(ws, HelloMessage())
+
+    with patch("src.services.runtime.stream_mp3_to_opus_frames", _fake_stream_mp3):
+        events = await _collect_events(runtime, session)
+
+    types = [e["type"] for e in events]
+    # Exactly one tts_start; sequence: tts_start → sentence_start(S1) → audio → sentence_start(S2) → audio → tts_stop.
+    assert types.count("tts_start") == 1
+    assert types[0] == "tts_start"
+    assert types[-1] == "tts_stop"
+    sentence_events = [e for e in events if e["type"] == "sentence_start"]
+    assert len(sentence_events) == 2
+    assert sentence_events[0]["text"] == "Hello world."
+    assert sentence_events[1]["text"] == "How are you?"
+    # tts_start precedes first sentence_start.
+    idx_tts_start = types.index("tts_start")
+    idx_first_ss = types.index("sentence_start")
+    assert idx_tts_start < idx_first_ss
+
+
+@pytest.mark.asyncio
+async def test_tts_start_fires_on_residual_flush_single_fragment() -> None:
+    """Fix B (residual-flush path): LLM yields only a no-terminator fragment; tts_start still emitted."""
+    store = MagicMock(save=AsyncMock())
+    # "Hello" has no sentence terminator — it lands in the residual buffer and is flushed at stream end.
+    llm = _make_llm_mock([
+        [
+            {"content": "Hello"},
+            {"finish_reason": "stop"},
+        ]
+    ])
+    tts = _make_tts_mock([b"mp3-data"])
+
+    async def _fake_stream_mp3(mp3_iter, sample_rate, frame_ms, channels=1):
+        async for _ in mp3_iter:
+            pass
+        yield b"opus-frame"
+
+    runtime = XiaozhiRuntime(store, llm_client=llm, tts_client=tts)
+    ws = MagicMock(headers={"protocol-version": "3", "device-id": "d", "client-id": "c"})
+    session = await runtime.bootstrap_session(ws, HelloMessage())
+
+    with patch("src.services.runtime.stream_mp3_to_opus_frames", _fake_stream_mp3):
+        events = await _collect_events(runtime, session)
+
+    types = [e["type"] for e in events]
+    # tts_start must be emitted even though no sentence was formed during streaming.
+    assert "tts_start" in types
+    assert "sentence_start" in types
+    assert "tts_stop" in types
+    sentence_events = [e for e in events if e["type"] == "sentence_start"]
+    assert len(sentence_events) == 1
+    assert sentence_events[0]["text"] == "Hello"
+    # tts_start precedes sentence_start.
+    assert types.index("tts_start") < types.index("sentence_start")
+
+
+@pytest.mark.asyncio
+async def test_tts_start_not_emitted_on_llm_error_before_any_sentence() -> None:
+    """Fix B (error path): LLM raises before any sentence is formed; tts_start must NOT fire."""
+    store = MagicMock(save=AsyncMock())
+
+    async def _chat_stream_error_empty(messages, tools=None):
+        # Raises immediately — buffer stays empty, no sentences formed.
+        raise RuntimeError("llm upstream failure")
+        yield  # make it an async generator
+
+    llm = MagicMock()
+    llm.chat_stream = _chat_stream_error_empty
+
+    tts = _make_tts_mock([b"mp3-data"])
+
+    async def _fake_stream_mp3(mp3_iter, sample_rate, frame_ms, channels=1):
+        async for _ in mp3_iter:
+            pass
+        yield b"opus-frame"
+
+    runtime = XiaozhiRuntime(store, llm_client=llm, tts_client=tts)
+    ws = MagicMock(headers={"protocol-version": "3", "device-id": "d", "client-id": "c"})
+    session = await runtime.bootstrap_session(ws, HelloMessage())
+
+    collected_events: list[dict] = []
+    with patch("src.services.runtime.stream_mp3_to_opus_frames", _fake_stream_mp3):
+        with pytest.raises(RuntimeError, match="llm upstream failure"):
+            async for ev in runtime.generate_response_stream(session):
+                collected_events.append(ev)
+
+    tts_start_count = sum(1 for e in collected_events if e["type"] == "tts_start")
+    assert tts_start_count == 0, "tts_start must not fire when LLM fails before any sentence"
+
+
+@pytest.mark.asyncio
+async def test_tts_start_not_emitted_for_tool_only_hop() -> None:
+    """Fix B (tool path): tool-only hop emits no tts_start; tts_start fires only in content hop."""
+    store = MagicMock(save=AsyncMock())
+
+    call_count = 0
+
+    async def _chat_stream(messages, tools=None):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # Tool-only hop — no content.
+            yield {
+                "tool_call_delta": {
+                    "index": 0,
+                    "id": "call_abc",
+                    "name": "ping",
+                    "arguments": "{}",
+                }
+            }
+            yield {"finish_reason": "tool_calls"}
+        else:
+            yield {"content": "Done."}
+            yield {"finish_reason": "stop"}
+
+    llm = MagicMock()
+    llm.chat_stream = _chat_stream
+    llm.chat = AsyncMock()
+
+    mcp = MagicMock(call_tool=AsyncMock(return_value="pong"))
+    tts = _make_tts_mock([b"mp3-data"])
+
+    async def _fake_stream_mp3(mp3_iter, sample_rate, frame_ms, channels=1):
+        async for _ in mp3_iter:
+            pass
+        yield b"opus-frame"
+
+    runtime = XiaozhiRuntime(store, llm_client=llm, tts_client=tts, mcp_client=mcp)
+    ws = MagicMock(headers={"protocol-version": "3", "device-id": "d", "client-id": "c"})
+    session = await runtime.bootstrap_session(ws, HelloMessage())
+
+    with patch("src.services.runtime.stream_mp3_to_opus_frames", _fake_stream_mp3):
+        events = await _collect_events(runtime, session)
+
+    types = [e["type"] for e in events]
+    # tts_start appears exactly once (content hop only).
+    assert types.count("tts_start") == 1
+    assert call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Fix C — TTS terminal failure raises instead of soft-logging
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_tts_one_sentence_raises_on_terminal_failure() -> None:
+    """Fix C: _tts_one_sentence raises (not soft-logs) after both retries exhausted.
+
+    NOTE: The exception is not yet propagated through generate_response_stream
+    (see Issues spotted in the test report — _tts_task swallows it because it
+    never pushes its sentinel to events_q on failure, causing the consumer to
+    deadlock). This test verifies the _tts_one_sentence contract in isolation.
+    """
+    store = MagicMock(save=AsyncMock())
+
+    async def _always_fail(text):
+        raise RuntimeError("tts service down")
+        yield  # make it an async generator
+
+    tts = MagicMock()
+    tts.synthesize_stream = _always_fail
+
+    # stream_mp3_to_opus_frames is called with mp3_iter from synthesize_stream.
+    # Since synthesize_stream raises, we still need to patch stream_mp3_to_opus_frames
+    # to avoid a real ffmpeg subprocess — but it won't be reached because the
+    # async-generator from synthesize_stream raises on first iteration.
+    # We patch anyway for safety/portability.
+    async def _fake_stream_mp3(mp3_iter, sample_rate, frame_ms, channels=1):
+        async for _ in mp3_iter:  # this raises RuntimeError from _always_fail
+            pass
+        yield b"opus-frame"
+
+    runtime = XiaozhiRuntime(store, llm_client=tts, tts_client=tts)
+    ws = MagicMock(headers={"protocol-version": "3", "device-id": "d", "client-id": "c"})
+    session = await runtime.bootstrap_session(ws, HelloMessage())
+
+    events_q: asyncio.Queue = asyncio.Queue()
+    frame_ref = [0]
+
+    with patch("src.services.runtime.stream_mp3_to_opus_frames", _fake_stream_mp3):
+        with pytest.raises(RuntimeError, match="tts service down"):
+            await runtime._tts_one_sentence("Hello.", session, events_q, frame_ref)

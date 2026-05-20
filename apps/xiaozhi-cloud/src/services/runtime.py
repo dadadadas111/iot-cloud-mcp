@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 import uuid
 from typing import AsyncIterator
@@ -19,21 +20,22 @@ logger = logging.getLogger(__name__)
 # Maximum number of tool-call iterations per turn to prevent runaway loops.
 MAX_TOOL_ITERATIONS = 5
 
-SENTENCE_TERMINATORS = ".?!\n;:"
+SENTENCE_TERMINATORS = "?!\n;"
 MAX_SENTENCE_CHARS = 160
+
+# Matches a sentence boundary: simple terminators, or a period only when followed
+# by whitespace/end-of-string (avoids splitting URLs, decimals, abbreviations).
+_SPLIT_RE = re.compile(r'[?!\n;]|\.(?=\s|$)')
 
 
 def _try_split(buffer: str) -> tuple[list[str], str]:
     """Extract complete sentences from buffer. Returns (sentences, remaining_buffer)."""
     out: list[str] = []
     while True:
-        idx = min(
-            (buffer.find(c) for c in SENTENCE_TERMINATORS if buffer.find(c) >= 0),
-            default=-1,
-        )
-        if idx >= 0:
-            sentence = buffer[: idx + 1].strip()
-            buffer = buffer[idx + 1 :]
+        m = _SPLIT_RE.search(buffer)
+        if m:
+            sentence = buffer[: m.end()].strip()
+            buffer = buffer[m.end() :]
             if sentence:
                 out.append(sentence)
             continue
@@ -255,7 +257,7 @@ class XiaozhiRuntime:
             tts_started_ref = [False]
 
             async def _llm_task() -> None:
-                """Drain LLM stream; emit tts_start on first content delta; push sentences."""
+                """Drain LLM stream; emit tts_start on first enqueued sentence; push sentences."""
                 tool_calls_accum: dict[int, dict] = {}
                 content_accum_inner = ""
                 buffer_inner = ""
@@ -265,14 +267,16 @@ class XiaozhiRuntime:
                         if "content" in llm_event:
                             piece = llm_event["content"]
                             if piece:
-                                # Fix 4: fire tts_start immediately on first content delta.
-                                if not tts_started_ref[0]:
-                                    await events_q.put({"type": "tts_start"})
-                                    tts_started_ref[0] = True
                                 content_accum_inner += piece
                                 buffer_inner += piece
                                 new_sentences, buffer_inner = _try_split(buffer_inner)
                                 for sentence in new_sentences:
+                                    # Emit tts_start exactly once, when the first sentence is
+                                    # ready — guarantees a TTS audio path exists before the
+                                    # client sees tts_start.
+                                    if not tts_started_ref[0]:
+                                        await events_q.put({"type": "tts_start"})
+                                        tts_started_ref[0] = True
                                     await sentence_q.put(sentence)
 
                         elif "tool_call_delta" in llm_event:
@@ -300,6 +304,9 @@ class XiaozhiRuntime:
 
                     # Flush residual buffer as final sentence.
                     if buffer_inner.strip():
+                        if not tts_started_ref[0]:
+                            await events_q.put({"type": "tts_start"})
+                            tts_started_ref[0] = True
                         await sentence_q.put(buffer_inner.strip())
 
                     hop_result["type"] = "content"
@@ -313,14 +320,16 @@ class XiaozhiRuntime:
 
             async def _tts_task() -> None:
                 """Consume sentences; emit sentence_start+audio per sentence."""
-                while True:
-                    sentence = await sentence_q.get()
-                    if sentence is None:
-                        break
-                    # sentence_start fires BEFORE this sentence's audio frames (Decision 5).
-                    await events_q.put({"type": "sentence_start", "text": sentence})
-                    await self._tts_one_sentence(sentence, session, events_q, frame_index_ref)
-                await events_q.put(None)  # sentinel: all audio done
+                try:
+                    while True:
+                        sentence = await sentence_q.get()
+                        if sentence is None:
+                            break
+                        # sentence_start fires BEFORE this sentence's audio frames (Decision 5).
+                        await events_q.put({"type": "sentence_start", "text": sentence})
+                        await self._tts_one_sentence(sentence, session, events_q, frame_index_ref)
+                finally:
+                    await events_q.put(None)  # sentinel: unblock consumer even on failure
 
             llm_t = asyncio.create_task(_llm_task())
             tts_t = asyncio.create_task(_tts_task())
@@ -425,8 +434,7 @@ class XiaozhiRuntime:
                     await asyncio.sleep(0.2)
                     continue
                 logger.warning("tts gave up sentence=%r error=%s", sentence[:40], exc)
-                await events.put({"type": "error", "message": f"tts failed: {exc}"})
-                return
+                raise
 
     def _build_assistant_msg_from_tool_calls(self, accum: dict[int, dict]) -> dict:
         """Build OpenAI-format assistant message from accumulated tool call deltas."""
