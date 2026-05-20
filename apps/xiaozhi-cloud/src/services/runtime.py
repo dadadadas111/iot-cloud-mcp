@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 import uuid
-from dataclasses import dataclass
+from typing import AsyncIterator
 
 from fastapi import WebSocket
 
+from ..audio import stream_mp3_to_opus_frames
 from ..protocol.models import AbortMessage, AudioParams, HelloMessage, ListenMessage, ListenState, ServerHelloMessage
 from ..session.models import DeviceSession, SessionPhase
 from ..session.store import SessionStore
@@ -17,12 +19,35 @@ logger = logging.getLogger(__name__)
 # Maximum number of tool-call iterations per turn to prevent runaway loops.
 MAX_TOOL_ITERATIONS = 5
 
+SENTENCE_TERMINATORS = ".?!\n;:"
+MAX_SENTENCE_CHARS = 160
 
-@dataclass
-class TurnResult:
-    transcript: str
-    response_text: str
-    tts_audio: bytes
+
+def _try_split(buffer: str) -> tuple[list[str], str]:
+    """Extract complete sentences from buffer. Returns (sentences, remaining_buffer)."""
+    out: list[str] = []
+    while True:
+        idx = min(
+            (buffer.find(c) for c in SENTENCE_TERMINATORS if buffer.find(c) >= 0),
+            default=-1,
+        )
+        if idx >= 0:
+            sentence = buffer[: idx + 1].strip()
+            buffer = buffer[idx + 1 :]
+            if sentence:
+                out.append(sentence)
+            continue
+        if len(buffer) >= MAX_SENTENCE_CHARS:
+            cut = buffer.rfind(" ", 0, MAX_SENTENCE_CHARS)
+            if cut <= 0:
+                cut = MAX_SENTENCE_CHARS
+            sentence = buffer[:cut].strip()
+            buffer = buffer[cut:]
+            if sentence:
+                out.append(sentence)
+            continue
+        break
+    return out, buffer
 
 
 class XiaozhiRuntime:
@@ -186,20 +211,24 @@ class XiaozhiRuntime:
             )
             return []
 
-    async def generate_response(self, session: DeviceSession) -> tuple[str, bytes]:
+    async def generate_response_stream(
+        self, session: DeviceSession
+    ) -> AsyncIterator[dict]:
         """
-        LLM + optional tool loop + TTS.
+        Stream LLM + tool-loop + sentence-pipelined TTS. Yields typed event dicts:
+          {"type": "tts_start"}
+          {"type": "sentence_start", "text": str}
+          {"type": "audio_frame", "opus": bytes, "index": int}
+          {"type": "tts_stop"}
+          {"type": "error", "message": str}
 
-        Flow:
-          1. Fetch tool list from MCP (per-session cache, TTL 5 min).
-          2. Call LLM with messages + tools.
-          3. If the LLM returns tool_calls:
-               a. Execute each tool call via MCP.
-               b. Append assistant message + tool results to messages.
-               c. Loop back to step 2 (up to MAX_TOOL_ITERATIONS hops).
-          4. When LLM returns a plain text reply (no tool_calls), synthesise TTS.
+        LLM streaming and TTS run concurrently on content hops: as soon as the first
+        sentence boundary is detected in the LLM stream, TTS starts for that sentence
+        while later tokens are still being generated. The events queue serialises output
+        so the caller sees the correct ordering.
 
-        Returns (response_text, tts_audio).
+        Appends assistant content to conversation_history and saves session BEFORE
+        yielding tts_stop so a disconnect mid-stream still persists the turn.
         """
         if self._llm_client is None or self._tts_client is None:
             raise RuntimeError("LLM/TTS providers are not configured")
@@ -211,68 +240,128 @@ class XiaozhiRuntime:
         tools = await self._get_mcp_tools(session)
 
         for iteration in range(MAX_TOOL_ITERATIONS):
-            assistant_msg = await self._llm_client.chat(messages, tools=tools or None)
+            # Shared queues for this hop.
+            # events_q: all events flowing out of generate_response_stream (excl. tts_stop).
+            #   Sentinel None means TTS pipeline finished.
+            # sentence_q: sentences from LLM side to TTS side. Sentinel None = LLM done.
+            # hop_result: carries the hop type ("tool_calls" or "content") from LLM task to main.
+            events_q: asyncio.Queue[dict | None] = asyncio.Queue()
+            sentence_q: asyncio.Queue[str | None] = asyncio.Queue()
+            hop_result: dict = {}
+            frame_index_ref = [0]
 
-            tool_calls = assistant_msg.get("tool_calls") or []
-            if not tool_calls:
-                # Final text reply — done with the loop.
-                response_text = (assistant_msg.get("content") or "").strip()
-                if not response_text:
-                    raise RuntimeError("empty llm response")
+            # tts_started is a one-element list so _llm_task can mutate it as a
+            # closure cell shared across hops (Fix 4: emit tts_start in _llm_task).
+            tts_started_ref = [False]
 
-                session.add_turn("assistant", response_text)
-                tts_audio = await self._tts_client.synthesize(response_text)
-                await self._store.save(session)
-                logger.info(
-                    "generate_response done session_id=%s iterations=%d",
-                    session.session_id,
-                    iteration,
-                )
-                return response_text, tts_audio
+            async def _llm_task() -> None:
+                """Drain LLM stream; emit tts_start on first content delta; push sentences."""
+                tool_calls_accum: dict[int, dict] = {}
+                content_accum_inner = ""
+                buffer_inner = ""
 
-            # LLM wants to call tools — execute them and feed results back.
-            logger.info(
-                "tool_calls iteration=%d session_id=%s calls=%s",
-                iteration,
-                session.session_id,
-                [tc.get("function", {}).get("name") for tc in tool_calls],
-            )
-
-            # Append the assistant message (with tool_calls) to the history so
-            # the next LLM call has the correct context.
-            messages.append(assistant_msg)
-
-            for tc in tool_calls:
-                tool_call_id: str = tc.get("id", str(uuid.uuid4()))
-                fn = tc.get("function", {})
-                tool_name: str = fn.get("name", "")
                 try:
-                    arguments: dict = json.loads(fn.get("arguments") or "{}")
-                except json.JSONDecodeError:
-                    arguments = {}
+                    async for llm_event in self._llm_client.chat_stream(messages, tools=tools or None):
+                        if "content" in llm_event:
+                            piece = llm_event["content"]
+                            if piece:
+                                # Fix 4: fire tts_start immediately on first content delta.
+                                if not tts_started_ref[0]:
+                                    await events_q.put({"type": "tts_start"})
+                                    tts_started_ref[0] = True
+                                content_accum_inner += piece
+                                buffer_inner += piece
+                                new_sentences, buffer_inner = _try_split(buffer_inner)
+                                for sentence in new_sentences:
+                                    await sentence_q.put(sentence)
 
-                if self._mcp_client is not None and tool_name:
-                    tool_result = await self._mcp_client.call_tool(tool_name, arguments)
-                else:
-                    tool_result = f"Tool '{tool_name}' is not available."
+                        elif "tool_call_delta" in llm_event:
+                            d = llm_event["tool_call_delta"]
+                            slot = tool_calls_accum.setdefault(
+                                d["index"], {"id": None, "name": None, "arguments": ""}
+                            )
+                            if d["id"]:
+                                slot["id"] = d["id"]
+                            if d["name"]:
+                                slot["name"] = d["name"]
+                            slot["arguments"] += d["arguments"]
 
-                logger.debug(
-                    "tool_call id=%s name=%s result_preview=%s",
-                    tool_call_id,
-                    tool_name,
-                    tool_result[:120],
+                    if tool_calls_accum and not content_accum_inner.strip():
+                        hop_result["type"] = "tool_calls"
+                        hop_result["accum"] = tool_calls_accum
+                        await sentence_q.put(None)
+                        return
+
+                    # Fix 3: empty content with no tool_calls is an error.
+                    if not content_accum_inner.strip() and not tool_calls_accum:
+                        hop_result["type"] = "empty"
+                        await sentence_q.put(None)
+                        return
+
+                    # Flush residual buffer as final sentence.
+                    if buffer_inner.strip():
+                        await sentence_q.put(buffer_inner.strip())
+
+                    hop_result["type"] = "content"
+                    hop_result["content_accum"] = content_accum_inner.strip()
+                    await sentence_q.put(None)
+
+                except BaseException:
+                    # Fix 1: always unblock _tts_task even if _llm_task dies.
+                    await sentence_q.put(None)
+                    raise
+
+            async def _tts_task() -> None:
+                """Consume sentences; emit sentence_start+audio per sentence."""
+                while True:
+                    sentence = await sentence_q.get()
+                    if sentence is None:
+                        break
+                    # sentence_start fires BEFORE this sentence's audio frames (Decision 5).
+                    await events_q.put({"type": "sentence_start", "text": sentence})
+                    await self._tts_one_sentence(sentence, session, events_q, frame_index_ref)
+                await events_q.put(None)  # sentinel: all audio done
+
+            llm_t = asyncio.create_task(_llm_task())
+            tts_t = asyncio.create_task(_tts_task())
+
+            try:
+                while True:
+                    ev = await events_q.get()
+                    if ev is None:
+                        break
+                    yield ev
+            except BaseException:
+                llm_t.cancel()
+                tts_t.cancel()
+                raise
+
+            # Fix 1: propagate exceptions from tasks (gather surfaces them cleanly).
+            await asyncio.gather(llm_t, tts_t)
+
+            # Fix 3: raise on empty response (no content, no tool_calls).
+            if hop_result.get("type") == "empty":
+                raise RuntimeError("empty llm response")
+
+            if hop_result.get("type") == "tool_calls":
+                logger.info(
+                    "tool_calls iteration=%d session_id=%s calls=%s",
+                    iteration,
+                    session.session_id,
+                    [v.get("name") for v in hop_result["accum"].values()],
                 )
+                assistant_msg = self._build_assistant_msg_from_tool_calls(hop_result["accum"])
+                messages.append(assistant_msg)
+                await self._execute_tool_calls_and_append(messages, hop_result["accum"], session)
+                continue
 
-                # Append tool result in the format the LLM expects.
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call_id,
-                        "content": tool_result,
-                    }
-                )
+            # Content hop complete.
+            session.add_turn("assistant", hop_result.get("content_accum", ""))
+            await self._store.save(session)
+            yield {"type": "tts_stop"}
+            return
 
-        # Iteration cap reached — ask the LLM for a final answer without tools.
+        # Iteration cap — force a non-streaming final answer.
         logger.warning(
             "tool loop iteration cap reached session_id=%s max=%d — forcing final reply",
             session.session_id,
@@ -283,13 +372,108 @@ class XiaozhiRuntime:
         if not response_text:
             raise RuntimeError("empty llm response after tool loop cap")
 
-        session.add_turn("assistant", response_text)
-        tts_audio = await self._tts_client.synthesize(response_text)
-        await self._store.save(session)
-        return response_text, tts_audio
+        events_cap: asyncio.Queue[dict | None] = asyncio.Queue()
+        frame_index_ref_cap = [0]
 
-    async def process_turn(self, session: DeviceSession, wav_audio: bytes) -> TurnResult:
-        """Full pipeline — kept for backward compat (not used by the fast path)."""
-        transcript = await self.transcribe_audio(session, wav_audio)
-        response_text, tts_audio = await self.generate_response(session)
-        return TurnResult(transcript=transcript, response_text=response_text, tts_audio=tts_audio)
+        async def _tts_cap() -> None:
+            await self._tts_one_sentence(response_text, session, events_cap, frame_index_ref_cap)
+            await events_cap.put(None)
+
+        tts_task_cap = asyncio.create_task(_tts_cap())
+        yield {"type": "tts_start"}
+        yield {"type": "sentence_start", "text": response_text}
+
+        try:
+            while True:
+                ev = await events_cap.get()
+                if ev is None:
+                    break
+                yield ev
+        except BaseException:
+            tts_task_cap.cancel()
+            raise
+        await tts_task_cap
+
+        session.add_turn("assistant", response_text)
+        await self._store.save(session)
+        yield {"type": "tts_stop"}
+
+    async def _tts_one_sentence(
+        self,
+        sentence: str,
+        session: DeviceSession,
+        events: asyncio.Queue,
+        frame_index_ref: list[int],
+    ) -> None:
+        """Run TTS + encode for one sentence, push audio_frame events. Retries once on failure."""
+        for attempt in range(2):
+            try:
+                mp3_iter = self._tts_client.synthesize_stream(sentence)
+                async for opus_frame in stream_mp3_to_opus_frames(
+                    mp3_iter,
+                    sample_rate=session.audio_sample_rate,
+                    frame_ms=session.audio_frame_duration,
+                ):
+                    await events.put(
+                        {"type": "audio_frame", "opus": opus_frame, "index": frame_index_ref[0]}
+                    )
+                    frame_index_ref[0] += 1
+                return
+            except Exception as exc:
+                if attempt == 0:
+                    logger.warning("tts retry sentence=%r error=%s", sentence[:40], exc)
+                    await asyncio.sleep(0.2)
+                    continue
+                logger.warning("tts gave up sentence=%r error=%s", sentence[:40], exc)
+                await events.put({"type": "error", "message": f"tts failed: {exc}"})
+                return
+
+    def _build_assistant_msg_from_tool_calls(self, accum: dict[int, dict]) -> dict:
+        """Build OpenAI-format assistant message from accumulated tool call deltas."""
+        tool_calls = [
+            {
+                "id": slot["id"] or str(uuid.uuid4()),
+                "type": "function",
+                "function": {
+                    "name": slot["name"] or "",
+                    "arguments": slot["arguments"],
+                },
+            }
+            for _, slot in sorted(accum.items())
+        ]
+        return {"role": "assistant", "content": None, "tool_calls": tool_calls}
+
+    async def _execute_tool_calls_and_append(
+        self,
+        messages: list[dict],
+        accum: dict[int, dict],
+        session: DeviceSession,
+    ) -> None:
+        """Execute each tool call and append the result messages."""
+        for _, slot in sorted(accum.items()):
+            tool_call_id = slot["id"] or str(uuid.uuid4())
+            tool_name = slot["name"] or ""
+            try:
+                arguments: dict = json.loads(slot["arguments"] or "{}")
+            except json.JSONDecodeError:
+                arguments = {}
+
+            if self._mcp_client is not None and tool_name:
+                tool_result = await self._mcp_client.call_tool(tool_name, arguments)
+            else:
+                tool_result = f"Tool '{tool_name}' is not available."
+
+            logger.debug(
+                "mcp call_tool id=%s name=%s result_preview=%s",
+                tool_call_id,
+                tool_name,
+                tool_result[:120],
+            )
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": tool_result,
+                }
+            )

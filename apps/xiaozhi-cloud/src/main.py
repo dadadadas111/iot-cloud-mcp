@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from redis.asyncio import Redis
 
-from .audio import build_audio_frame, calculate_rms, contains_speech, decode_opus_frames_to_pcm, decode_opus_frames_to_wav, transcode_to_opus_frames
+from .audio import build_audio_frame, calculate_rms, contains_speech, decode_opus_frames_to_pcm, decode_opus_frames_to_wav
 from .config.settings import settings
 from .integrations.edge_tts_client import EdgeTtsClient
 from .integrations.groq_stt import GroqSttClient
@@ -249,34 +249,36 @@ async def _process_turn(websocket: WebSocket, session) -> None:
         transcript = await _runtime.transcribe_audio(session, wav_audio)
         await websocket.send_text(json.dumps({"type": "stt", "text": transcript, "session_id": session.session_id}))
 
-        # 2) LLM + optional tool loop + TTS synthesis
-        # tts:start fires AFTER the full tool loop so the device only shows
-        # "Speaking" once we have actual audio ready — not mid-tool-call.
-        response_text, tts_audio = await _runtime.generate_response(session)
-        await websocket.send_text(json.dumps({"type": "tts", "state": "start", "session_id": session.session_id}))
-
-        # 3) Display text and stream audio
-        await websocket.send_text(
-            json.dumps({"type": "tts", "state": "sentence_start", "text": response_text, "session_id": session.session_id})
-        )
-        opus_frames = await transcode_to_opus_frames(
-            tts_audio,
-            session.audio_sample_rate,
-            session.audio_frame_duration,
-        )
-        for index, opus_frame in enumerate(opus_frames):
-            await websocket.send_bytes(
-                build_audio_frame(
-                    session.protocol_version,
-                    opus_frame,
-                    timestamp=index * session.audio_frame_duration,
+        # 2) Streaming LLM + sentence-pipelined TTS
+        frame_timestamp = 0
+        async for event in _runtime.generate_response_stream(session):
+            t = event["type"]
+            if t == "tts_start":
+                await websocket.send_text(json.dumps({"type": "tts", "state": "start", "session_id": session.session_id}))
+            elif t == "sentence_start":
+                await websocket.send_text(json.dumps({
+                    "type": "tts",
+                    "state": "sentence_start",
+                    "text": event["text"],
+                    "session_id": session.session_id,
+                }))
+            elif t == "audio_frame":
+                await websocket.send_bytes(
+                    build_audio_frame(
+                        session.protocol_version,
+                        event["opus"],
+                        timestamp=frame_timestamp,
+                    )
                 )
-            )
-            if index + 1 >= TTS_PREROLL_FRAMES:
-                await sleep(session.audio_frame_duration / 1000)
+                frame_timestamp += session.audio_frame_duration
+                if event["index"] + 1 > TTS_PREROLL_FRAMES:
+                    await sleep(session.audio_frame_duration / 1000)
+            elif t == "tts_stop":
+                await sleep(TTS_STOP_DELAY_SECONDS)
+                await websocket.send_text(json.dumps({"type": "tts", "state": "stop", "session_id": session.session_id}))
+            elif t == "error":
+                logger.warning("turn non-fatal error session_id=%s msg=%s", session.session_id, event["message"])
 
-        await sleep(TTS_STOP_DELAY_SECONDS)
-        await websocket.send_text(json.dumps({"type": "tts", "state": "stop", "session_id": session.session_id}))
         await _runtime.transition(session, SessionPhase.READY)
         session.reset_audio()
     except WebSocketDisconnect:
