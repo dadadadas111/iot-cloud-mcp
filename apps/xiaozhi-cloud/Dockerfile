@@ -13,10 +13,10 @@ COPY src ./src
 RUN pip install --no-cache-dir .
 
 RUN mkdir -p /app/models && \
-    curl -fsSL -o /app/models/vi_VN-vivos-medium.onnx \
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/vivos/medium/vi_VN-vivos-medium.onnx" && \
-    curl -fsSL -o /app/models/vi_VN-vivos-medium.onnx.json \
-      "https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/vivos/medium/vi_VN-vivos-medium.onnx.json"
+    curl -fsSL -o /app/models/vi_VN-vais1000-medium.onnx \
+      "https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/vais1000/medium/vi_VN-vais1000-medium.onnx" && \
+    curl -fsSL -o /app/models/vi_VN-vais1000-medium.onnx.json \
+      "https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/vais1000/medium/vi_VN-vais1000-medium.onnx.json"
 
 EXPOSE 8080
 
