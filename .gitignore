@@ -56,3 +56,5 @@ resource_metadata.json
 
 # Agent state
 .sisyphus/
+.claude/
+.opencode/
