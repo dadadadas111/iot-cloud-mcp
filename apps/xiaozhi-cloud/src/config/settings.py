@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     openai_compatible_base_url: str = ""
     openai_compatible_api_key: str = ""
     openai_compatible_model: str = ""
+    llm_disable_tools: bool = False
 
     tts_provider: str = "edge"
     tts_voice: str = "vi-VN-HoaiMyNeural"

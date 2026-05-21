@@ -239,7 +239,8 @@ class XiaozhiRuntime:
         messages: list[dict] = [{"role": "system", "content": system_prompt}]
         messages.extend(session.conversation_history)
 
-        tools = await self._get_mcp_tools(session)
+        from ..config.settings import settings
+        tools = [] if settings.llm_disable_tools else await self._get_mcp_tools(session)
 
         for iteration in range(MAX_TOOL_ITERATIONS):
             # Shared queues for this hop.
