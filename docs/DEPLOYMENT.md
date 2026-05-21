@@ -27,13 +27,6 @@
 ├── .env
 └── backups/
 
-/opt/rogo-agent/                   # rogo-agent — PRODUCTION
-├── docker-compose.yml
-└── .env                           # fill in secrets (never committed)
-
-/opt/rogo-agent-stag/              # rogo-agent — STAGING
-├── docker-compose.yml
-└── .env                           # fill in secrets (never committed)
 ```
 
 ### Container Registry
@@ -41,8 +34,6 @@
 - **Registry**: `ghcr.io/dadadadas111/iot-cloud-mcp`
 - **MCP production tag**: `latest`
 - **MCP staging tags**: `staging-pr-{N}`, `staging-{SHORT_SHA}`
-- **rogo-agent production tag**: `agent-latest`
-- **rogo-agent staging tags**: `agent-staging-{SHORT_SHA}`
 
 ### Services Per Environment
 
@@ -56,18 +47,6 @@
 | Base URL        | `https://mcp.dash.id.vn`               | `https://mcp-stag.dash.id.vn`                  |
 | Network         | `mcp_iot-network`                      | `mcp-stag_iot-network-staging`                 |
 
-#### rogo-agent
-
-| Service          | Production                          | Staging                                    |
-| ---------------- | ----------------------------------- | ------------------------------------------ |
-| Container        | `rogo-agent`                        | `rogo-agent-staging`                       |
-| Redis            | shared `iot-cloud-redis` (DB 1)     | shared `iot-cloud-redis-staging` (DB 1)    |
-| App port         | 8081 (host) → 8080 (container)      | 8080 (host) → 8080 (container)             |
-| Public URL       | `https://agent.mcp.dash.id.vn`      | `https://agent.mcp-stag.dash.id.vn`        |
-| WebSocket (Rogo) | `wss://agent.mcp.dash.id.vn/device/ws` | `wss://agent.mcp-stag.dash.id.vn/device/ws` |
-| WebSocket (Xiaozhi compat) | `wss://agent.mcp.dash.id.vn/xiaozhi/ws` | `wss://agent.mcp-stag.dash.id.vn/xiaozhi/ws` |
-| Network          | `mcp_iot-network` (external)        | `mcp-stag_iot-network-staging` (external)  |
-| SSL cert         | `*.mcp.dash.id.vn`                  | `*.mcp-stag.dash.id.vn`                    |
 
 ### Other Services on VPS
 
@@ -79,37 +58,10 @@
 
 ## CI/CD Pipelines
 
-### rogo-agent Production (`.github/workflows/agent-build.yml`)
+The current workflows in `.github/workflows/` are scoped to MCP-related paths only.
+Future sibling apps should get their own app-specific workflows, image tags, and VPS directories so unrelated changes do not trigger the MCP deploy pipeline.
 
-**Trigger**: Push to `master`/`main` AND files changed under `apps/rogo-agent/**`
-
-```
-Push to master (agent files changed)
-  → Build apps/rogo-agent/Dockerfile
-  → Push ghcr.io/.../iot-cloud-mcp:agent-latest
-  → SSH /opt/rogo-agent
-  → docker compose down + up -d
-  → https://agent.mcp.dash.id.vn
-```
-
-### rogo-agent Staging (`.github/workflows/agent-build-staging.yml`)
-
-**Trigger**: PR labeled `deploy-agent-staging` (separate from `deploy-staging` which deploys MCP)
-
-```
-PR labeled deploy-agent-staging
-  → Build apps/rogo-agent/Dockerfile
-  → Push ghcr.io/.../iot-cloud-mcp:agent-staging-{SHORT_SHA}
-  → SSH /opt/rogo-agent-stag
-  → IMAGE_TAG=agent-staging-{SHA} docker compose up -d
-  → https://agent.mcp-stag.dash.id.vn
-```
-
-**Note**: Both workflows use `paths:` filter so they only run when `apps/rogo-agent/**` or the workflow file itself changes. MCP server changes do not trigger agent builds and vice versa.
-
----
-
-### MCP Server Production (`.github/workflows/docker-build.yml`)
+### Production (`.github/workflows/docker-build.yml`)
 
 **Trigger**: Push to `main` or `master` branch
 

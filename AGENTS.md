@@ -1,37 +1,39 @@
 # AGENTS.md — Hierarchical Agent Knowledge
 
-> **Generated**: 2026-03-26 | **Commit**: 58a6078 | **Branch**: feature-staging
+> **Generated**: 2026-05-20 | **Commit**: caed271 | **Branch**: feat/xiaozhi-custom-cloud
 
 ## Overview
 
-NestJS MCP gateway that proxies AI tool calls to a Rogo IoT Cloud REST API. Multi-tenant via URL-embedded API keys (`/mcp/:projectApiKey`).
+Monorepo with two sibling services:
 
-**Stack**: NestJS 10 + TypeScript (ES2021/CJS) + Redis (ioredis) + Zod v4 + Jest + BullMQ
+1. **`./` (root)** — NestJS MCP gateway that proxies AI tool calls to a Rogo IoT Cloud REST API. Multi-tenant via URL-embedded API keys (`/mcp/:projectApiKey`).
+2. **`apps/xiaozhi-cloud/`** — Python FastAPI custom cloud for Xiaozhi AI devices. Speaks the Xiaozhi WebSocket + OTA protocol, runs a streaming LLM/TTS turn pipeline, and bridges tool calls back to the NestJS MCP server. See `apps/xiaozhi-cloud/AGENTS.md`.
 
-**See `AGENT.md`** for full architecture, data flow, session internals, and environment variables.
+**Stacks**: NestJS 10 + TypeScript (ES2021/CJS) + Redis (ioredis) + Zod v4 + Jest + BullMQ (root) · Python 3.11+ + FastAPI + Redis + edge-tts + pytest (xiaozhi-cloud)
 
 ## Structure
 
 ```
-src/
-├── main.ts                 # Bootstrap: CORS, logging middleware, validation pipe
-├── app.module.ts           # Root module (Config, Throttler, Http, all feature modules)
-├── health.controller.ts    # GET /health
-├── mcp/                    # MCP protocol — controller, sessions, server factory [→ AGENTS.md]
-│   └── mcp-auth.controller.ts  # Subdomain OAuth routes under /mcp/:alias/* [→ AGENTS.md]
-├── tools/                  # 24 MCP tool definitions + executor [→ AGENTS.md]
-├── resources/              # 4 MCP resource definitions (overview, state-guide, control-guide, device-attributes)
-├── widgets/                # HTML widget SPA (device-app.html) served as ui://widget/* resource
-├── auth/                   # OAuth 2.1 flow (/authorize, /token, /register)
-├── discovery/              # .well-known OAuth discovery endpoints
-├── scheduler/              # BullMQ-based tool scheduler (delayed/absolute-time tool execution)
-├── proxy/                  # IoT API proxy (IotApiService — all HTTP calls to Rogo Cloud)
-├── redis/                  # @Global Redis client module (ioredis, retry, cleanup)
-└── common/                 # Shared utils, constants, decorators
-    ├── constants/          # product.constants.ts (DEVICE_TYPE, BRAND, OWNERSHIP maps)
-    ├── utils/              # jwt.utils.ts, product.utils.ts, url.utils.ts, error.utils.ts
-    ├── interfaces/         # Shared interfaces
-    └── decorators/         # api-key.decorator.ts
+./
+├── src/                        # NestJS MCP gateway
+│   ├── main.ts                 # Bootstrap: CORS, logging middleware, validation pipe
+│   ├── app.module.ts           # Root module (Config, Throttler, Http, all feature modules)
+│   ├── health.controller.ts    # GET /health
+│   ├── mcp/                    # MCP protocol — controller, sessions, server factory [→ AGENTS.md]
+│   │   └── mcp-auth.controller.ts  # Subdomain OAuth routes under /mcp/:alias/* [→ AGENTS.md]
+│   ├── tools/                  # 24 MCP tool definitions + executor [→ AGENTS.md]
+│   ├── resources/              # 4 MCP resource definitions
+│   ├── widgets/                # HTML widget SPA (device-app.html) served as ui://widget/* resource
+│   ├── auth/                   # OAuth 2.1 flow (/authorize, /token, /register)
+│   ├── discovery/              # .well-known OAuth discovery endpoints
+│   ├── scheduler/              # BullMQ-based tool scheduler
+│   ├── proxy/                  # IoT API proxy (IotApiService)
+│   ├── redis/                  # @Global Redis client module
+│   └── common/                 # Shared utils, constants, decorators
+└── apps/
+    └── xiaozhi-cloud/          # Python Xiaozhi custom cloud [→ AGENTS.md]
+        ├── src/                # main.py, audio.py, services/runtime.py, integrations/*, session/*, protocol/*
+        └── tests/              # pytest suite (40 passed, 1 skipped as of caed271)
 ```
 
 ## Where to Look
@@ -51,6 +53,7 @@ src/
 | Widget HTML (device UI)  | `views/widgets/device-app.html`                                    | Single-file SPA. Uses MCP Apps bridge (\_bridge) for all clients |
 | Docker/deploy            | `docker-compose*.yml`, `Dockerfile`, `.github/workflows/`          | See `docs/DEPLOYMENT.md`                                         |
 | Environment vars         | `.env.example`                                                     | All vars documented there; use `ConfigService.get<T>()` in code  |
+| Xiaozhi custom cloud     | `apps/xiaozhi-cloud/`                                              | Sibling Python service; see `apps/xiaozhi-cloud/AGENTS.md`       |
 
 ## Conventions
 
@@ -98,13 +101,13 @@ npm run lint             # ESLint
 npm run format           # Prettier
 ```
 
-## Xiaozhi Bridge
+## Xiaozhi integrations — two flavors
 
-`bridge/xiaozhi/` — standalone Python bridge that connects a per-user Xiaozhi AI device to Rogo IoT via the deployed MCP server. Each user runs their own instance.
+This repo has **two** ways to plug Xiaozhi devices into Rogo IoT. Don't confuse them:
 
-See **`docs/XIAOZHI_BRIDGE.md`** for full setup guide.
+1. **`bridge/xiaozhi/`** — per-user Python bridge that connects a Xiaozhi device to the **Xiaozhi-hosted cloud** and relays MCP tool calls back to our NestJS MCP server. Each user runs their own bridge. See **`docs/XIAOZHI_BRIDGE.md`**. Architecture: `bridge.py` (headless OAuth) → `mcp_pipe.py` (Xiaozhi WebSocket relay) → `bridge_server.py` (transparent stdio↔HTTP MCP proxy) → Rogo MCP server.
 
-Architecture: `bridge.py` (headless OAuth) → `mcp_pipe.py` (Xiaozhi WebSocket relay) → `bridge_server.py` (transparent stdio↔HTTP MCP proxy) → Rogo MCP server.
+2. **`apps/xiaozhi-cloud/`** — **our own custom Xiaozhi cloud**. The device connects directly to us instead of Xiaozhi's cloud. We handle STT/LLM/TTS in-house and bridge tool calls to the sibling NestJS MCP server. See **`apps/xiaozhi-cloud/AGENTS.md`** and **`docs/XIAOZHI_CLOUD_PLAN.md`**. Architecture: device → `xiaozhi-cloud` (FastAPI, streaming LLM/TTS pipeline) → `iot-cloud-mcp` (NestJS) → Rogo IoT Cloud API.
 
 ## TODOs
 
@@ -114,7 +117,7 @@ Architecture: `bridge.py` (headless OAuth) → `mcp_pipe.py` (Xiaozhi WebSocket 
 
 ## Notes
 
-- **CI/CD**: Push to master → build Docker + deploy prod (`mcp.dash.id.vn:3001`). PR/branch → staging (`mcp-stag.dash.id.vn:3002`). VPS: `160.187.247.2`
+- **CI/CD**: NestJS — push to master → build Docker + deploy prod (`mcp.dash.id.vn:3001`). PR/branch → staging (`mcp-stag.dash.id.vn:3002`). xiaozhi-cloud — push to master → prod; push to `feat/xiaozhi-custom-cloud` only → staging (single-branch allowlist; revisit before merging that branch). VPS: `160.187.247.2`
 - **Nginx**: All 4 configs have `proxy_buffering off`, `proxy_read_timeout 300s`, `Connection ''` for SSE streaming. Backups at `/tmp/*.bak`
 - **e2e tests**: `test:e2e` script exists in package.json but `test/jest-e2e.json` config is missing — e2e not operational
 - **ThrottlerModule**: Uses array syntax `forRoot([{ttl: 60000, limit: 100}])` — ttl appears to be ms (non-standard, typical is seconds)
@@ -124,7 +127,8 @@ Architecture: `bridge.py` (headless OAuth) → `mcp_pipe.py` (Xiaozhi WebSocket 
 ## Hierarchy
 
 ```
-./AGENTS.md                  ← you are here
-├── src/mcp/AGENTS.md        ← protocol, sessions, transport, subdomain auth
-└── src/tools/AGENTS.md      ← tool definitions, registry, executor
+./AGENTS.md                            ← you are here
+├── src/mcp/AGENTS.md                  ← MCP protocol, sessions, transport, subdomain auth
+├── src/tools/AGENTS.md                ← tool definitions, registry, executor
+└── apps/xiaozhi-cloud/AGENTS.md       ← Python Xiaozhi custom cloud (FastAPI, streaming LLM/TTS, MCP bridge)
 ```
