@@ -1,0 +1,34 @@
+services:
+  xiaozhi-cloud-staging:
+    image: ghcr.io/dadadadas111/iot-cloud-mcp:${IMAGE_TAG}
+    container_name: xiaozhi-cloud-staging
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    depends_on:
+      - xiaozhi-cloud-redis-staging
+    networks:
+      - xiaozhi-cloud-staging
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  xiaozhi-cloud-redis-staging:
+    image: redis:7-alpine
+    container_name: xiaozhi-cloud-redis-staging
+    restart: unless-stopped
+    volumes:
+      - xiaozhi-cloud-redis-data-staging:/data
+    networks:
+      - xiaozhi-cloud-staging
+
+networks:
+  xiaozhi-cloud-staging:
+    driver: bridge
+
+volumes:
+  xiaozhi-cloud-redis-data-staging:

@@ -17,6 +17,11 @@ lerna-debug.log*
 # Tests
 /coverage
 /.nyc_output
+.pytest_cache/
+.venv/
+*.egg-info/
+__pycache__/
+*.py[cod]
 
 # IDEs and editors
 /.idea
@@ -51,3 +56,5 @@ resource_metadata.json
 
 # Agent state
 .sisyphus/
+.claude/
+.opencode/

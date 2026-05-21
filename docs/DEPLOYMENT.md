@@ -57,6 +57,9 @@ The VPS also hosts n8n (workflow automation):
 
 ## CI/CD Pipelines
 
+The current workflows in `.github/workflows/` are scoped to MCP-related paths only.
+Future sibling apps should get their own app-specific workflows, image tags, and VPS directories so unrelated changes do not trigger the MCP deploy pipeline.
+
 ### Production (`.github/workflows/docker-build.yml`)
 
 **Trigger**: Push to `main` or `master` branch
