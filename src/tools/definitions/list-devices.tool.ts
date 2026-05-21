@@ -4,11 +4,15 @@
  */
 
 import { z } from 'zod';
+import {
+  PAGINATION_INPUT_SCHEMA_PROPERTIES,
+  PaginationParamsSchema,
+} from './pagination-params.tool';
 
 /**
  * list_devices tool parameters
  */
-const ListDevicesParamsSchema = z.object({
+const ListDevicesParamsSchema = PaginationParamsSchema.extend({
   locationId: z.string().nullish().describe('Optional location ID to filter devices by location'),
 });
 
@@ -22,7 +26,8 @@ export type ListDevicesParams = z.infer<typeof ListDevicesParamsSchema>;
  */
 export const LIST_DEVICES_TOOL = {
   name: 'list_devices',
-  description: 'Get all devices. Optionally filter by location using locationId parameter.',
+  description:
+    'Get devices with compact pagination. Optionally filter by location using locationId. Defaults to limit=20, offset=0 to keep responses small for edge models.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -30,12 +35,14 @@ export const LIST_DEVICES_TOOL = {
         type: ['string', 'null'],
         description: 'Optional location ID to filter devices by location',
       },
+      ...PAGINATION_INPUT_SCHEMA_PROPERTIES,
     },
     required: [],
   },
   metadata: {
     name: 'list_devices',
-    description: 'Get all devices. Optionally filter by location using locationId parameter.',
+    description:
+      'Get devices with compact pagination. Optionally filter by location using locationId. Defaults to limit=20, offset=0 to keep responses small for edge models.',
     readOnlyHint: true,
     securitySchemes: {
       oauth2: {

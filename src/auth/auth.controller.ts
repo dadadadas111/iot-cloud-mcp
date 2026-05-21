@@ -285,13 +285,23 @@ export class AuthController {
   @ApiOperation({ summary: 'Static client registration (PoC)' })
   @ApiParam({ name: 'alias', description: 'Partner alias' })
   @ApiResponse({ status: 200, description: 'Client registered' })
-  async register(@Param('alias') alias: string): Promise<any> {
+  async register(
+    @Param('alias') alias: string,
+    @Body() body?: Record<string, unknown>,
+  ): Promise<any> {
     this.logger.log(`Client registration request for alias: ${alias}`);
+
+    const redirectUris =
+      Array.isArray(body?.redirect_uris) &&
+      body.redirect_uris.every((uri): uri is string => typeof uri === 'string')
+        ? [...body.redirect_uris]
+        : undefined;
 
     // Return static client_id (PoC)
     return {
       client_id: 'web-client-static',
       client_id_issued_at: Math.floor(Date.now() / 1000),
+      ...(redirectUris ? { redirect_uris: redirectUris } : {}),
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       token_endpoint_auth_method: 'none',

@@ -69,6 +69,7 @@ import {
   CancelScheduledJobParams,
 } from '../definitions/cancel-scheduled-job.tool';
 import { sanitizeErrorForClient } from '../../common/utils/error.utils';
+import { DEFAULT_PAGE_LIMIT } from '../definitions/pagination-params.tool';
 
 /** Context for tool execution containing request metadata */
 interface ToolContext {
@@ -76,6 +77,15 @@ interface ToolContext {
   projectApiKey?: string;
   userId?: string;
   meta?: Record<string, unknown>;
+}
+
+interface PaginationResult<T> {
+  items: T[];
+  total: number;
+  returned: number;
+  hasMore: boolean;
+  limit: number;
+  offset: number;
 }
 
 /** Thrown when authorization header is missing */
@@ -190,6 +200,43 @@ export class ToolExecutorService {
     return chunks;
   }
 
+  private paginateItems<T>(
+    items: T[],
+    limitParam?: number | null,
+    offsetParam?: number | null,
+  ): PaginationResult<T> {
+    const limit = limitParam ?? DEFAULT_PAGE_LIMIT;
+    const offset = offsetParam ?? 0;
+    const pagedItems = items.slice(offset, offset + limit);
+
+    return {
+      items: pagedItems,
+      total: items.length,
+      returned: pagedItems.length,
+      hasMore: offset + pagedItems.length < items.length,
+      limit,
+      offset,
+    };
+  }
+
+  private buildSlimDeviceSummary(
+    device: IotDevice,
+    options?: { includeDesc?: boolean; includeMac?: boolean; includeFeatures?: boolean },
+  ) {
+    const typeInfo = resolveDeviceType(device);
+
+    return {
+      uuid: device.uuid,
+      label: device.label,
+      ...(options?.includeDesc ? { desc: device.desc } : {}),
+      ...(options?.includeMac ? { mac: device.mac } : {}),
+      locationId: device.locationId,
+      groupId: device.groupId,
+      ...(options?.includeFeatures ? { features: device.features } : {}),
+      ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
+    };
+  }
+
   // ─── Public API ─────────────────────────────────────────────────────────────
 
   /**
@@ -260,22 +307,7 @@ export class ToolExecutorService {
         .map((d) => ({ d, score: Math.max(scoreText(d.label ?? ''), scoreText(d.desc ?? '')) }))
         .filter(({ score }) => score > 0)
         .sort((a, b) => b.score - a.score)
-        .map(({ d }) => {
-          const typeInfo = resolveDeviceType(d);
-          return {
-            uuid: d.uuid,
-            label: d.label,
-            desc: d.desc,
-            mac: d.mac,
-            locationId: d.locationId,
-            groupId: d.groupId,
-            features: d.features,
-            ...(typeInfo && {
-              deviceType: typeInfo.deviceType,
-              deviceTypeId: typeInfo.deviceTypeId,
-            }),
-          };
-        });
+        .map(({ d }) => this.buildSlimDeviceSummary(d, { includeDesc: true }));
 
       const matchedLocations = locations
         .filter((l) => scoreText(l.label ?? '') + scoreText(l.desc ?? '') > 0)
@@ -285,18 +317,17 @@ export class ToolExecutorService {
         .filter((g) => scoreText(g.label ?? '') + scoreText(g.desc ?? '') > 0)
         .map((g) => ({ uuid: g.uuid, label: g.label, desc: g.desc, locationId: g.locationId }));
 
+      const pagedDevices = this.paginateItems(matchedDevices, params.limit, params.offset);
+      const pagedLocations = this.paginateItems(matchedLocations, params.limit, params.offset);
+      const pagedGroups = this.paginateItems(matchedGroups, params.limit, params.offset);
+
       if (
         matchedDevices.length === 0 &&
         matchedLocations.length === 0 &&
         matchedGroups.length === 0
       ) {
-        return this.successResult({
-          total: 0,
-          devices: [],
-          locations: [],
-          groups: [],
-          message: 'No matches found. Try shorter keywords. All available devices:',
-          allDevices: devices.map((d) => {
+        const suggestedDevices = this.paginateItems(
+          devices.map((d) => {
             const typeInfo = resolveDeviceType(d);
             return {
               uuid: d.uuid,
@@ -304,14 +335,33 @@ export class ToolExecutorService {
               ...(typeInfo && { deviceType: typeInfo.deviceType }),
             };
           }),
+          params.limit,
+          params.offset,
+        );
+
+        return this.successResult({
+          total: 0,
+          returned: suggestedDevices.returned,
+          hasMore: suggestedDevices.hasMore,
+          limit: suggestedDevices.limit,
+          offset: suggestedDevices.offset,
+          devices: [],
+          locations: [],
+          groups: [],
+          message: 'No matches found. Try shorter keywords. Returning a capped device suggestion list.',
+          allDevices: suggestedDevices.items,
         });
       }
 
       return this.successResult({
         total: matchedDevices.length + matchedLocations.length + matchedGroups.length,
-        devices: matchedDevices,
-        locations: matchedLocations,
-        groups: matchedGroups,
+        returned: pagedDevices.returned + pagedLocations.returned + pagedGroups.returned,
+        hasMore: pagedDevices.hasMore || pagedLocations.hasMore || pagedGroups.hasMore,
+        limit: params.limit ?? DEFAULT_PAGE_LIMIT,
+        offset: params.offset ?? 0,
+        devices: pagedDevices.items,
+        locations: pagedLocations.items,
+        groups: pagedGroups.items,
       });
     } catch (error) {
       return this.errorResult(error);
@@ -367,21 +417,18 @@ export class ToolExecutorService {
         params.locationId ?? undefined,
       );
 
-      const slimDevices = devices.map((device) => {
-        const typeInfo = resolveDeviceType(device);
-        return {
-          uuid: device.uuid,
-          label: device.label,
-          desc: device.desc,
-          mac: device.mac,
-          locationId: device.locationId,
-          groupId: device.groupId,
-          features: device.features,
-          ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
-        };
-      });
+      const slimDevices = devices.map((device) => this.buildSlimDeviceSummary(device, { includeDesc: true }));
+      const pagedDevices = this.paginateItems(slimDevices, params.limit, params.offset);
 
-      const result = { _view: 'list', total: slimDevices.length, devices: slimDevices };
+      const result = {
+        _view: 'list',
+        total: pagedDevices.total,
+        returned: pagedDevices.returned,
+        hasMore: pagedDevices.hasMore,
+        limit: pagedDevices.limit,
+        offset: pagedDevices.offset,
+        devices: pagedDevices.items,
+      };
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         structuredContent: result as Record<string, unknown>,
@@ -393,7 +440,7 @@ export class ToolExecutorService {
 
   /** List locations with slim response */
   private async executeListLocations(
-    _params: ListLocationsParams,
+    params: ListLocationsParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
     try {
@@ -406,7 +453,16 @@ export class ToolExecutorService {
         desc: loc.desc,
       }));
 
-      return this.successResult({ total: slimLocations.length, locations: slimLocations });
+      const pagedLocations = this.paginateItems(slimLocations, params.limit, params.offset);
+
+      return this.successResult({
+        total: pagedLocations.total,
+        returned: pagedLocations.returned,
+        hasMore: pagedLocations.hasMore,
+        limit: pagedLocations.limit,
+        offset: pagedLocations.offset,
+        locations: pagedLocations.items,
+      });
     } catch (error) {
       return this.errorResult(error);
     }
@@ -432,7 +488,16 @@ export class ToolExecutorService {
         locationId: group.locationId,
       }));
 
-      return this.successResult({ total: slimGroups.length, groups: slimGroups });
+      const pagedGroups = this.paginateItems(slimGroups, params.limit, params.offset);
+
+      return this.successResult({
+        total: pagedGroups.total,
+        returned: pagedGroups.returned,
+        hasMore: pagedGroups.hasMore,
+        limit: pagedGroups.limit,
+        offset: pagedGroups.offset,
+        groups: pagedGroups.items,
+      });
     } catch (error) {
       return this.errorResult(error);
     }
@@ -849,19 +914,14 @@ export class ToolExecutorService {
         ? allDevices.filter((d) => d.groupId === params.groupId)
         : allDevices;
 
-      const slimDevices = devices.map((device) => {
-        const typeInfo = resolveDeviceType(device);
-        return {
-          uuid: device.uuid,
-          label: device.label,
-          desc: device.desc,
-          mac: device.mac,
-          locationId: device.locationId,
-          groupId: device.groupId,
-          features: device.features,
-          ...(typeInfo && { deviceType: typeInfo.deviceType, deviceTypeId: typeInfo.deviceTypeId }),
-        };
-      });
+      const slimDevices = devices.map((device) =>
+        this.buildSlimDeviceSummary(device, {
+          includeDesc: true,
+          includeMac: true,
+          includeFeatures: true,
+        }),
+      );
+      const pagedDevices = this.paginateItems(slimDevices, params.limit, params.offset);
 
       // Resolve context labels in parallel when a filter is active
       const [locationLabel, groupLabel] = await Promise.all([
@@ -883,8 +943,12 @@ export class ToolExecutorService {
 
       const result = {
         _view,
-        total: slimDevices.length,
-        devices: slimDevices,
+        total: pagedDevices.total,
+        returned: pagedDevices.returned,
+        hasMore: pagedDevices.hasMore,
+        limit: pagedDevices.limit,
+        offset: pagedDevices.offset,
+        devices: pagedDevices.items,
         ...(params.locationId && { locationId: params.locationId, locationLabel }),
         ...(params.groupId && { groupId: params.groupId, groupLabel }),
       };
@@ -901,7 +965,7 @@ export class ToolExecutorService {
   // ─── Smart (Scene/Automation) Handlers ────────────────────────────────────────
 
   private async executeListSmarts(
-    _params: ListSmartsParams,
+    params: ListSmartsParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
     try {
@@ -916,7 +980,16 @@ export class ToolExecutorService {
         fav: smart.fav,
       }));
 
-      return this.successResult({ total: slimSmarts.length, smarts: slimSmarts });
+      const pagedSmarts = this.paginateItems(slimSmarts, params.limit, params.offset);
+
+      return this.successResult({
+        total: pagedSmarts.total,
+        returned: pagedSmarts.returned,
+        hasMore: pagedSmarts.hasMore,
+        limit: pagedSmarts.limit,
+        offset: pagedSmarts.offset,
+        smarts: pagedSmarts.items,
+      });
     } catch (error) {
       return this.errorResult(error);
     }
@@ -980,7 +1053,16 @@ export class ToolExecutorService {
         cmds: cmd.cmds,
       }));
 
-      return this.successResult({ total: slimCmds.length, commands: slimCmds });
+      const pagedCmds = this.paginateItems(slimCmds, params.limit, params.offset);
+
+      return this.successResult({
+        total: pagedCmds.total,
+        returned: pagedCmds.returned,
+        hasMore: pagedCmds.hasMore,
+        limit: pagedCmds.limit,
+        offset: pagedCmds.offset,
+        commands: pagedCmds.items,
+      });
     } catch (error) {
       return this.errorResult(error);
     }
@@ -989,13 +1071,22 @@ export class ToolExecutorService {
   // ─── Scheduler Management Handlers ──────────────────────────────────────────
 
   private async executeListScheduledJobs(
-    _params: ListScheduledJobsParams,
+    params: ListScheduledJobsParams,
     context: ToolContext,
   ): Promise<CallToolResult> {
     try {
       const { userId, projectApiKey } = this.extractUserContext(context);
       const jobs = await this.schedulerService.listJobs(userId, projectApiKey);
-      return this.successResult({ total: jobs.length, jobs });
+      const pagedJobs = this.paginateItems(jobs, params.limit, params.offset);
+
+      return this.successResult({
+        total: pagedJobs.total,
+        returned: pagedJobs.returned,
+        hasMore: pagedJobs.hasMore,
+        limit: pagedJobs.limit,
+        offset: pagedJobs.offset,
+        jobs: pagedJobs.items,
+      });
     } catch (error) {
       return this.errorResult(error);
     }

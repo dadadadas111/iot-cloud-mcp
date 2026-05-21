@@ -4,11 +4,15 @@
  */
 
 import { z } from 'zod';
+import {
+  PAGINATION_INPUT_SCHEMA_PROPERTIES,
+  PaginationParamsSchema,
+} from './pagination-params.tool';
 
 /**
  * list_locations tool has no parameters
  */
-const ListLocationsParamsSchema = z.object({});
+const ListLocationsParamsSchema = PaginationParamsSchema.extend({});
 
 /** Type for list_locations parameters */
 export type ListLocationsParams = z.infer<typeof ListLocationsParamsSchema>;
@@ -20,15 +24,19 @@ export type ListLocationsParams = z.infer<typeof ListLocationsParamsSchema>;
  */
 export const LIST_LOCATIONS_TOOL = {
   name: 'list_locations',
-  description: 'Get all locations for the authenticated user.',
+  description:
+    'Get locations for the authenticated user with compact pagination. Defaults to limit=20, offset=0.',
   inputSchema: {
     type: 'object' as const,
-    properties: {},
+    properties: {
+      ...PAGINATION_INPUT_SCHEMA_PROPERTIES,
+    },
     required: [],
   },
   metadata: {
     name: 'list_locations',
-    description: 'Get all locations for the authenticated user.',
+    description:
+      'Get locations for the authenticated user with compact pagination. Defaults to limit=20, offset=0.',
     readOnlyHint: true,
     securitySchemes: {
       oauth2: {

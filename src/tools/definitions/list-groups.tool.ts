@@ -4,11 +4,15 @@
  */
 
 import { z } from 'zod';
+import {
+  PAGINATION_INPUT_SCHEMA_PROPERTIES,
+  PaginationParamsSchema,
+} from './pagination-params.tool';
 
 /**
  * list_groups tool parameters
  */
-const ListGroupsParamsSchema = z.object({
+const ListGroupsParamsSchema = PaginationParamsSchema.extend({
   locationId: z.string().nullish().describe('Optional location ID to filter groups by location'),
 });
 
@@ -22,7 +26,8 @@ export type ListGroupsParams = z.infer<typeof ListGroupsParamsSchema>;
  */
 export const LIST_GROUPS_TOOL = {
   name: 'list_groups',
-  description: 'Get all groups. Optionally filter by location using locationId parameter.',
+  description:
+    'Get groups with compact pagination. Optionally filter by location using locationId. Defaults to limit=20, offset=0.',
   inputSchema: {
     type: 'object' as const,
     properties: {
@@ -30,12 +35,14 @@ export const LIST_GROUPS_TOOL = {
         type: ['string', 'null'],
         description: 'Optional location ID to filter groups by location',
       },
+      ...PAGINATION_INPUT_SCHEMA_PROPERTIES,
     },
     required: [],
   },
   metadata: {
     name: 'list_groups',
-    description: 'Get all groups. Optionally filter by location using locationId parameter.',
+    description:
+      'Get groups with compact pagination. Optionally filter by location using locationId. Defaults to limit=20, offset=0.',
     readOnlyHint: true,
     securitySchemes: {
       oauth2: {

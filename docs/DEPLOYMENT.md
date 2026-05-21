@@ -17,41 +17,42 @@
 ### Directory Layout
 
 ```
-/opt/mcp/                          # PRODUCTION
-├── docker-compose.yml             # Production compose
-├── .env                           # Production env vars
-└── backups/                       # Created by deploy.sh
+/opt/mcp/                          # MCP server — PRODUCTION
+├── docker-compose.yml
+├── .env
+└── backups/
 
-/opt/mcp-stag/                     # STAGING
-├── docker-compose.staging.yml     # Staging compose
-├── .env                           # Staging env vars
-└── backups/                       # Created by deploy.sh
+/opt/mcp-stag/                     # MCP server — STAGING
+├── docker-compose.staging.yml
+├── .env
+└── backups/
+
 ```
 
 ### Container Registry
 
 - **Registry**: `ghcr.io/dadadadas111/iot-cloud-mcp`
-- **Production tag**: `latest` (built from `main`/`master` branch)
-- **Staging tags**: `staging-pr-{N}`, `staging-{SHORT_SHA}` (built from PRs to main)
+- **MCP production tag**: `latest`
+- **MCP staging tags**: `staging-pr-{N}`, `staging-{SHORT_SHA}`
 
 ### Services Per Environment
+
+#### MCP Server
 
 | Service         | Production                             | Staging                                        |
 | --------------- | -------------------------------------- | ---------------------------------------------- |
 | App container   | `iot-cloud-mcp`                        | `iot-cloud-mcp-staging`                        |
 | Redis container | `iot-cloud-redis`                      | `iot-cloud-redis-staging`                      |
 | App port        | 3001                                   | 3002                                           |
-| Redis port      | 6379 (internal)                        | 6379 (internal, no host mapping)               |
 | Base URL        | `https://mcp.dash.id.vn`               | `https://mcp-stag.dash.id.vn`                  |
-| IoT API         | `https://openapi.rogo.com.vn/api/v2.0` | `https://staging.openapi.rogo.com.vn/api/v2.0` |
-| Network         | `iot-network`                          | `iot-network-staging`                          |
+| Network         | `mcp_iot-network`                      | `mcp-stag_iot-network-staging`                 |
+
 
 ### Other Services on VPS
 
-The VPS also hosts n8n (workflow automation):
-
-- n8n worker + main + postgres + redis on port 5678
-- These are independent — do NOT interfere with them
+- n8n: port 5678 (internal only) — do NOT interfere
+- ds2api: port 6011 — do NOT interfere
+- rogo-xiaozhi-bridge: no ports — legacy PoC bridge, keep running until agent demo is validated
 
 ---
 

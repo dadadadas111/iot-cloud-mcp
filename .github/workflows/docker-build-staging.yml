@@ -2,26 +2,7 @@ name: Build and Push Docker Image (Staging)
 
 on:
   pull_request:
-    branches:
-      - master
-      - main
-    paths:
-      - '.github/workflows/docker-build-staging.yml'
-      - 'src/**'
-      - 'views/**'
-      - 'config/**'
-      - 'scripts/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'tsconfig.json'
-      - 'nest-cli.json'
-      - '.eslintrc.js'
-      - '.prettierrc'
-      - 'Dockerfile'
-      - 'docker-compose.staging.yml'
-      - '.dockerignore'
-      - '.env.example'
-      - 'docs/DEPLOYMENT.md'
+    types: [labeled, synchronize]
 
 env:
   REGISTRY: ghcr.io
@@ -31,6 +12,7 @@ jobs:
   build-and-push:
     name: Build and Push Docker Image (Staging)
     runs-on: ubuntu-latest
+    if: contains(github.event.pull_request.labels.*.name, 'deploy-staging')
 
     permissions:
       contents: read
