@@ -155,6 +155,3 @@ See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the full ops runbook.
 - **Testing**: Jest
 - **Deploy**: Docker + GitHub Actions
 
-## License
-
-MIT
