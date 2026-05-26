@@ -8,7 +8,6 @@ class BinaryAudioType(IntEnum):
     OPUS = 0
     JSON = 1
 
-
 class ClientMessageType(StrEnum):
     HELLO = "hello"
     LISTEN = "listen"
